@@ -322,10 +322,6 @@ function parseGPX(text, fallbackName) {
   const nameEl = doc.querySelector('trk > name, rte > name, metadata > name');
   return { name: (nameEl && nameEl.textContent.trim()) || fallbackName, pts };
 }
-function looksLikeHeatmap(text) {
-  const head = text.slice(0, 200);
-  return head.includes('FeatureCollection') || head.includes('"features"');
-}
 
 /* ---------------- track processing ---------------- */
 const RESAMPLE_M = 8;
@@ -1402,13 +1398,27 @@ setInterval(refreshFriends, 30000); // age out stale friends
 
 /* ---------------- files: load / persist ---------------- */
 async function addFile(name, text) {
-  if (looksLikeHeatmap(text)) {
-    const geo = JSON.parse(text);
-    S.heat = processHeatmap(geo);
-    for (const t of S.tracks) t.alerts = null; // junctions depend on heatmap
-    await idb.put({ id: 'heatmap', name, kind: 'heatmap', text });
-    document.getElementById('heatInfo').textContent = 'Heatmap: ' + name + ' — ' + S.heat.count + ' tracks';
-    return 'heatmap';
+  if (text.slice(0, 100).trimStart().startsWith('{')) {
+    const obj = JSON.parse(text);
+    if (Array.isArray(obj.tracks)) {
+      // DingoNav bundle (planner's "DingoNav bundle" export / bundle.json shape):
+      // heatmap + tracks in one file, one pick on the phone
+      let nT = 0, errs = 0;
+      if (obj.heatmap) await addFile(obj.heatmapName || 'heatmap.geojson', JSON.stringify(obj.heatmap));
+      for (const t of obj.tracks) {
+        try { await addFile(t.name, t.gpx); nT++; }
+        catch (e) { errs++; console.warn('bundle track failed', t.name, e); }
+      }
+      return { bundle: true, tracks: nT, heatmap: !!obj.heatmap, errs };
+    }
+    if (obj.type === 'FeatureCollection' || obj.features) {
+      S.heat = processHeatmap(obj);
+      for (const t of S.tracks) t.alerts = null; // cues depend on heatmap
+      await idb.put({ id: 'heatmap', name, kind: 'heatmap', text });
+      document.getElementById('heatInfo').textContent = 'Heatmap: ' + name + ' — ' + S.heat.count + ' tracks';
+      return 'heatmap';
+    }
+    throw new Error('unrecognised JSON — expected heatmap GeoJSON or a DingoNav bundle');
   }
   const { name: trkName, pts } = parseGPX(text, name.replace(/\.gpx$/i, '').replace(/_/g, ' '));
   let h = 0; for (let i = 0; i < text.length; i += 97) h = (h * 31 + text.charCodeAt(i)) >>> 0;
@@ -1422,7 +1432,12 @@ async function addFile(name, text) {
 async function handleFiles(files) {
   let nT = 0, nH = 0, errs = 0;
   for (const f of files) {
-    try { (await addFile(f.name, await f.text())) === 'gpx' ? nT++ : nH++; }
+    try {
+      const r = await addFile(f.name, await f.text());
+      if (r === 'gpx') nT++;
+      else if (r === 'heatmap') nH++;
+      else if (r && r.bundle) { nT += r.tracks; if (r.heatmap) nH++; errs += r.errs; }
+    }
     catch (e) { errs++; console.warn('load failed', f.name, e); }
   }
   if (S.sel < 0 && S.tracks.length) selectTrack(0);
