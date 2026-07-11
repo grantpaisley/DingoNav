@@ -240,6 +240,7 @@
 
   <h3>Settings</h3>
   <div class="row"><label>Turn beeps</label><span class="sw"><input type="checkbox" id="setSound" checked><span></span></span></div>
+  <div class="row"><label>Turn confirmation chirp</label><span class="sw"><input type="checkbox" id="setConfirm" checked><span></span></span></div>
   <div class="row"><label>Vehicle (warning lead)</label><span class="seg" id="vehSeg">
     <button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
   <div class="row"><label>Auto-zoom with speed</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
@@ -297,7 +298,7 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null,
   friends: new Map(), demo: null,
-  set: { sound: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false },
+  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
@@ -457,16 +458,17 @@ function heatGrid(heat) {
 /* ================================================================
    CUE ENGINE — import-time route analysis.
    Decodes the z14 `roads` layer from the local PMTiles basemap along
-   the route corridor, matches the route to way classes (fire trail /
-   singletrack / road), and emits TURN cues only where there is a
-   decision to make: an alternative continues where you don't go, or
-   the route departs one way class for another while the old way
-   carries on. Trail bends with no alternative stay silent (curve
-   warnings are cut from v1 by design). Results cached in IDB per
-   route + heatmap + basemap.
+   the route corridor, matches the route to ways (class + name), and
+   emits a cue only where the obvious move is wrong: the route leaves
+   one way for another AND the departed way carries on somewhere the
+   route doesn't go. Straight-ahead departures count (main road bends
+   away, route continues onto a minor way). Seamless renames, bends on
+   the same way, and unmapped-singletrack twists all stay silent;
+   hairpins always cue. Results cached in IDB per route + heatmap +
+   basemap.
    ================================================================ */
 const CUE = { SAMPLE: 10, MATCH_D: 15, MATCH_ANG: 50, ALT_D: 35, ALT_ANG: 28,
-  TURN_MIN: 25, TURN_LONE: 60, HAIRPIN: 120, MERGE_M: 30 };
+  DEP_D: 45, TURN_MIN: 25, HAIRPIN: 120, MERGE_M: 30, REJOIN_M: 300 };
 
 /* minimal MVT decoder — LineString features + string props of one named layer */
 function mvtLayerLines(buffer, layerName) {
@@ -629,21 +631,22 @@ function matchWays(trk, g) {
     }
     if (best >= 0) { cls[i] = g.pc[best]; nm[i] = g.pn[best]; }
   }
-  const sm = new Array(trk.n).fill(null); // majority over ±3 kills tile-edge flapping
+  // majority over ±3 on (class,name) jointly — kills tile-edge flapping and keeps the pair consistent
+  const sm = new Array(trk.n).fill(null), smn = new Array(trk.n).fill(null);
   for (let i = 0; i < trk.n; i++) {
     const cnt = new Map();
     for (let j = Math.max(0, i - 3); j <= Math.min(trk.n - 1, i + 3); j++)
-      if (cls[j]) cnt.set(cls[j], (cnt.get(cls[j]) || 0) + 1);
-    let bc = null, bn = 0;
-    for (const [c, n2] of cnt) if (n2 > bn) { bn = n2; bc = c; }
-    sm[i] = bc;
+      if (cls[j]) { const k = cls[j] + '\x1f' + (nm[j] || ''); cnt.set(k, (cnt.get(k) || 0) + 1); }
+    let bk = null, bn = 0;
+    for (const [k, n2] of cnt) if (n2 > bn) { bn = n2; bk = k; }
+    if (bk) { const parts = bk.split('\x1f'); sm[i] = parts[0]; smn[i] = parts[1] || null; }
   }
-  return { cls: sm, name: nm, brg };
+  return { cls: sm, name: smn, brg };
 }
 
-/* the decision test: does anything continue along the incoming heading where the route doesn't go? */
+/* the quiet cue model: cue ⇔ way transition AND the departed way carries on without you */
 function classifyCues(trk, g, hg, m) {
-  const grids = hg ? [g, hg] : [g]; // basemap roads + heatmap (queried in place)
+  const grids = hg ? [g, hg] : [g]; // heatmap = continuation evidence only, never its own cue
   const W = 5;
   const turn = new Float32Array(trk.n);
   for (let i = 0; i < trk.n - 1 - W; i++) {
@@ -657,6 +660,8 @@ function classifyCues(trk, g, hg, m) {
     for (let j = from; j < i; j++) { sx += Math.sin(m.brg[j] * Math.PI / 180); sy += Math.cos(m.brg[j] * Math.PI / 180); }
     return Math.atan2(sx, sy) * 180 / Math.PI;
   };
+  // generic: anything (mapped way or ridden heatmap trail) continues along the incoming
+  // heading where the route doesn't — the decision test when the departed way is unmapped
   const altContinues = i => {
     const x = trk.xy[i * 2], y = trk.xy[i * 2 + 1], hIn = inHeading(i);
     const dx = Math.sin(hIn * Math.PI / 180), dy = Math.cos(hIn * Math.PI / 180);
@@ -670,43 +675,61 @@ function classifyCues(trk, g, hg, m) {
     }
     return false;
   };
-  const hasData = i => grids.some(gr => nearCueSamples(gr, trk.xy[i * 2], trk.xy[i * 2 + 1], 40).length > 0);
+  // specific: the way we just left (matched by name, else class) carries on near the
+  // junction somewhere that isn't the route. Direction-free on purpose — a main road
+  // bending away while the route holds straight is exactly the case that must cue.
+  const departedContinues = (i, clsB, nameB) => {
+    const x = trk.xy[i * 2], y = trk.xy[i * 2 + 1], hIn = inHeading(i);
+    const dx = Math.sin(hIn * Math.PI / 180), dy = Math.cos(hIn * Math.PI / 180);
+    for (const [j, d] of nearCueSamples(g, x, y, CUE.DEP_D)) {
+      if (d < 8) continue;                                              // junction-node clutter
+      if ((g.px[j] - x) * dx + (g.py[j] - y) * dy < -10) continue;      // behind the apex = ridden-in leg
+      if (nameB ? g.pn[j] !== nameB : g.pc[j] !== clsB) continue;
+      const near = nearestOnTrack(trk, g.px[j], g.py[j], i);
+      if (near.d < 12 && Math.abs(trk.cum[near.idx] - trk.cum[i]) < 120) continue; // that's the route
+      return true;
+    }
+    return false;
+  };
+  const wayKey = i => m.cls[i] ? m.cls[i] + '\x1f' + (m.name[i] || '') : null;
   const mkCue = (idx, deg) => {
     const after = Math.min(trk.n - 1, idx + Math.ceil(25 / RESAMPLE_M));
     return { at: trk.cum[idx], idx, deg: Math.round(deg),
-      type: Math.abs(deg) >= CUE.HAIRPIN ? 'hairpin' : deg > 0 ? 'right' : 'left',
+      type: Math.abs(deg) >= CUE.HAIRPIN ? 'hairpin' : Math.abs(deg) >= CUE.TURN_MIN ? (deg > 0 ? 'right' : 'left') : 'ahead',
       from: m.cls[Math.max(0, idx - 3)] || null, onto: m.cls[after] || null, name: m.name[after] || null };
   };
   const cues = [];
-  // pass 1: angle-based decision points
+  // pass 1: hairpins — always cue, way data or not
   let i = 1;
   while (i < trk.n - 1) {
-    if (Math.abs(turn[i]) >= CUE.TURN_MIN) {
+    if (Math.abs(turn[i]) >= CUE.HAIRPIN) {
       let best = i, j = i;
-      while (j < trk.n && Math.abs(turn[j]) >= CUE.TURN_MIN - 5) { if (Math.abs(turn[j]) > Math.abs(turn[best])) best = j; j++; }
-      const deg = turn[best];
-      const fire = Math.abs(deg) >= CUE.HAIRPIN ? true                    // hairpins always cue
-        : hasData(best) ? altContinues(best)                              // decision only if something continues
-        : Math.abs(deg) >= CUE.TURN_LONE;                                 // unmapped ground: geometry fallback
-      if (fire) cues.push(mkCue(best, deg));
+      while (j < trk.n && Math.abs(turn[j]) >= CUE.HAIRPIN - 15) { if (Math.abs(turn[j]) > Math.abs(turn[best])) best = j; j++; }
+      cues.push(mkCue(best, turn[best]));
       i = j + Math.ceil(40 / RESAMPLE_M);
     } else i++;
   }
-  // pass 2: way-class departures (fire trail -> singletrack at a shallow angle)
-  let run = null;
+  // pass 2: way transitions (class or name, incl. mapped -> unmapped) where the old way carries on
   for (let k = 1; k < trk.n; k++) {
-    if (!m.cls[k] || m.cls[k] === m.cls[k - 1]) continue;
-    if (m.cls[k - 1]) {
-      // require both runs to be substantial (~40 m) so tile seams don't fire
-      let backOk = 0; for (let j = k - 1; j >= 0 && m.cls[j] === m.cls[k - 1]; j--) backOk++;
-      let fwdOk = 0; for (let j = k; j < trk.n && m.cls[j] === m.cls[k]; j++) fwdOk++;
-      if (backOk >= 5 && fwdOk >= 5 && altContinues(k)) {
-        const dup = cues.find(c => Math.abs(c.at - trk.cum[k]) < CUE.MERGE_M);
-        if (dup) { dup.from = m.cls[k - 1]; dup.onto = m.cls[k]; dup.name = m.name[k + 2] || dup.name; }
-        else cues.push(mkCue(k, turn[k]));
-      }
+    if (wayKey(k) === wayKey(k - 1)) continue;
+    // look-through: a null gap with the SAME way on both sides within ~300 m is a
+    // map-match dropout (GPS drift, corner mismatch), not a departure + rejoin
+    if (!wayKey(k)) {
+      let j = k; while (j < trk.n && !wayKey(j)) j++;
+      if (j < trk.n && wayKey(j) === wayKey(k - 1) && trk.cum[j] - trk.cum[k] < CUE.REJOIN_M) { k = j; continue; }
+    } else if (!wayKey(k - 1)) {
+      let j = k - 1; while (j >= 0 && !wayKey(j)) j--;
+      if (j >= 0 && wayKey(j) === wayKey(k) && trk.cum[k] - trk.cum[j] < CUE.REJOIN_M) continue;
     }
-    run = m.cls[k];
+    // both sides must hold their way ~5 samples (≈50 m) so tile seams and match blips don't fire
+    let backOk = 0; for (let j = k - 1; j >= 0 && wayKey(j) === wayKey(k - 1); j--) backOk++;
+    let fwdOk = 0; for (let j = k; j < trk.n && wayKey(j) === wayKey(k); j++) fwdOk++;
+    if (backOk < 5 || fwdOk < 5) continue;
+    const clsB = m.cls[k - 1], nameB = m.name[k - 1];
+    if (!(clsB ? departedContinues(k, clsB, nameB) : altContinues(k))) continue; // no decision = no cue
+    const dup = cues.find(c => Math.abs(c.at - trk.cum[k]) < CUE.MERGE_M);
+    if (dup) { dup.from = clsB; dup.onto = m.cls[k]; dup.name = m.name[k] || dup.name; }
+    else cues.push(mkCue(k, turn[k]));
   }
   cues.sort((a, b) => a.at - b.at);
   // merge cue clusters
@@ -731,7 +754,7 @@ async function analyzeRoute(trk) {
 }
 async function analyzeRouteInner(trk) {
   {
-    const key = 'cue2-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
+    const key = 'cue3-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
     try { const rec = await idb.get(key); if (rec) { trk.alerts = rec.cues; return; } } catch (e) {}
     const t0 = performance.now();
     const g = await decodeCorridor(trk);
@@ -761,7 +784,7 @@ const BEEP = {
   far()      { if (!S.set.sound) return; tone(660, .22, 0); vib([120]); console.log('[beep] far'); },
   turn()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
   hairpin()  { if (!S.set.sound) return; tone(990, .12, 0); tone(990, .12, .17); tone(1320, .2, .34); vib([80, 50, 80, 50, 160]); console.log('[beep] hairpin'); },
-  junction() { if (!S.set.sound) return; tone(520, .12, 0); tone(780, .12, .16); vib([60, 40, 60]); console.log('[beep] junction'); },
+  ahead()    { if (!S.set.sound) return; tone(520, .12, 0); tone(780, .12, .16); vib([60, 40, 60]); console.log('[beep] ahead'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
 };
@@ -1099,7 +1122,7 @@ function onFix(lat, lon, acc, speed, heading) {
     if (delta !== 0) ns.dirVotes = Math.max(-8, Math.min(8, ns.dirVotes + Math.sign(delta)));
     const newDir = ns.dirVotes <= -4 ? -1 : ns.dirVotes >= 4 ? 1 : ns.dir;
     if (newDir !== ns.dir) {
-      ns.dir = newDir; refreshMapData(); // chevrons follow riding direction
+      ns.dir = newDir; ns.confirmAt = null; refreshMapData(); // chevrons follow riding direction
       toast(ns.dir > 0 ? 'Direction: forward along track' : 'Direction: reverse along track');
     }
   }
@@ -1112,6 +1135,7 @@ function onFix(lat, lon, acc, speed, heading) {
     bn.textContent = 'OFF TRACK · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
     if (t - ns.lastOffBeep > 30e3) { BEEP.off(); ns.lastOffBeep = t; }
     prog.classList.add('offtrack'); // strip dims, labels freeze — no fake ETA off-route
+    ns.confirmAt = null;            // wandered off after the turn — nothing to congratulate
     setHud(null); return;
   }
 
@@ -1129,16 +1153,26 @@ function onFix(lat, lon, acc, speed, heading) {
     if (ns.dir > 0) { for (const a of trk.alerts) if (a.at > s + 5) { next = a; dTo = a.at - s; break; } }
     else { for (let i = trk.alerts.length - 1; i >= 0; i--) { const a = trk.alerts[i]; if (a.at < s - 5) { next = a; dTo = s - a.at; break; } } }
   }
-  if (ns.lastNext && next !== ns.lastNext && !ns.off) flashCommit(); // rode through the cue on-track
+  if (ns.lastNext && next !== ns.lastNext && !ns.off) {
+    // rode through the cue on-track — confirm ~30 m past the turn point, and only
+    // if it actually alerted (re-armed / never-approached cues stay quiet)
+    const p = ns.lastNext, st = ns.alertStates.get(p);
+    // st.done = confirmed this arming — direction-vote wobble at a hairpin apex must not re-confirm
+    if (st && !st.near && !st.done) { st.done = true; ns.confirmAt = ns.dir > 0 ? p.at + 30 : p.at - 30; }
+  }
   ns.lastNext = next;
+  if (ns.confirmAt != null && (ns.dir > 0 ? s >= ns.confirmAt : s <= ns.confirmAt)) {
+    ns.confirmAt = null; flashCommit();
+    if (S.set.confirm) BEEP.back();
+  }
   setHud(next, dTo, ns.dir, farM);
   if (next) {
     let st = ns.alertStates.get(next); if (!st) ns.alertStates.set(next, st = { far: true, near: true });
-    if (dTo > farM + 80) { st.far = true; st.near = true; } // re-arm on repeat laps
+    if (dTo > farM + 80) { st.far = true; st.near = true; st.done = false; } // re-arm on repeat laps
     if (dTo <= farM && dTo > nearM && st.far) { st.far = false; BEEP.far(); }
     if (dTo <= nearM && st.near) {
       st.near = false; st.far = false;
-      next.type === 'hairpin' ? BEEP.hairpin() : BEEP.turn();
+      next.type === 'hairpin' ? BEEP.hairpin() : next.type === 'ahead' ? BEEP.ahead() : BEEP.turn();
     }
   }
 }
@@ -1157,8 +1191,8 @@ function setHud(alert, dTo, dir, farM) {
   if (!show) return;
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
-  const icons = { left: '⬅', right: '➡', hairpin: '⟲' };
-  const labels = { left: 'turn left', right: 'turn right', hairpin: 'hairpin' };
+  const icons = { left: '⬅', right: '➡', hairpin: '⟲', ahead: '⬆' };
+  const labels = { left: 'turn left', right: 'turn right', hairpin: 'hairpin', ahead: 'straight ahead' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
   const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
   const ontoTxt = onto && onto !== from ? ' · onto ' + ((dir > 0 && alert.name) || onto) : '';
@@ -1255,8 +1289,7 @@ function drawProgress(force) {
     ctx.fillStyle = '#26313d'; ctx.fillRect(0, yC - 2.5, w, 5);
     ctx.fillStyle = '#00e5ff'; ctx.fillRect(0, yC - 2.5, frac * w, 5);
   }
-  if (trk.alerts) for (const a of trk.alerts) { // ticks = decisions only; junction crossings would be a barcode
-    if (a.type === 'junction') continue;
+  if (trk.alerts) for (const a of trk.alerts) {
     const x = routeX(a.at);
     ctx.fillStyle = a.type === 'hairpin' ? '#ff4545' : '#ffb020';
     if (expanded) ctx.fillRect(x - 1, 0, 2, 8);
@@ -1522,6 +1555,7 @@ function bindSet(id, key, cb) {
   el.onchange = () => { S.set[key] = el.checked; saveSet(); if (cb) cb(); };
 }
 bindSet('setSound', 'sound');
+bindSet('setConfirm', 'confirm');
 bindSet('setAutoZoom', 'autoZoom');
 for (const b of document.querySelectorAll('#vehSeg button')) {
   b.classList.toggle('active', b.dataset.v === S.set.vehicle);
