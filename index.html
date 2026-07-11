@@ -55,7 +55,21 @@
   .ctl.active{border-color:var(--accent); color:var(--accent)}
   #north{position:fixed; left:12px; bottom:120px; z-index:10; width:44px; height:44px; border-radius:50%;
     background:rgba(22,28,34,.9); border:1px solid #2a3540; display:flex; align-items:center; justify-content:center;
-    font-weight:800; color:var(--bad); font-size:17px}
+    font-weight:800; color:var(--bad); font-size:17px; cursor:pointer}
+  #north.course{border-color:var(--accent)}
+  #northInner{display:flex; flex-direction:column; align-items:center; line-height:1; will-change:transform}
+  #northInner::before{content:''; width:0; height:0; border:4px solid transparent; border-bottom:7px solid var(--bad); margin-bottom:1px}
+
+  /* ---------- progress strip ---------- */
+  #progress{position:fixed; left:0; right:0; z-index:14; display:none;
+    background:rgba(14,18,22,.92); border-top:1px solid #232d38; padding:4px 10px 0}
+  #progress.on{display:block}
+  #progress.offtrack{opacity:.4}
+  #progCanvas{display:block; width:100%; height:16px}
+  #progress.expanded #progCanvas{height:72px}
+  #progLabels{display:flex; justify-content:space-between; font-size:12px; color:var(--dim);
+    font-variant-numeric:tabular-nums; padding:2px 2px 4px}
+  #progLabels b{color:var(--fg); font-weight:700}
 
   /* ---------- bottom bar ---------- */
   #bottom{position:fixed; left:0; right:0; bottom:0; z-index:15;
@@ -120,7 +134,7 @@
 <div id="banner">OFF TRACK</div>
 <div id="toast"></div>
 
-<div id="north">N</div>
+<div id="north" title="toggle north-up / course-up"><span id="northInner">N</span></div>
 <div id="sideCtl">
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl" id="zoomOut">−</div>
@@ -132,6 +146,11 @@
   <div class="big">DingoNav</div>
   <div style="color:var(--dim)">No tracks loaded yet</div>
   <button class="btn primary" id="emptyLoad">Load GPX / heatmap files</button>
+</div>
+
+<div id="progress">
+  <canvas id="progCanvas"></canvas>
+  <div id="progLabels"><span id="progDone">—</span><span id="progTogo">—</span></div>
 </div>
 
 <div id="bottom">
@@ -181,7 +200,7 @@
 /* ================================================================
    DingoNav — offline GPX follower with turn beeps.
    MapLibre GL + PMTiles basemap; Dingo heatmap + tracks on top.
-   North is always up.
+   North-up or course-up (GPS bearing; approach bearing held when stopped).
    ================================================================ */
 
 /* ---------------- tiny IndexedDB wrapper ---------------- */
@@ -217,9 +236,9 @@ function angDiff(a, b) { let d = b - a; while (d > 180) d -= 360; while (d < -18
 const S = {
   tracks: [], heat: null, sel: -1,
   follow: true, nav: false,
-  pos: null, navState: null,
+  pos: null, navState: null, courseBearing: null,
   friends: new Map(), demo: null,
-  set: { sound: true, junctions: true, autoZoom: true, wake: true, name: '', code: '' },
+  set: { sound: true, junctions: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
@@ -233,7 +252,9 @@ function parseGPX(text, fallbackName) {
   for (const tag of ['trkpt', 'rtept']) {
     for (const el of doc.getElementsByTagName(tag)) {
       const lat = parseFloat(el.getAttribute('lat')), lon = parseFloat(el.getAttribute('lon'));
-      if (isFinite(lat) && isFinite(lon)) pts.push([lat, lon]);
+      const eleEl = el.getElementsByTagName('ele')[0];
+      const ele = eleEl ? parseFloat(eleEl.textContent) : NaN;
+      if (isFinite(lat) && isFinite(lon)) pts.push([lat, lon, ele]);
     }
     if (pts.length) break;
   }
@@ -258,21 +279,22 @@ function processTrack(id, name, ptsLL) {
     if (la < minLat) minLat = la; if (la > maxLat) maxLat = la;
     if (lo < minLon) minLon = lo; if (lo > maxLon) maxLon = lo;
   }
-  const rx = [raw[0]], ry = [raw[1]];
+  const rx = [raw[0]], ry = [raw[1]], re = [ptsLL[0][2] ?? NaN];
   let carry = 0;
   for (let i = 1; i < ptsLL.length; i++) {
     let ax = raw[(i - 1) * 2], ay = raw[(i - 1) * 2 + 1], bx = raw[i * 2], by = raw[i * 2 + 1];
+    const ea = ptsLL[i - 1][2] ?? NaN, eb = ptsLL[i][2] ?? NaN;
     let seg = dist(ax, ay, bx, by);
-    if (seg > 2000) { carry = 0; rx.push(bx); ry.push(by); continue; } // GPS gap — don't interpolate across
+    if (seg > 2000) { carry = 0; rx.push(bx); ry.push(by); re.push(eb); continue; } // GPS gap — don't interpolate across
     let along = RESAMPLE_M - carry;
     while (along < seg) {
       const t = along / seg;
-      rx.push(ax + (bx - ax) * t); ry.push(ay + (by - ay) * t);
+      rx.push(ax + (bx - ax) * t); ry.push(ay + (by - ay) * t); re.push(ea + (eb - ea) * t);
       along += RESAMPLE_M;
     }
     carry = seg - (along - RESAMPLE_M);
   }
-  rx.push(raw[(ptsLL.length - 1) * 2]); ry.push(raw[(ptsLL.length - 1) * 2 + 1]);
+  rx.push(raw[(ptsLL.length - 1) * 2]); ry.push(raw[(ptsLL.length - 1) * 2 + 1]); re.push(ptsLL[ptsLL.length - 1][2] ?? NaN);
   const n = rx.length;
   const xy = new Float32Array(n * 2), cum = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -285,8 +307,33 @@ function processTrack(id, name, ptsLL) {
     let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(i);
   }
   const coordsLL = ptsLL.map(p => [p[1], p[0]]); // GeoJSON [lon,lat]
-  return { id, name, xy, cum, n, grid, cell: CELL, coordsLL,
-    llBounds: [[minLon, minLat], [maxLon, maxLat]], lengthM: cum[n - 1], alerts: null };
+  const trk = { id, name, xy, cum, n, grid, cell: CELL, coordsLL, ele: Float32Array.from(re),
+    llBounds: [[minLon, minLat], [maxLon, maxLat]], lengthM: cum[n - 1], alerts: null,
+    hasEle: false, profile: null, eleMin: 0, eleMax: 0 };
+  buildProfile(trk);
+  return trk;
+}
+function buildProfile(trk) {
+  const e = trk.ele, n = trk.n;
+  let nF = 0, firstF = -1;
+  for (let i = 0; i < n; i++) if (isFinite(e[i])) { nF++; if (firstF < 0) firstF = i; }
+  trk.hasEle = nF / n > 0.8;
+  if (!trk.hasEle) return;
+  // forward-fill gaps, then smooth ±4 samples (~±32 m)
+  const f = new Float32Array(n);
+  let last = e[firstF];
+  for (let i = 0; i < n; i++) { if (isFinite(e[i])) last = e[i]; f[i] = last; }
+  const sm = new Float32Array(n), W = 4;
+  for (let i = 0; i < n; i++) {
+    let s = 0, c = 0;
+    for (let j = Math.max(0, i - W); j <= Math.min(n - 1, i + W); j++) { s += f[j]; c++; }
+    sm[i] = s / c;
+  }
+  const step = Math.max(1, Math.ceil(n / 400)), prof = [];
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < n; i += step) { prof.push({ d: trk.cum[i], e: sm[i] }); if (sm[i] < mn) mn = sm[i]; if (sm[i] > mx) mx = sm[i]; }
+  if (prof[prof.length - 1].d !== trk.cum[n - 1]) prof.push({ d: trk.cum[n - 1], e: sm[n - 1] });
+  trk.profile = prof; trk.eleMin = mn; trk.eleMax = mx;
 }
 function nearestOnTrack(trk, x, y, hintIdx) {
   let best = -1, bd = Infinity;
@@ -476,6 +523,7 @@ async function initMap() {
   map.keyboard.disableRotation();
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
   map.on('dragstart', () => { if (S.nav) setFollow(false); });
+  map.on('rotate', () => { northInner.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
   window.__map = map;
   // MapLibre's own ResizeObserver doesn't fire in hidden/background tabs — watchdog it,
   // installed BEFORE waiting for style load (the map may misreport 400x300 until resized)
@@ -603,6 +651,7 @@ function followCamera() {
   const [la, lo] = toLL(S.pos.x, S.pos.y);
   const opts = { center: [lo, la], duration: 900, easing: t => t };
   if (S.set.autoZoom) opts.zoom = speedZoom(S.pos.speed, la);
+  if (S.set.orient === 'course' && S.courseBearing != null) opts.bearing = S.courseBearing;
   map.easeTo(opts);
 }
 document.getElementById('zoomIn').onclick = () => map && map.zoomIn();
@@ -614,6 +663,20 @@ document.getElementById('followBtn').onclick = () => {
 };
 function setFollow(on) { S.follow = on; document.getElementById('followBtn').classList.toggle('active', on); }
 setFollow(true);
+
+/* ---------------- orientation: north-up / course-up ---------------- */
+const northBtn = document.getElementById('north'), northInner = document.getElementById('northInner');
+function applyOrient() {
+  northBtn.classList.toggle('course', S.set.orient === 'course');
+  if (!mapReady) return;
+  if (S.set.orient === 'north') map.easeTo({ bearing: 0, duration: 500 });
+  else if (S.courseBearing != null) map.easeTo({ bearing: S.courseBearing, duration: 500 });
+}
+northBtn.onclick = () => {
+  S.set.orient = S.set.orient === 'course' ? 'north' : 'course'; saveSet(); applyOrient();
+  toast(S.set.orient === 'course' ? 'Course up — travel direction points up' : 'North up');
+};
+applyOrient();
 function fitSelected() {
   if (!mapReady) return;
   if (S.sel >= 0) map.fitBounds(S.tracks[S.sel].llBounds, { padding: 60, duration: 600 });
@@ -637,10 +700,14 @@ function startNav() {
   const trk = S.tracks[S.sel]; if (!trk) return;
   audio(); // unlock on gesture
   if (!trk.alerts) { buildAlerts(trk); refreshMapData(); }
-  S.navState = { idx: -1, dir: 1, dirVotes: 0, off: false, lastOffBeep: 0, alertStates: new Map() };
+  S.navState = { idx: -1, dir: 1, dirVotes: 0, off: false, lastOffBeep: 0, alertStates: new Map(),
+    movingS: 0, avgSpd: null, lastFixT: 0 };
   S.nav = true; setFollow(true);
   document.getElementById('hud').classList.add('on');
   document.getElementById('hudSpeed').classList.add('on');
+  prog.classList.add('on'); prog.classList.remove('offtrack');
+  prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
+  placeProgress(); drawProgress(true);
   const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop');
   if (S.set.wake) requestWake();
   if (!S.demo) startGPS();
@@ -652,6 +719,8 @@ function stopNav() {
   document.getElementById('hud').classList.remove('on');
   document.getElementById('hudSpeed').classList.remove('on');
   document.getElementById('banner').classList.remove('on');
+  prog.classList.remove('on', 'offtrack');
+  placeProgress();
   const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
   stopGPS(); releaseWake(); stopDemo();
 }
@@ -667,6 +736,9 @@ function onFix(lat, lon, acc, speed, heading) {
   let hdg = heading;
   if ((hdg == null || isNaN(hdg)) && S.pos && dist(x, y, S.pos.x, S.pos.y) > 3) hdg = bearing(S.pos.x, S.pos.y, x, y);
   S.pos = { x, y, acc: acc || 0, speed: spd || 0, heading: hdg, t };
+  // course bearing: only trust headings above ~7 km/h, low-pass; held frozen when slower
+  if (hdg != null && !isNaN(hdg) && (spd || 0) > 2)
+    S.courseBearing = S.courseBearing == null ? hdg : S.courseBearing + angDiff(S.courseBearing, hdg) * 0.4;
   document.getElementById('hudSpeed').innerHTML = Math.round((spd || 0) * 3.6) + ' <small>km/h</small>';
   refreshPosLayers(); followCamera();
   if (!S.nav || S.sel < 0 || !ns) return;
@@ -685,15 +757,23 @@ function onFix(lat, lon, acc, speed, heading) {
   ns.idx = near.idx;
 
   if (near.d > OFF_M && !ns.off) ns.off = true;
-  if (near.d < ON_M && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); }
+  if (near.d < ON_M && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); }
   if (ns.off) {
     const bn = document.getElementById('banner');
     bn.textContent = 'OFF TRACK · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
     if (t - ns.lastOffBeep > 30e3) { BEEP.off(); ns.lastOffBeep = t; }
+    prog.classList.add('offtrack'); // strip dims, labels freeze — no fake ETA off-route
     setHud(null); return;
   }
 
   const s = trk.cum[near.idx];
+  const dts = ns.lastFixT ? Math.min(5, (t - ns.lastFixT) / 1000) : 0;
+  ns.lastFixT = t;
+  if ((spd || 0) > 1) { // moving: accumulate time + rolling avg speed (EMA, ~50 s at 1 Hz)
+    ns.movingS += dts;
+    ns.avgSpd = ns.avgSpd == null ? spd : ns.avgSpd * 0.98 + spd * 0.02;
+  }
+  drawProgress();
   let next = null, dTo = Infinity;
   if (trk.alerts) {
     if (ns.dir > 0) { for (const a of trk.alerts) if (a.at > s + 5) { next = a; dTo = a.at - s; break; } }
@@ -723,6 +803,85 @@ function setHud(alert, dTo, dir) {
   arrow.textContent = icons[type]; arrow.className = type;
   distEl.innerHTML = (dTo >= 995 ? (dTo / 1000).toFixed(1) + ' <small>km</small>' : Math.round(dTo / 5) * 5 + ' <small>m</small>');
   typeEl.textContent = labels[type];
+}
+
+/* ---------------- progress strip ---------------- */
+const prog = document.getElementById('progress'), progCanvas = document.getElementById('progCanvas');
+const progDone = document.getElementById('progDone'), progTogo = document.getElementById('progTogo');
+function placeProgress() {
+  const b = document.getElementById('bottom').offsetHeight;
+  prog.style.bottom = b + 'px';
+  // keep side controls + rose clear of the strip while navigating; CSS default otherwise
+  const above = S.nav ? (b + prog.offsetHeight + 14) + 'px' : '';
+  document.getElementById('sideCtl').style.bottom = above;
+  document.getElementById('north').style.bottom = above;
+}
+window.addEventListener('resize', () => { placeProgress(); drawProgress(true); });
+prog.onclick = () => {
+  const trk = S.tracks[S.sel];
+  if (!trk || !trk.hasEle) { toast('No elevation data in this track'); return; }
+  S.set.profile = !S.set.profile; saveSet();
+  prog.classList.toggle('expanded', S.set.profile);
+  placeProgress(); drawProgress(true);
+};
+function fmtTime(sec) {
+  sec = Math.max(0, sec | 0);
+  return ((sec / 3600) | 0) + ':' + String(((sec % 3600) / 60) | 0).padStart(2, '0');
+}
+function drawProgress(force) {
+  if (!S.nav) return;
+  const trk = S.tracks[S.sel], ns = S.navState;
+  if (!trk || !ns) return;
+  const dpr = window.devicePixelRatio || 1, w = progCanvas.clientWidth, h = progCanvas.clientHeight;
+  if (!w || !h) return;
+  if (force || progCanvas.width !== ((w * dpr) | 0) || progCanvas.height !== ((h * dpr) | 0)) {
+    progCanvas.width = (w * dpr) | 0; progCanvas.height = (h * dpr) | 0;
+  }
+  const ctx = progCanvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const len = trk.lengthM || 1, sRaw = ns.idx >= 0 ? trk.cum[ns.idx] : (ns.dir > 0 ? 0 : len);
+  const done = ns.dir > 0 ? sRaw : len - sRaw;
+  const frac = Math.max(0, Math.min(1, done / len));
+  const routeX = d => (ns.dir > 0 ? d : len - d) / len * w; // strip always reads left→right in riding direction
+  const expanded = prog.classList.contains('expanded') && trk.profile;
+  let dotY = h / 2;
+  if (expanded) {
+    const eSpan = (trk.eleMax - trk.eleMin) || 1, top = 10, bot = h - 2;
+    const eY = e => bot - (e - trk.eleMin) / eSpan * (bot - top);
+    const P = trk.profile, N = P.length;
+    const tracePath = close => {
+      ctx.beginPath();
+      for (let i = 0; i < N; i++) {
+        const p = P[ns.dir > 0 ? i : N - 1 - i];
+        i ? ctx.lineTo(routeX(p.d), eY(p.e)) : ctx.moveTo(routeX(p.d), eY(p.e));
+      }
+      if (close) { ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); }
+    };
+    tracePath(true); ctx.fillStyle = '#26313d'; ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, frac * w, h); ctx.clip();
+    tracePath(true); ctx.fillStyle = 'rgba(0,229,255,.4)'; ctx.fill(); ctx.restore();
+    tracePath(false); ctx.strokeStyle = '#55677a'; ctx.lineWidth = 1; ctx.stroke();
+    let pi = Math.max(0, Math.min(N - 1, Math.round(sRaw / len * (N - 1))));
+    dotY = eY(P[pi].e);
+  } else {
+    const yC = h / 2;
+    ctx.fillStyle = '#26313d'; ctx.fillRect(0, yC - 2.5, w, 5);
+    ctx.fillStyle = '#00e5ff'; ctx.fillRect(0, yC - 2.5, frac * w, 5);
+  }
+  if (trk.alerts) for (const a of trk.alerts) { // ticks = decisions only; junction crossings would be a barcode
+    if (a.type === 'junction') continue;
+    const x = routeX(a.at);
+    ctx.fillStyle = a.type === 'hairpin' ? '#ff4545' : '#ffb020';
+    if (expanded) ctx.fillRect(x - 1, 0, 2, 8);
+    else ctx.fillRect(x - 1, 2, 2, h - 4);
+  }
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(frac * w, dotY, 4.5, 0, 7); ctx.fill();
+  ctx.fillStyle = '#4096ff'; ctx.beginPath(); ctx.arc(frac * w, dotY, 3, 0, 7); ctx.fill();
+  progDone.innerHTML = '<b>' + (done / 1000).toFixed(1) + ' km</b> · ' + fmtTime(ns.movingS);
+  const rem = Math.max(0, len - done);
+  progTogo.innerHTML = '<b>' + (rem / 1000).toFixed(1) + ' km</b> · ' +
+    (ns.avgSpd > 0.5 ? '~' + fmtTime(rem / ns.avgSpd) : '—');
 }
 
 /* ---------------- GPS ---------------- */
