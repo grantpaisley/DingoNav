@@ -308,11 +308,12 @@
   <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
 </div>
 
-<input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json" hidden>
+<input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json,.dingonav" hidden>
 <input type="file" id="baseInput" accept=".pmtiles" hidden>
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/pmtiles.js"></script>
+<script src="vendor/fflate.js"></script>
 <script>
 'use strict';
 /* ================================================================
@@ -1739,10 +1740,44 @@ async function addFile(name, text) {
   await idb.put({ id, name: trkName, kind: 'gpx', text });
   return 'gpx';
 }
+/* A .dingonav zip (planner's "DingoNav bundle" export): bundle.json (tracks +
+ * heatmap) plus optional basemap.pmtiles and strava/{z}/{x}/{y}.png tiles — the
+ * whole ride in one file. Unzipped with fflate (vendored, offline). Basemap and
+ * Strava tiles land in IDB and take effect on the reload handleFiles triggers. */
+async function loadBundleZip(file) {
+  const entries = fflate.unzipSync(new Uint8Array(await file.arrayBuffer()));
+  let nT = 0, nH = 0, errs = 0, basemap = false, stravaTiles = 0;
+
+  if (entries['bundle.json']) {
+    const r = await addFile('bundle.json', fflate.strFromU8(entries['bundle.json']));
+    if (r && r.bundle) { nT += r.tracks; if (r.heatmap) nH++; errs += r.errs; }
+  }
+  if (entries['basemap.pmtiles']) {
+    const blob = new Blob([entries['basemap.pmtiles']], { type: 'application/octet-stream' });
+    await idb.put({ id: 'basemap', name: file.name.replace(/\.dingonav$/i, '') + ' basemap', kind: 'basemap', blob });
+    basemap = true;
+  }
+  // Strava corridor tiles — persisted now; the raster layer that renders them is
+  // wired separately once the Dingo Strava proxy is producing real tiles.
+  for (const path in entries) {
+    const m = path.match(/^strava\/(\d+)\/(\d+)\/(\d+)\.png$/);
+    if (!m) continue;
+    await idb.put({ id: `stravatile-${m[1]}-${m[2]}-${m[3]}`, kind: 'stravatile',
+      blob: new Blob([entries[path]], { type: 'image/png' }) });
+    stravaTiles++;
+  }
+  return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles };
+}
 async function handleFiles(files) {
-  let nT = 0, nH = 0, errs = 0;
+  let nT = 0, nH = 0, errs = 0, needReload = false, stravaTiles = 0;
   for (const f of files) {
     try {
+      if (/\.dingonav$/i.test(f.name)) {
+        const r = await loadBundleZip(f);
+        nT += r.tracks; if (r.heatmap) nH++; errs += r.errs; stravaTiles += r.stravaTiles;
+        if (r.basemap || r.stravaTiles) needReload = true;
+        continue;
+      }
       const r = await addFile(f.name, await f.text());
       if (r === 'gpx') nT++;
       else if (r === 'heatmap') nH++;
@@ -1753,7 +1788,10 @@ async function handleFiles(files) {
   if (S.sel < 0 && S.tracks.length) selectTrack(0);
   refreshTrackList(); refreshEmpty(); refreshMapData();
   if (nT || nH) fitSelected();
-  toast(`Loaded ${nT} track${nT === 1 ? '' : 's'}${nH ? ' + heatmap' : ''}${errs ? ' · ' + errs + ' failed' : ''}`);
+  const extra = stravaTiles ? ` + ${stravaTiles} Strava tiles` : '';
+  toast(`Loaded ${nT} track${nT === 1 ? '' : 's'}${nH ? ' + heatmap' : ''}${extra}${errs ? ' · ' + errs + ' failed' : ''}`);
+  // Basemap / Strava tiles only take effect after a map rebuild.
+  if (needReload) setTimeout(() => location.reload(), 1100);
 }
 document.getElementById('fileInput').addEventListener('change', e => { handleFiles([...e.target.files]); e.target.value = ''; });
 document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
