@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dingonav",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["serve.js", "8139"],
+      "port": 8139,
+      "autoPort": true
+    }
+  ]
+}

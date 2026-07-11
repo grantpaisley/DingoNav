@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0e1216">
+<title>DingoNav</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<style>
+  :root{
+    --bg:#0e1216; --panel:#161c22; --panel2:#1e2630; --fg:#e8eef4; --dim:#8fa0b0;
+    --accent:#00e5ff; --own:#ff7a00; --plan:#3390ff; --other:#ff2d2d;
+    --ok:#38d178; --warn:#ffb020; --bad:#ff4545;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%; overflow:hidden; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,'Segoe UI',Roboto,sans-serif; user-select:none; -webkit-user-select:none}
+  #map{position:fixed; inset:0; background:var(--bg)}
+  .maplibregl-ctrl-scale{background:rgba(14,18,22,.6)!important; color:var(--fg)!important;
+    border-color:rgba(232,238,244,.5)!important; font-size:11px}
+  .maplibregl-ctrl-attrib{background:rgba(14,18,22,.5)!important; font-size:10px}
+  .maplibregl-ctrl-attrib a{color:var(--dim)!important}
+
+  /* ---------- top HUD ---------- */
+  #hud{position:fixed; top:0; left:0; right:0; display:none; justify-content:center;
+    padding:calc(env(safe-area-inset-top) + 8px) 12px 8px; pointer-events:none; z-index:10}
+  #hud.on{display:flex}
+  #hudBox{background:rgba(14,18,22,.92); border:1px solid #2a3540; border-radius:16px;
+    padding:10px 20px; display:flex; align-items:center; gap:16px; min-width:230px; justify-content:center}
+  #hudArrow{font-size:44px; line-height:1; width:56px; text-align:center}
+  #hudArrow.left{color:var(--warn)} #hudArrow.right{color:var(--warn)}
+  #hudArrow.junction{color:var(--accent)} #hudArrow.hairpin{color:var(--bad)}
+  #hudDist{font-size:40px; font-weight:800; font-variant-numeric:tabular-nums}
+  #hudDist small{font-size:18px; font-weight:600; color:var(--dim)}
+  #hudType{font-size:13px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em}
+  #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:12px; z-index:10;
+    background:rgba(14,18,22,.85); border-radius:12px; padding:6px 12px; font-size:22px; font-weight:700;
+    display:none; font-variant-numeric:tabular-nums}
+  #hudSpeed.on{display:block} #hudSpeed small{font-size:12px; color:var(--dim); font-weight:500}
+  #banner{position:fixed; top:110px; left:50%; transform:translateX(-50%); z-index:11;
+    background:var(--bad); color:#fff; font-weight:800; font-size:20px; padding:10px 22px;
+    border-radius:12px; display:none; box-shadow:0 4px 20px rgba(0,0,0,.5)}
+  #banner.on{display:block}
+  #toast{position:fixed; bottom:110px; left:50%; transform:translateX(-50%); z-index:30;
+    background:var(--panel2); border:1px solid #2a3540; color:var(--fg); font-size:15px; padding:10px 18px;
+    border-radius:12px; display:none; max-width:88vw; text-align:center}
+
+  /* ---------- side controls ---------- */
+  #sideCtl{position:fixed; right:10px; bottom:120px; display:flex; flex-direction:column; gap:10px; z-index:10}
+  .ctl{width:54px; height:54px; border-radius:14px; background:rgba(22,28,34,.92); border:1px solid #2a3540;
+    color:var(--fg); font-size:26px; display:flex; align-items:center; justify-content:center; cursor:pointer}
+  .ctl:active{background:var(--panel2)}
+  .ctl.active{border-color:var(--accent); color:var(--accent)}
+  #north{position:fixed; left:12px; bottom:120px; z-index:10; width:44px; height:44px; border-radius:50%;
+    background:rgba(22,28,34,.9); border:1px solid #2a3540; display:flex; align-items:center; justify-content:center;
+    font-weight:800; color:var(--bad); font-size:17px}
+
+  /* ---------- bottom bar ---------- */
+  #bottom{position:fixed; left:0; right:0; bottom:0; z-index:15;
+    background:rgba(14,18,22,.96); border-top:1px solid #232d38;
+    padding:10px 12px calc(env(safe-area-inset-bottom) + 10px); display:flex; gap:10px; align-items:center}
+  #menuBtn{width:56px; height:56px; font-size:26px; flex:none}
+  #trackInfo{flex:1; min-width:0; line-height:1.25}
+  #trackName{font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  #trackSub{font-size:13px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  #navBtn{flex:none; height:56px; padding:0 26px; border-radius:14px; border:none; font-size:19px; font-weight:800;
+    background:var(--ok); color:#04240f; cursor:pointer}
+  #navBtn.stop{background:var(--bad); color:#fff}
+  #navBtn:disabled{background:#2a3540; color:#5a6a78}
+
+  /* ---------- panel ---------- */
+  #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
+  #shade.on{display:block}
+  #panel{position:fixed; left:0; right:0; bottom:0; max-height:78vh; overflow-y:auto; z-index:20;
+    background:var(--panel); border-radius:20px 20px 0 0; padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
+    transform:translateY(105%); transition:transform .22s ease}
+  #panel.on{transform:translateY(0)}
+  #panel h3{font-size:13px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); margin:18px 0 8px}
+  #panel h3:first-child{margin-top:4px}
+  .trk{display:flex; align-items:center; gap:12px; padding:12px 10px; border-radius:12px; cursor:pointer}
+  .trk.sel{background:var(--panel2); outline:1px solid var(--accent)}
+  .trk .dot{width:14px; height:14px; border-radius:50%; flex:none}
+  .trk .nm{flex:1; min-width:0; font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .trk .len{font-size:13px; color:var(--dim); flex:none}
+  .trk .del{flex:none; color:var(--dim); font-size:20px; padding:4px 8px}
+  .btnRow{display:flex; gap:10px; margin-top:10px; flex-wrap:wrap}
+  .btn{flex:1; min-width:130px; padding:13px; border-radius:12px; border:1px solid #2a3540; background:var(--panel2);
+    color:var(--fg); font-size:15px; font-weight:600; cursor:pointer; text-align:center}
+  .btn.primary{background:var(--accent); color:#00252b; border:none}
+  .btn.danger{color:var(--bad)}
+  .row{display:flex; align-items:center; justify-content:space-between; padding:11px 4px; gap:10px}
+  .row label{font-size:15px}
+  .row input[type=text]{background:var(--bg); border:1px solid #2a3540; color:var(--fg); border-radius:10px;
+    padding:10px 12px; font-size:15px; width:170px}
+  .sw{position:relative; width:52px; height:30px; flex:none}
+  .sw input{opacity:0; width:0; height:0}
+  .sw span{position:absolute; inset:0; background:#2a3540; border-radius:15px; transition:.15s}
+  .sw span::before{content:''; position:absolute; width:24px; height:24px; border-radius:50%; background:#8fa0b0;
+    top:3px; left:3px; transition:.15s}
+  .sw input:checked + span{background:var(--accent)}
+  .sw input:checked + span::before{background:#fff; transform:translateX(22px)}
+  .hint{font-size:12.5px; color:var(--dim); margin-top:6px; line-height:1.45}
+  #friendStatus,#baseStatus{font-size:13px; color:var(--dim); padding:4px}
+  #emptyState{position:fixed; inset:0; display:none; z-index:5; align-items:center; justify-content:center; flex-direction:column; gap:16px; pointer-events:none}
+  #emptyState.on{display:flex}
+  #emptyState .big{font-size:22px; font-weight:700}
+  #emptyState .btn{flex:none; padding:16px 30px; font-size:17px; pointer-events:auto}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="hud"><div id="hudBox">
+  <div id="hudArrow">↑</div>
+  <div><div id="hudDist">— <small>m</small></div><div id="hudType">next turn</div></div>
+</div></div>
+<div id="hudSpeed">0 <small>km/h</small></div>
+<div id="banner">OFF TRACK</div>
+<div id="toast"></div>
+
+<div id="north">N</div>
+<div id="sideCtl">
+  <div class="ctl" id="zoomIn">+</div>
+  <div class="ctl" id="zoomOut">−</div>
+  <div class="ctl" id="followBtn" title="follow GPS">◎</div>
+  <div class="ctl" id="fitBtn" title="fit track">⛶</div>
+</div>
+
+<div id="emptyState">
+  <div class="big">DingoNav</div>
+  <div style="color:var(--dim)">No tracks loaded yet</div>
+  <button class="btn primary" id="emptyLoad">Load GPX / heatmap files</button>
+</div>
+
+<div id="bottom">
+  <div class="ctl" id="menuBtn">☰</div>
+  <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
+  <button id="navBtn" disabled>START</button>
+</div>
+
+<div id="shade"></div>
+<div id="panel">
+  <h3>Tracks</h3>
+  <div id="trackList"></div>
+  <div class="btnRow">
+    <button class="btn primary" id="loadBtn">Load files…</button>
+    <button class="btn danger" id="clearBtn">Clear all data</button>
+  </div>
+  <div class="hint">Load .gpx tracks and a heatmap .geojson (exported from <b>Dingo</b>). Everything is stored on this device and works fully offline.</div>
+  <div class="hint" id="heatInfo"></div>
+
+  <h3>Offline basemap</h3>
+  <div id="baseStatus">no basemap loaded</div>
+  <div class="btnRow"><button class="btn" id="baseBtn">Load .pmtiles basemap…</button></div>
+  <div class="hint">A .pmtiles extract gives roads, trails, water and labels offline. One is auto-downloaded on first open when hosted with the app; cut other areas with the <b>pmtiles</b> CLI (see README).</div>
+
+  <h3>Group ride (needs signal)</h3>
+  <div class="row"><label>Your name</label><input type="text" id="myName" maxlength="12" placeholder="Grant"></div>
+  <div class="row"><label>Ride code</label><input type="text" id="rideCode" maxlength="24" placeholder="e.g. watagans-42"></div>
+  <div id="friendStatus">off — enter a shared code to see friends</div>
+  <div class="hint">Everyone with the same code sees each other's position (updates ~20 s via ntfy.sh when online; silently off without signal). Use a code others can't guess.</div>
+
+  <h3>Settings</h3>
+  <div class="row"><label>Turn / junction beeps</label><span class="sw"><input type="checkbox" id="setSound" checked><span></span></span></div>
+  <div class="row"><label>Junction beeps (heatmap crossings)</label><span class="sw"><input type="checkbox" id="setJunctions" checked><span></span></span></div>
+  <div class="row"><label>Auto-zoom with speed</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
+  <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
+  <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
+  <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
+</div>
+
+<input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json" hidden>
+<input type="file" id="baseInput" accept=".pmtiles" hidden>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/pmtiles.js"></script>
+<script>
+'use strict';
+/* ================================================================
+   DingoNav — offline GPX follower with turn beeps.
+   MapLibre GL + PMTiles basemap; Dingo heatmap + tracks on top.
+   North is always up.
+   ================================================================ */
+
+/* ---------------- tiny IndexedDB wrapper ---------------- */
+const idb = {
+  db: null,
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('dingonav', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'id' });
+      r.onsuccess = () => { idb.db = r.result; res(); };
+      r.onerror = () => rej(r.error);
+    });
+  },
+  tx(mode) { return idb.db.transaction('files', mode).objectStore('files'); },
+  put(rec) { return new Promise((res, rej) => { const q = idb.tx('readwrite').put(rec); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
+  del(id) { return new Promise((res, rej) => { const q = idb.tx('readwrite').delete(id); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
+  get(id) { return new Promise((res, rej) => { const q = idb.tx('readonly').get(id); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  all() { return new Promise((res, rej) => { const q = idb.tx('readonly').getAll(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  clear() { return new Promise((res, rej) => { const q = idb.tx('readwrite').clear(); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
+};
+
+/* ---------------- geometry helpers (nav math in local metres) ---------------- */
+const R_LAT = 110540, R_LON = 111320;
+let REF = null;
+function setRef(lat, lon) { REF = { lat, lon, kx: R_LON * Math.cos(lat * Math.PI / 180) }; }
+function toXY(lat, lon) { return [(lon - REF.lon) * REF.kx, (lat - REF.lat) * R_LAT]; }
+function toLL(x, y) { return [y / R_LAT + REF.lat, x / REF.kx + REF.lon]; }
+function dist(ax, ay, bx, by) { const dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy); }
+function bearing(ax, ay, bx, by) { return Math.atan2(bx - ax, by - ay) * 180 / Math.PI; }
+function angDiff(a, b) { let d = b - a; while (d > 180) d -= 360; while (d < -180) d += 360; return d; }
+
+/* ---------------- state ---------------- */
+const S = {
+  tracks: [], heat: null, sel: -1,
+  follow: true, nav: false,
+  pos: null, navState: null,
+  friends: new Map(), demo: null,
+  set: { sound: true, junctions: true, autoZoom: true, wake: true, name: '', code: '' },
+};
+try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
+function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
+let map = null, mapReady = false;
+
+/* ---------------- GPX / GeoJSON parsing ---------------- */
+function parseGPX(text, fallbackName) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('not valid GPX');
+  const pts = [];
+  for (const tag of ['trkpt', 'rtept']) {
+    for (const el of doc.getElementsByTagName(tag)) {
+      const lat = parseFloat(el.getAttribute('lat')), lon = parseFloat(el.getAttribute('lon'));
+      if (isFinite(lat) && isFinite(lon)) pts.push([lat, lon]);
+    }
+    if (pts.length) break;
+  }
+  if (pts.length < 2) throw new Error('no track points');
+  const nameEl = doc.querySelector('trk > name, rte > name, metadata > name');
+  return { name: (nameEl && nameEl.textContent.trim()) || fallbackName, pts };
+}
+function looksLikeHeatmap(text) {
+  const head = text.slice(0, 200);
+  return head.includes('FeatureCollection') || head.includes('"features"');
+}
+
+/* ---------------- track processing ---------------- */
+const RESAMPLE_M = 8;
+function processTrack(id, name, ptsLL) {
+  if (!REF) setRef(ptsLL[0][0], ptsLL[0][1]);
+  const raw = new Float32Array(ptsLL.length * 2);
+  let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+  for (let i = 0; i < ptsLL.length; i++) {
+    const [x, y] = toXY(ptsLL[i][0], ptsLL[i][1]); raw[i * 2] = x; raw[i * 2 + 1] = y;
+    const la = ptsLL[i][0], lo = ptsLL[i][1];
+    if (la < minLat) minLat = la; if (la > maxLat) maxLat = la;
+    if (lo < minLon) minLon = lo; if (lo > maxLon) maxLon = lo;
+  }
+  const rx = [raw[0]], ry = [raw[1]];
+  let carry = 0;
+  for (let i = 1; i < ptsLL.length; i++) {
+    let ax = raw[(i - 1) * 2], ay = raw[(i - 1) * 2 + 1], bx = raw[i * 2], by = raw[i * 2 + 1];
+    let seg = dist(ax, ay, bx, by);
+    if (seg > 2000) { carry = 0; rx.push(bx); ry.push(by); continue; } // GPS gap — don't interpolate across
+    let along = RESAMPLE_M - carry;
+    while (along < seg) {
+      const t = along / seg;
+      rx.push(ax + (bx - ax) * t); ry.push(ay + (by - ay) * t);
+      along += RESAMPLE_M;
+    }
+    carry = seg - (along - RESAMPLE_M);
+  }
+  rx.push(raw[(ptsLL.length - 1) * 2]); ry.push(raw[(ptsLL.length - 1) * 2 + 1]);
+  const n = rx.length;
+  const xy = new Float32Array(n * 2), cum = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    xy[i * 2] = rx[i]; xy[i * 2 + 1] = ry[i];
+    if (i) cum[i] = cum[i - 1] + dist(rx[i - 1], ry[i - 1], rx[i], ry[i]);
+  }
+  const grid = new Map(), CELL = 64;
+  for (let i = 0; i < n; i++) {
+    const k = ((xy[i * 2] / CELL) | 0) + ',' + ((xy[i * 2 + 1] / CELL) | 0);
+    let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(i);
+  }
+  const coordsLL = ptsLL.map(p => [p[1], p[0]]); // GeoJSON [lon,lat]
+  return { id, name, xy, cum, n, grid, cell: CELL, coordsLL,
+    llBounds: [[minLon, minLat], [maxLon, maxLat]], lengthM: cum[n - 1], alerts: null };
+}
+function nearestOnTrack(trk, x, y, hintIdx) {
+  let best = -1, bd = Infinity;
+  if (hintIdx >= 0) {
+    const lo = Math.max(0, hintIdx - 60), hi = Math.min(trk.n - 1, hintIdx + 60);
+    for (let i = lo; i <= hi; i++) { const d = dist(x, y, trk.xy[i * 2], trk.xy[i * 2 + 1]); if (d < bd) { bd = d; best = i; } }
+    if (bd < 60) return { idx: best, d: bd };
+  }
+  const C = trk.cell, cx = (x / C) | 0, cy = (y / C) | 0;
+  for (let r = 0; r <= 8; r++) {
+    for (let ix = cx - r; ix <= cx + r; ix++) for (let iy = cy - r; iy <= cy + r; iy++) {
+      if (r && Math.abs(ix - cx) !== r && Math.abs(iy - cy) !== r) continue;
+      const a = trk.grid.get(ix + ',' + iy); if (!a) continue;
+      for (const i of a) { const d = dist(x, y, trk.xy[i * 2], trk.xy[i * 2 + 1]); if (d < bd) { bd = d; best = i; } }
+    }
+    if (best >= 0 && bd < r * C) break;
+  }
+  if (best < 0) {
+    for (let i = 0; i < trk.n; i += 4) { const d = dist(x, y, trk.xy[i * 2], trk.xy[i * 2 + 1]); if (d < bd) { bd = d; best = i; } }
+  }
+  return { idx: best, d: bd };
+}
+function idxAt(trk, distM) {
+  let lo = 0, hi = trk.n - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (trk.cum[m] < distM) lo = m + 1; else hi = m; }
+  return lo;
+}
+
+/* ---------------- heatmap processing (junction grid in XY) ---------------- */
+function processHeatmap(geojson) {
+  const feats = geojson.features || [];
+  if (!feats.length) throw new Error('empty GeoJSON');
+  if (!REF) { const c = feats[0].geometry.coordinates[0]; setRef(c[1], c[0]); }
+  let count = 0;
+  for (const f of feats) if (f.geometry) count++;
+  return { geojson, count, grid: null };
+}
+function heatGrid(heat) {
+  if (heat.grid) return heat.grid;
+  const CELL = 24, grid = new Map(), px = [], py = [], pb = [];
+  const STEP = 12; // densify to ~12 m samples
+  for (const f of heat.geojson.features) {
+    const g = f.geometry; if (!g) continue;
+    const coordSets = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+    for (const coords of coordSets) {
+      for (let i = 1; i < coords.length; i++) {
+        const [ax, ay] = toXY(coords[i - 1][1], coords[i - 1][0]);
+        const [bx, by] = toXY(coords[i][1], coords[i][0]);
+        const seg = dist(ax, ay, bx, by); if (seg > 2000) continue;
+        const brg = bearing(ax, ay, bx, by);
+        const steps = Math.max(1, Math.round(seg / STEP));
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps, x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+          const j = px.length; px.push(x); py.push(y); pb.push(brg);
+          const k = ((x / CELL) | 0) + ',' + ((y / CELL) | 0);
+          let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(j);
+        }
+      }
+    }
+  }
+  heat.grid = { grid, px, py, pb, cell: CELL };
+  return heat.grid;
+}
+
+/* ---------------- alert extraction (turns + junctions) ---------------- */
+function buildAlerts(trk) {
+  const alerts = [];
+  const W = 5; // 5 samples ≈ 40 m window
+  const brg = new Float32Array(trk.n - 1);
+  for (let i = 0; i < trk.n - 1; i++) brg[i] = bearing(trk.xy[i * 2], trk.xy[i * 2 + 1], trk.xy[i * 2 + 2], trk.xy[i * 2 + 3]);
+  const turn = new Float32Array(trk.n);
+  for (let i = 0; i < trk.n - 1 - W; i++) {
+    let sum = 0;
+    for (let j = i; j < i + W; j++) sum += angDiff(brg[j], brg[j + 1]);
+    turn[i + ((W / 2) | 0)] = sum;
+  }
+  let i = 0;
+  while (i < trk.n) {
+    if (Math.abs(turn[i]) >= 45) {
+      let best = i, j = i;
+      while (j < trk.n && Math.abs(turn[j]) >= 40) { if (Math.abs(turn[j]) > Math.abs(turn[best])) best = j; j++; }
+      const a = turn[best];
+      alerts.push({ at: trk.cum[best], idx: best,
+        type: Math.abs(a) >= 120 ? 'hairpin' : (a > 0 ? 'right' : 'left'), deg: Math.round(a) });
+      i = j + Math.ceil(60 / RESAMPLE_M);
+    } else i++;
+  }
+  if (S.heat && S.set.junctions) {
+    const hg = heatGrid(S.heat), C = hg.cell;
+    let lastJ = -1e9;
+    for (let k = 0; k < trk.n - 1; k += 2) { // every 16 m
+      if (trk.cum[k] - lastJ < 60) continue;
+      const x = trk.xy[k * 2], y = trk.xy[k * 2 + 1], myb = brg[Math.min(k, brg.length - 1)];
+      const cx = (x / C) | 0, cy = (y / C) | 0;
+      let hit = false;
+      for (let ix = cx - 1; ix <= cx + 1 && !hit; ix++) for (let iy = cy - 1; iy <= cy + 1 && !hit; iy++) {
+        const a = hg.grid.get(ix + ',' + iy); if (!a) continue;
+        for (const j of a) {
+          const d = dist(x, y, hg.px[j], hg.py[j]); if (d > 15) continue;
+          const bd = Math.abs(angDiff(myb, hg.pb[j])); const cross = Math.min(bd, 180 - bd);
+          if (cross > 35) { hit = true; break; }
+        }
+      }
+      if (hit) {
+        const nearTurn = alerts.some(al => al.type !== 'junction' && Math.abs(al.at - trk.cum[k]) < 50);
+        if (!nearTurn) alerts.push({ at: trk.cum[k], idx: k, type: 'junction', deg: 0 });
+        lastJ = trk.cum[k];
+      }
+    }
+  }
+  alerts.sort((a, b) => a.at - b.at);
+  trk.alerts = alerts;
+  console.log(`[dingonav] alerts for "${trk.name}": ${alerts.length}`,
+    alerts.reduce((m, a) => (m[a.type] = (m[a.type] || 0) + 1, m), {}));
+  return alerts;
+}
+
+/* ---------------- audio ---------------- */
+let AC = null;
+function audio() { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); return AC; }
+function tone(freq, dur, when, vol = 0.5) {
+  const ctx = audio(), t = ctx.currentTime + when;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01);
+  g.gain.setValueAtTime(vol, t + dur - 0.03); g.gain.linearRampToValueAtTime(0, t + dur);
+  o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+const BEEP = {
+  far()      { if (!S.set.sound) return; tone(660, .22, 0); vib([120]); console.log('[beep] far'); },
+  turn()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
+  hairpin()  { if (!S.set.sound) return; tone(990, .12, 0); tone(990, .12, .17); tone(1320, .2, .34); vib([80, 50, 80, 50, 160]); console.log('[beep] hairpin'); },
+  junction() { if (!S.set.sound) return; tone(520, .12, 0); tone(780, .12, .16); vib([60, 40, 60]); console.log('[beep] junction'); },
+  off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
+  back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
+};
+function vib(pat) { if (navigator.vibrate) navigator.vibrate(pat); }
+
+/* ---------------- MapLibre setup ---------------- */
+const EMPTY = { type: 'FeatureCollection', features: [] };
+async function initMap() {
+  const protocol = new pmtiles.Protocol();
+  maplibregl.addProtocol('pmtiles', protocol.tile);
+
+  // basemap: IDB blob -> else fetch alongside the app -> else plain dark background
+  let baseBlob = null, baseName = '';
+  try { const rec = await idb.get('basemap'); if (rec) { baseBlob = rec.blob; baseName = rec.name; } } catch (e) {}
+  if (!baseBlob) {
+    try {
+      toast('Downloading offline basemap…');
+      const resp = await fetch('basemap/central-coast.pmtiles');
+      if (resp.ok) {
+        baseBlob = await resp.blob(); baseName = 'central-coast.pmtiles';
+        await idb.put({ id: 'basemap', name: baseName, kind: 'basemap', blob: baseBlob });
+        toast('Basemap stored for offline use (' + (baseBlob.size / 1e6).toFixed(0) + ' MB)');
+      }
+    } catch (e) {}
+  }
+  let style;
+  if (baseBlob) {
+    protocol.add(new pmtiles.PMTiles(new pmtiles.FileSource(new File([baseBlob], 'base'))));
+    const baseLayers = await (await fetch('basemap/layers.json')).json();
+    const baseUrl = new URL('basemap/', location.href).href;
+    style = {
+      version: 8,
+      glyphs: baseUrl + 'fonts/{fontstack}/{range}.pbf', // string concat — new URL() would %-encode the tokens
+      sprite: baseUrl + 'sprites/dark',
+      sources: { protomaps: { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } },
+      layers: baseLayers,
+    };
+    setBaseStatus('Basemap: ' + baseName + ' (' + (baseBlob.size / 1e6).toFixed(0) + ' MB, on device)');
+  } else {
+    style = {
+      version: 8,
+      glyphs: new URL('basemap/', location.href).href + 'fonts/{fontstack}/{range}.pbf',
+      sources: {},
+      layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } }],
+    };
+    setBaseStatus('no basemap — tracks on dark background');
+  }
+  map = new maplibregl.Map({
+    container: 'map', style,
+    center: [151.3, -33.3], zoom: 9,
+    maxPitch: 0, pitchWithRotate: false, dragRotate: false, attributionControl: { compact: true },
+  });
+  map.touchZoomRotate.disableRotation();
+  map.keyboard.disableRotation();
+  map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
+  map.on('dragstart', () => { if (S.nav) setFollow(false); });
+  window.__map = map;
+  // MapLibre's own ResizeObserver doesn't fire in hidden/background tabs — watchdog it,
+  // installed BEFORE waiting for style load (the map may misreport 400x300 until resized)
+  setInterval(() => {
+    const c = map.getContainer(), cv = map.getCanvas();
+    if (Math.abs(cv.clientWidth - c.clientWidth) > 2 || Math.abs(cv.clientHeight - c.clientHeight) > 2) map.resize();
+  }, 1000);
+  map.resize();
+  // don't rely solely on the 'load' event — it can stall in hidden tabs; poll isStyleLoaded too
+  await new Promise(res => {
+    if (map.isStyleLoaded()) return res();
+    const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 250);
+    map.once('load', () => { clearInterval(t); res(); });
+  });
+  mapReady = true; // before addOverlays — its refreshMapData() call needs this
+  addOverlays();
+}
+const CLS_MATCH = ['match', ['get', 'class'], 'other', '#ff2d2d', 'plan', '#3390ff', '#ff7a00'];
+function addOverlays() {
+  map.addSource('heat', { type: 'geojson', data: S.heat ? S.heat.geojson : EMPTY });
+  map.addSource('tracksOther', { type: 'geojson', data: EMPTY });
+  map.addSource('selTrack', { type: 'geojson', data: EMPTY });
+  map.addSource('alerts', { type: 'geojson', data: EMPTY });
+  map.addSource('friends', { type: 'geojson', data: EMPTY });
+  map.addSource('posAcc', { type: 'geojson', data: EMPTY });
+  map.addSource('pos', { type: 'geojson', data: EMPTY });
+
+  map.addLayer({ id: 'heat-halo', type: 'line', source: 'heat',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': CLS_MATCH, 'line-opacity': 0.10, 'line-blur': 4,
+      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 2, 12, 6, 15, 14, 17, 26] } });
+  map.addLayer({ id: 'heat-core', type: 'line', source: 'heat',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': CLS_MATCH, 'line-opacity': 0.35,
+      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
+  map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
+    layout: { 'line-join': 'round' },
+    paint: { 'line-color': '#b4c8d7', 'line-opacity': 0.4, 'line-width': 1.6 } });
+  map.addLayer({ id: 'sel-casing', type: 'line', source: 'selTrack',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': '#001318', 'line-opacity': 0.7,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 8] } });
+  map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': '#00e5ff',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 4] } });
+  map.addLayer({ id: 'sel-chevrons', type: 'symbol', source: 'selTrack',
+    layout: { 'symbol-placement': 'line', 'symbol-spacing': 90, 'text-field': '›',
+      'text-size': 15, 'text-font': ['Noto Sans Medium'], 'text-keep-upright': false,
+      'text-allow-overlap': true, 'text-rotation-alignment': 'map' },
+    paint: { 'text-color': '#003a44' } });
+  map.addLayer({ id: 'alert-dots', type: 'circle', source: 'alerts', minzoom: 12.5,
+    paint: { 'circle-radius': 4.5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#0e1216',
+      'circle-color': ['match', ['get', 't'], 'junction', '#00e5ff', 'hairpin', '#ff4545', '#ffb020'] } });
+  map.addLayer({ id: 'friends-dots', type: 'circle', source: 'friends',
+    paint: { 'circle-radius': 8, 'circle-color': '#38d178', 'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff' } });
+  map.addLayer({ id: 'friends-labels', type: 'symbol', source: 'friends',
+    layout: { 'text-field': ['get', 'name'], 'text-size': 13, 'text-font': ['Noto Sans Medium'],
+      'text-offset': [0.9, 0], 'text-anchor': 'left', 'text-allow-overlap': true },
+    paint: { 'text-color': '#38d178', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 2 } });
+  map.addLayer({ id: 'pos-acc', type: 'fill', source: 'posAcc',
+    paint: { 'fill-color': 'rgba(64,150,255,0.12)' } });
+  map.addLayer({ id: 'pos-heading', type: 'symbol', source: 'pos',
+    layout: { 'text-field': '▲', 'text-size': 18, 'text-font': ['Noto Sans Medium'],
+      'text-rotate': ['get', 'heading'], 'text-rotation-alignment': 'map',
+      'text-offset': [0, -1.1], 'text-allow-overlap': true },
+    filter: ['get', 'moving'],
+    paint: { 'text-color': '#4096ff' } });
+  map.addLayer({ id: 'pos-dot', type: 'circle', source: 'pos',
+    paint: { 'circle-radius': 8, 'circle-color': '#4096ff', 'circle-stroke-width': 3, 'circle-stroke-color': '#fff' } });
+  refreshMapData();
+}
+function circlePoly(lat, lon, radiusM) {
+  const kx = 1 / (R_LON * Math.cos(lat * Math.PI / 180)), ky = 1 / R_LAT;
+  const ring = [];
+  for (let i = 0; i <= 32; i++) {
+    const a = i / 32 * 2 * Math.PI;
+    ring.push([lon + Math.cos(a) * radiusM * kx, lat + Math.sin(a) * radiusM * ky]);
+  }
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] } };
+}
+function refreshMapData() {
+  if (!mapReady) return;
+  map.getSource('heat').setData(S.heat ? S.heat.geojson : EMPTY);
+  map.getSource('tracksOther').setData({ type: 'FeatureCollection',
+    features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
+      geometry: { type: 'LineString', coordinates: t.coordsLL } })) });
+  const trk = S.tracks[S.sel];
+  const dir = (S.navState && S.navState.dir) || 1;
+  map.getSource('selTrack').setData(trk ? { type: 'Feature', properties: {},
+    geometry: { type: 'LineString', coordinates: dir > 0 ? trk.coordsLL : [...trk.coordsLL].reverse() } } : EMPTY);
+  map.getSource('alerts').setData(trk && trk.alerts ? { type: 'FeatureCollection',
+    features: trk.alerts.map(a => { const [la, lo] = toLL(trk.xy[a.idx * 2], trk.xy[a.idx * 2 + 1]);
+      return { type: 'Feature', properties: { t: a.type }, geometry: { type: 'Point', coordinates: [lo, la] } }; }) } : EMPTY);
+}
+function refreshPosLayers() {
+  if (!mapReady || !S.pos) return;
+  const [la, lo] = toLL(S.pos.x, S.pos.y);
+  map.getSource('pos').setData({ type: 'Feature',
+    properties: { heading: S.pos.heading || 0, moving: !!(S.pos.heading != null && S.pos.speed > 0.8) },
+    geometry: { type: 'Point', coordinates: [lo, la] } });
+  map.getSource('posAcc').setData(S.pos.acc > 15 ? circlePoly(la, lo, S.pos.acc) : EMPTY);
+}
+function refreshFriends() {
+  if (!mapReady) return;
+  const now = Date.now(), feats = [];
+  for (const [name, f] of S.friends) {
+    if (now - f.t > 3 * 60e3) continue;
+    feats.push({ type: 'Feature', properties: { name }, geometry: { type: 'Point', coordinates: [f.lon, f.lat] } });
+  }
+  map.getSource('friends').setData({ type: 'FeatureCollection', features: feats });
+}
+
+/* ---------------- follow / zoom ---------------- */
+function speedZoom(speedMs, lat) {
+  const span = Math.max(320, Math.min(1700, (speedMs || 0) * 120 + 200)); // metres of screen height
+  const h = map.getContainer().clientHeight || 700;
+  return Math.log2(156543.03392 * Math.cos(lat * Math.PI / 180) * h / span);
+}
+let lastEase = 0;
+function followCamera() {
+  if (!mapReady || !S.pos || !S.follow || !S.nav) return;
+  const now = Date.now(); if (now - lastEase < 800) return;
+  lastEase = now;
+  const [la, lo] = toLL(S.pos.x, S.pos.y);
+  const opts = { center: [lo, la], duration: 900, easing: t => t };
+  if (S.set.autoZoom) opts.zoom = speedZoom(S.pos.speed, la);
+  map.easeTo(opts);
+}
+document.getElementById('zoomIn').onclick = () => map && map.zoomIn();
+document.getElementById('zoomOut').onclick = () => map && map.zoomOut();
+document.getElementById('fitBtn').onclick = () => { fitSelected(); setFollow(false); };
+document.getElementById('followBtn').onclick = () => {
+  setFollow(!S.follow);
+  if (S.follow && S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); }
+};
+function setFollow(on) { S.follow = on; document.getElementById('followBtn').classList.toggle('active', on); }
+setFollow(true);
+function fitSelected() {
+  if (!mapReady) return;
+  if (S.sel >= 0) map.fitBounds(S.tracks[S.sel].llBounds, { padding: 60, duration: 600 });
+  else if (S.tracks.length) map.fitBounds(S.tracks[0].llBounds, { padding: 60, duration: 600 });
+  else if (S.heat) {
+    let minLo = 180, minLa = 90, maxLo = -180, maxLa = -90;
+    for (const f of S.heat.geojson.features) {
+      const g = f.geometry; if (!g || g.type !== 'LineString') continue;
+      for (const c of g.coordinates) {
+        if (c[0] < minLo) minLo = c[0]; if (c[0] > maxLo) maxLo = c[0];
+        if (c[1] < minLa) minLa = c[1]; if (c[1] > maxLa) maxLa = c[1];
+      }
+    }
+    if (maxLo > minLo) map.fitBounds([[minLo, minLa], [maxLo, maxLa]], { padding: 40, duration: 600 });
+  }
+}
+
+/* ---------------- navigation ---------------- */
+const FAR_M = 160, NEAR_M = 55, OFF_M = 60, ON_M = 40;
+function startNav() {
+  const trk = S.tracks[S.sel]; if (!trk) return;
+  audio(); // unlock on gesture
+  if (!trk.alerts) { buildAlerts(trk); refreshMapData(); }
+  S.navState = { idx: -1, dir: 1, dirVotes: 0, off: false, lastOffBeep: 0, alertStates: new Map() };
+  S.nav = true; setFollow(true);
+  document.getElementById('hud').classList.add('on');
+  document.getElementById('hudSpeed').classList.add('on');
+  const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop');
+  if (S.set.wake) requestWake();
+  if (!S.demo) startGPS();
+  startFriends();
+  toast('Navigation started — following nearest point on track');
+}
+function stopNav() {
+  S.nav = false;
+  document.getElementById('hud').classList.remove('on');
+  document.getElementById('hudSpeed').classList.remove('on');
+  document.getElementById('banner').classList.remove('on');
+  const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
+  stopGPS(); releaseWake(); stopDemo();
+}
+document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
+
+function onFix(lat, lon, acc, speed, heading) {
+  if (!REF) return;
+  const [x, y] = toXY(lat, lon);
+  const t = Date.now();
+  const ns = S.navState;
+  let spd = speed;
+  if ((spd == null || isNaN(spd)) && S.pos && t > S.pos.t) spd = dist(x, y, S.pos.x, S.pos.y) / ((t - S.pos.t) / 1000);
+  let hdg = heading;
+  if ((hdg == null || isNaN(hdg)) && S.pos && dist(x, y, S.pos.x, S.pos.y) > 3) hdg = bearing(S.pos.x, S.pos.y, x, y);
+  S.pos = { x, y, acc: acc || 0, speed: spd || 0, heading: hdg, t };
+  document.getElementById('hudSpeed').innerHTML = Math.round((spd || 0) * 3.6) + ' <small>km/h</small>';
+  refreshPosLayers(); followCamera();
+  if (!S.nav || S.sel < 0 || !ns) return;
+
+  const trk = S.tracks[S.sel];
+  const near = nearestOnTrack(trk, x, y, ns.idx);
+  if (ns.idx >= 0 && near.d < OFF_M) {
+    const delta = near.idx - ns.idx;
+    if (delta !== 0) ns.dirVotes = Math.max(-8, Math.min(8, ns.dirVotes + Math.sign(delta)));
+    const newDir = ns.dirVotes <= -4 ? -1 : ns.dirVotes >= 4 ? 1 : ns.dir;
+    if (newDir !== ns.dir) {
+      ns.dir = newDir; refreshMapData(); // chevrons follow riding direction
+      toast(ns.dir > 0 ? 'Direction: forward along track' : 'Direction: reverse along track');
+    }
+  }
+  ns.idx = near.idx;
+
+  if (near.d > OFF_M && !ns.off) ns.off = true;
+  if (near.d < ON_M && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); }
+  if (ns.off) {
+    const bn = document.getElementById('banner');
+    bn.textContent = 'OFF TRACK · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
+    if (t - ns.lastOffBeep > 30e3) { BEEP.off(); ns.lastOffBeep = t; }
+    setHud(null); return;
+  }
+
+  const s = trk.cum[near.idx];
+  let next = null, dTo = Infinity;
+  if (trk.alerts) {
+    if (ns.dir > 0) { for (const a of trk.alerts) if (a.at > s + 5) { next = a; dTo = a.at - s; break; } }
+    else { for (let i = trk.alerts.length - 1; i >= 0; i--) { const a = trk.alerts[i]; if (a.at < s - 5) { next = a; dTo = s - a.at; break; } } }
+  }
+  setHud(next, dTo, ns.dir);
+  if (next) {
+    let st = ns.alertStates.get(next); if (!st) ns.alertStates.set(next, st = { far: true, near: true });
+    if (dTo > FAR_M + 80) { st.far = true; st.near = true; } // re-arm on repeat laps
+    // junctions only get the near beep — far warnings for every crossing would be constant noise
+    if (dTo <= FAR_M && dTo > NEAR_M && st.far && next.type !== 'junction') { st.far = false; BEEP.far(); }
+    if (dTo <= NEAR_M && st.near) {
+      st.near = false; st.far = false;
+      if (next.type === 'junction') BEEP.junction();
+      else if (next.type === 'hairpin') BEEP.hairpin();
+      else BEEP.turn();
+    }
+  }
+}
+function setHud(alert, dTo, dir) {
+  const arrow = document.getElementById('hudArrow'), distEl = document.getElementById('hudDist'), typeEl = document.getElementById('hudType');
+  if (!alert) { arrow.textContent = '↑'; arrow.className = ''; distEl.innerHTML = '— <small>m</small>'; typeEl.textContent = 'no upcoming turns'; return; }
+  let type = alert.type;
+  if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
+  const icons = { left: '⬅', right: '➡', hairpin: '⟲', junction: '✚' };
+  const labels = { left: 'turn left', right: 'turn right', hairpin: 'hairpin', junction: 'junction' };
+  arrow.textContent = icons[type]; arrow.className = type;
+  distEl.innerHTML = (dTo >= 995 ? (dTo / 1000).toFixed(1) + ' <small>km</small>' : Math.round(dTo / 5) * 5 + ' <small>m</small>');
+  typeEl.textContent = labels[type];
+}
+
+/* ---------------- GPS ---------------- */
+let watchId = null;
+function startGPS() {
+  if (!navigator.geolocation) { toast('No GPS available'); return; }
+  watchId = navigator.geolocation.watchPosition(
+    p => onFix(p.coords.latitude, p.coords.longitude, p.coords.accuracy, p.coords.speed, p.coords.heading),
+    e => toast('GPS: ' + e.message),
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+}
+function stopGPS() { if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; } }
+
+/* ---------------- wake lock ---------------- */
+let wakeLock = null;
+async function requestWake() {
+  try { wakeLock = await navigator.wakeLock.request('screen');
+    document.addEventListener('visibilitychange', reWake);
+  } catch (e) {}
+}
+function reWake() { if (S.nav && S.set.wake && document.visibilityState === 'visible') requestWake(); }
+function releaseWake() { if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
+
+/* ---------------- demo mode ---------------- */
+function startDemo() {
+  const trk = S.tracks[S.sel]; if (!trk) { toast('Select a track first'); return; }
+  stopDemo();
+  let d = 0;
+  const SPEED = 8.5; // m/s ≈ 30 km/h
+  S.demo = setInterval(() => {
+    d += SPEED;
+    if (d >= trk.lengthM) { toast('Demo finished'); stopNav(); return; }
+    const i = idxAt(trk, d);
+    const jitter = () => (Math.random() - 0.5) * 6;
+    const [lat, lon] = toLL(trk.xy[i * 2] + jitter(), trk.xy[i * 2 + 1] + jitter());
+    onFix(lat, lon, 8, SPEED, null);
+  }, 1000);
+  if (!S.nav) startNav();
+  toast('Demo ride at 30 km/h — listen for beeps');
+}
+function stopDemo() { if (S.demo) { clearInterval(S.demo); S.demo = null; } }
+document.getElementById('demoBtn').onclick = () => { closePanel(); S.demo ? (stopDemo(), stopNav()) : startDemo(); };
+document.getElementById('testBeep').onclick = () => { audio(); BEEP.turn(); };
+
+/* ---------------- friends via ntfy.sh ---------------- */
+let friendWS = null, friendPub = null, friendBackoff = 2000;
+function startFriends() {
+  const code = (S.set.code || '').trim(); if (!code) return;
+  const topic = 'dingonav-' + code.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  connectFriendWS(topic);
+  if (friendPub) clearInterval(friendPub);
+  friendPub = setInterval(() => {
+    if (!S.pos || !navigator.onLine) return;
+    const [lat, lon] = toLL(S.pos.x, S.pos.y);
+    fetch('https://ntfy.sh/' + topic, { method: 'POST', body: JSON.stringify({ n: S.set.name || 'rider', la: +lat.toFixed(5), lo: +lon.toFixed(5) }), keepalive: true }).catch(() => {});
+  }, 20000);
+  setFriendStatus('sharing as "' + (S.set.name || 'rider') + '" on ' + topic);
+}
+function connectFriendWS(topic) {
+  if (friendWS) { friendWS.onclose = null; friendWS.close(); }
+  try {
+    friendWS = new WebSocket('wss://ntfy.sh/' + topic + '/ws');
+    friendWS.onmessage = ev => {
+      try {
+        const m = JSON.parse(ev.data);
+        if (m.event !== 'message') return;
+        const d = JSON.parse(m.message);
+        if (!d.n || d.n === S.set.name) return;
+        S.friends.set(d.n, { lat: d.la, lon: d.lo, t: Date.now() });
+        refreshFriends();
+      } catch (e) {}
+    };
+    friendWS.onopen = () => { friendBackoff = 2000; };
+    friendWS.onclose = () => { if (S.nav && S.set.code) setTimeout(() => connectFriendWS(topic), friendBackoff = Math.min(60000, friendBackoff * 2)); };
+  } catch (e) {}
+}
+function setFriendStatus(s) { document.getElementById('friendStatus').textContent = s; }
+function setBaseStatus(s) { document.getElementById('baseStatus').textContent = s; }
+setInterval(refreshFriends, 30000); // age out stale friends
+
+/* ---------------- files: load / persist ---------------- */
+async function addFile(name, text) {
+  if (looksLikeHeatmap(text)) {
+    const geo = JSON.parse(text);
+    S.heat = processHeatmap(geo);
+    for (const t of S.tracks) t.alerts = null; // junctions depend on heatmap
+    await idb.put({ id: 'heatmap', name, kind: 'heatmap', text });
+    document.getElementById('heatInfo').textContent = 'Heatmap: ' + name + ' — ' + S.heat.count + ' tracks';
+    return 'heatmap';
+  }
+  const { name: trkName, pts } = parseGPX(text, name.replace(/\.gpx$/i, '').replace(/_/g, ' '));
+  let h = 0; for (let i = 0; i < text.length; i += 97) h = (h * 31 + text.charCodeAt(i)) >>> 0;
+  const id = 'gpx-' + h.toString(36) + '-' + pts.length; // deterministic — reloading same file overwrites
+  const existing = S.tracks.findIndex(t => t.id === id);
+  if (existing >= 0) S.tracks.splice(existing, 1);
+  S.tracks.push(processTrack(id, trkName, pts));
+  await idb.put({ id, name: trkName, kind: 'gpx', text });
+  return 'gpx';
+}
+async function handleFiles(files) {
+  let nT = 0, nH = 0, errs = 0;
+  for (const f of files) {
+    try { (await addFile(f.name, await f.text())) === 'gpx' ? nT++ : nH++; }
+    catch (e) { errs++; console.warn('load failed', f.name, e); }
+  }
+  if (S.sel < 0 && S.tracks.length) selectTrack(0);
+  refreshTrackList(); refreshEmpty(); refreshMapData();
+  if (nT || nH) fitSelected();
+  toast(`Loaded ${nT} track${nT === 1 ? '' : 's'}${nH ? ' + heatmap' : ''}${errs ? ' · ' + errs + ' failed' : ''}`);
+}
+document.getElementById('fileInput').addEventListener('change', e => { handleFiles([...e.target.files]); e.target.value = ''; });
+document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('emptyLoad').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('baseBtn').onclick = () => document.getElementById('baseInput').click();
+document.getElementById('baseInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  await idb.put({ id: 'basemap', name: f.name, kind: 'basemap', blob: f });
+  toast('Basemap saved — reloading'); setTimeout(() => location.reload(), 800);
+});
+document.getElementById('clearBtn').onclick = async () => {
+  if (!confirm('Remove all loaded tracks, heatmap and basemap from this device?')) return;
+  stopNav(); await idb.clear();
+  S.tracks = []; S.heat = null; S.sel = -1;
+  refreshTrackList(); refreshEmpty(); updateBottomBar(); refreshMapData();
+};
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles([...e.dataTransfer.files]); });
+
+/* ---------------- UI: panel, list, bottom bar ---------------- */
+const panel = document.getElementById('panel'), shade = document.getElementById('shade');
+function openPanel() { panel.classList.add('on'); shade.classList.add('on'); }
+function closePanel() { panel.classList.remove('on'); shade.classList.remove('on'); }
+document.getElementById('menuBtn').onclick = openPanel;
+shade.onclick = closePanel;
+
+function refreshTrackList() {
+  const el = document.getElementById('trackList');
+  el.innerHTML = '';
+  S.tracks.forEach((t, i) => {
+    const row = document.createElement('div');
+    row.className = 'trk' + (i === S.sel ? ' sel' : '');
+    row.innerHTML = `<span class="dot" style="background:${i === S.sel ? 'var(--accent)' : '#5a6a78'}"></span>
+      <span class="nm">${t.name}</span><span class="len">${(t.lengthM / 1000).toFixed(1)} km</span><span class="del">✕</span>`;
+    row.querySelector('.del').onclick = async ev => {
+      ev.stopPropagation();
+      await idb.del(t.id);
+      S.tracks.splice(i, 1);
+      if (S.sel === i) { S.sel = -1; stopNav(); } else if (S.sel > i) S.sel--;
+      refreshTrackList(); refreshEmpty(); updateBottomBar(); refreshMapData();
+    };
+    row.onclick = () => { selectTrack(i); closePanel(); fitSelected(); };
+    el.appendChild(row);
+  });
+  if (!S.tracks.length) el.innerHTML = '<div class="hint">No tracks yet.</div>';
+}
+function selectTrack(i) {
+  S.sel = i;
+  const trk = S.tracks[i];
+  if (trk && !trk.alerts) setTimeout(() => { buildAlerts(trk); updateBottomBar(); refreshMapData(); }, 10);
+  refreshTrackList(); updateBottomBar(); refreshMapData();
+}
+function updateBottomBar() {
+  const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
+  if (S.sel < 0) { nm.textContent = 'No track selected'; sub.textContent = S.tracks.length ? 'tap ☰ to pick a track' : 'load a GPX to begin'; nb.disabled = true; return; }
+  const t = S.tracks[S.sel];
+  nm.textContent = t.name;
+  const nA = t.alerts ? t.alerts.length : '…';
+  sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' alert points';
+  nb.disabled = false;
+}
+function refreshEmpty() { document.getElementById('emptyState').classList.toggle('on', !S.tracks.length && !S.heat); }
+let toastT = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(toastT); toastT = setTimeout(() => el.style.display = 'none', 3500);
+  console.log('[dingonav]', msg);
+}
+
+/* settings wiring */
+function bindSet(id, key, cb) {
+  const el = document.getElementById(id);
+  el.checked = S.set[key];
+  el.onchange = () => { S.set[key] = el.checked; saveSet(); if (cb) cb(); };
+}
+bindSet('setSound', 'sound');
+bindSet('setJunctions', 'junctions', () => { for (const t of S.tracks) t.alerts = null; if (S.sel >= 0) selectTrack(S.sel); });
+bindSet('setAutoZoom', 'autoZoom');
+bindSet('setWake', 'wake', () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); });
+const nameEl = document.getElementById('myName'), codeEl = document.getElementById('rideCode');
+nameEl.value = S.set.name; codeEl.value = S.set.code;
+nameEl.onchange = () => { S.set.name = nameEl.value.trim(); saveSet(); };
+codeEl.onchange = () => { S.set.code = codeEl.value.trim(); saveSet(); if (S.nav) startFriends(); };
+
+/* ---------------- boot ---------------- */
+async function boot() {
+  await idb.open();
+  const recs = (await idb.all()).filter(r => r.kind !== 'basemap');
+  recs.sort((a, b) => (a.kind === 'heatmap' ? -1 : 1) - (b.kind === 'heatmap' ? -1 : 1));
+  for (const r of recs) {
+    try {
+      if (r.kind === 'heatmap') {
+        S.heat = processHeatmap(JSON.parse(r.text));
+        document.getElementById('heatInfo').textContent = 'Heatmap: ' + r.name + ' — ' + S.heat.count + ' tracks';
+      } else {
+        const { name, pts } = parseGPX(r.text, r.name);
+        S.tracks.push(processTrack(r.id, name, pts));
+      }
+    } catch (e) { console.warn('restore failed', r.name, e); }
+  }
+  if (!recs.length) {
+    try {
+      const resp = await fetch('bundle.json');
+      if (resp.ok) {
+        const b = await resp.json();
+        if (b.heatmap) await addFile(b.heatmapName || 'heatmap.geojson', JSON.stringify(b.heatmap));
+        for (const t of (b.tracks || [])) await addFile(t.name, t.gpx);
+        toast('Loaded bundled tracks');
+      }
+    } catch (e) {}
+  }
+  if (S.tracks.length && S.sel < 0) { S.sel = 0; const trk = S.tracks[0]; if (!trk.alerts) buildAlerts(trk); }
+  refreshTrackList(); refreshEmpty(); updateBottomBar();
+  await initMap();
+  fitSelected();
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+}
+window.__nav = S;
+boot();
+</script>
+</body>
+</html>

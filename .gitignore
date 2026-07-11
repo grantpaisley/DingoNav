@@ -1,0 +1,9 @@
+# personal GPS data (real tracks + heatmap exports from Dingo)
+sample-data/
+bundle.json
+
+# basemap extract — 33MB+, regenerate with the pmtiles CLI (see README)
+basemap/*.pmtiles
+
+node_modules/
+.DS_Store
