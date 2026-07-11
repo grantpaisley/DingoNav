@@ -27,6 +27,15 @@ Explicitly cut for v1 (keep it simple):
 - **Speed coloring on import** — steepness only. Speed ramps are unreadable at nav
   zoom in sunlight, compete with heatmap colors, and plans have no timestamps anyway.
 
+## Responsive requirement (added 2026-07-11)
+
+The layout must work in **portrait, landscape, and half-screen** (split-screen /
+half of a bar-mounted display). Short viewports (≤500 px tall) compact the HUD,
+hide the bottom bar while navigating (STOP lives in the glove overlay), pin the
+progress strip to the screen edge, and reflow the glove grid (one row of six when
+wide, 3×2 otherwise). A 1 s watchdog re-places the chrome on viewport changes that
+never fire a resize event (split-screen drags).
+
 ## 1. Main screen & orientation
 
 Default screen: basemap, heatmap, route line, position dot, progress strip along the

@@ -141,6 +141,25 @@
   #emptyState.on{display:flex}
   #emptyState .big{font-size:22px; font-weight:700}
   #emptyState .btn{flex:none; padding:16px 30px; font-size:17px; pointer-events:auto}
+
+  /* ---------- responsive: landscape / split-screen (short viewports) ---------- */
+  @media (max-height: 500px) {
+    #hudBox{padding:6px 14px; gap:10px; min-width:0}
+    #hudArrow{font-size:30px; width:38px}
+    #hudDist{font-size:26px} #hudDist small{font-size:13px}
+    #hudType{font-size:11px}
+    #hudSpeed{font-size:16px; padding:4px 9px}
+    #banner{top:62px; font-size:16px; padding:7px 16px}
+    #progress.expanded #progCanvas{height:44px}
+    body.navving #bottom{display:none} /* riding: reclaim the bar — STOP lives in the glove overlay */
+    .gtile{height:72px; gap:3px}
+    .gtile .gi{font-size:24px}
+    .gtile .gl{font-size:11px}
+    #gloveOverlay{padding-top:10px}
+  }
+  @media (max-height: 500px) and (min-width: 620px) {
+    #gloveGrid{grid-template-columns:repeat(6,1fr); max-width:none} /* landscape: one row of six */
+  }
 </style>
 </head>
 <body>
@@ -559,9 +578,15 @@ async function initMap() {
   window.__map = map;
   // MapLibre's own ResizeObserver doesn't fire in hidden/background tabs — watchdog it,
   // installed BEFORE waiting for style load (the map may misreport 400x300 until resized)
+  let lastVW = innerWidth, lastVH = innerHeight;
   setInterval(() => {
     const c = map.getContainer(), cv = map.getCanvas();
     if (Math.abs(cv.clientWidth - c.clientWidth) > 2 || Math.abs(cv.clientHeight - c.clientHeight) > 2) map.resize();
+    // viewport changes that never fire a resize event (split-screen drags, this dev pane) still re-place the chrome
+    if (innerWidth !== lastVW || innerHeight !== lastVH) {
+      lastVW = innerWidth; lastVH = innerHeight;
+      placeProgress(); drawProgress(true);
+    }
   }, 1000);
   map.resize();
   // don't rely solely on the 'load' event — it can stall in hidden tabs; poll isStyleLoaded too
@@ -735,6 +760,7 @@ function startNav() {
   S.navState = { idx: -1, dir: 1, dirVotes: 0, off: false, lastOffBeep: 0, alertStates: new Map(),
     movingS: 0, avgSpd: null, lastFixT: 0 };
   S.nav = true; setFollow(true);
+  document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
   document.getElementById('hud').classList.add('on');
   document.getElementById('hudSpeed').classList.add('on');
   prog.classList.add('on'); prog.classList.remove('offtrack');
@@ -750,6 +776,7 @@ function startNav() {
 }
 function stopNav() {
   S.nav = false;
+  document.body.classList.remove('navving');
   document.getElementById('hud').classList.remove('on');
   document.getElementById('hudSpeed').classList.remove('on');
   document.getElementById('banner').classList.remove('on');
@@ -851,13 +878,20 @@ function placeProgress() {
   // keep side controls, rose and glove button clear of the strip while navigating; CSS default otherwise
   const gb = document.getElementById('gloveBtn');
   const above = S.nav ? b + prog.offsetHeight + 14 : 0;
+  // lift maplibre's own bottom controls (scale, attribution) clear of the bar + strip
+  for (const c of document.querySelectorAll('.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right'))
+    c.style.bottom = S.nav ? (b + prog.offsetHeight + 4) + 'px' : '';
   document.getElementById('sideCtl').style.bottom = above ? above + 'px' : '';
   gb.style.bottom = above ? above + 'px' : '';
   // rose shares the left edge with the glove button — stack it on top when they'd collide
   const northAbove = above && S.set.gloveSide === 'left' ? above + gb.offsetHeight + 12 : above;
   document.getElementById('north').style.bottom = northAbove ? northAbove + 'px' : '';
 }
-window.addEventListener('resize', () => { placeProgress(); drawProgress(true); });
+window.addEventListener('resize', () => {
+  placeProgress(); drawProgress(true);
+  // media-query flips (bar hide/show, canvas height) can apply after this event — settle once more
+  setTimeout(() => { placeProgress(); drawProgress(true); }, 80);
+});
 prog.onclick = () => {
   const trk = S.tracks[S.sel];
   if (!trk || !trk.hasEle) { toast('No elevation data in this track'); return; }
