@@ -2,8 +2,11 @@
 sample-data/
 bundle.json
 
-# basemap extract — 33MB+, regenerate with the pmtiles CLI (see README)
+# basemap extracts — regenerate with the pmtiles CLI (see README).
+# central-coast is committed (33MB, under GitHub's 100MB blob cap) so the
+# GitHub Pages deploy can auto-download it on first open.
 basemap/*.pmtiles
+!basemap/central-coast.pmtiles
 
 node_modules/
 .DS_Store
