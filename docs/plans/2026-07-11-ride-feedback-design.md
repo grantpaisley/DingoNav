@@ -18,21 +18,28 @@ Drop the two noisy triggers:
 - **Standalone heatmap-junction cues** — gone as their own beep type. The heatmap grid
   remains *evidence* for the decision test below.
 
-A cue now fires only where **both** hold:
+A cue now fires only where **all three** hold *(revised after the round-1 field test:
+hairpin cues and straight-ahead cues are gone — see below)*:
 
 1. **Way transition** — the smoothed way-class/name under the track changes
-   (road→track, named→named, track→path). No minimum turn angle: straight-ahead
-   onto a minor way while the main road bends off is the canonical case.
-2. **The departed way continues** — sampling the basemap+heatmap grid ahead of the
-   transition, the way you were on (matched by class/name along the incoming heading)
-   carries on somewhere the route doesn't. Keeps shire-boundary renames and
-   flow-through trail joins silent (no decision = no beep).
+   (road→track, named→named, track→path, mapped→unmapped).
+2. **The departed way continues** — sampling the basemap grid around the transition,
+   the way you were on (matched by name, else class) carries on somewhere the route
+   doesn't. Keeps shire-boundary renames and flow-through trail joins silent
+   (no decision = no beep).
+3. **It's an actual turn** — peak bearing change ≥ `TURN_MIN` around the transition.
+   Going straight ahead needs no warning, even onto another way.
 
-Exceptions:
+Revisions from the round-1 field test (2026-07-11, built as cue4):
 
-- **Hairpins always beep** (≥ `CUE.HAIRPIN`), regardless of way data.
+- **No hairpin cues** — you can see a hairpin on the map, and recorded
+  obstacle-retry loops (riding circles to get up/around an obstacle) fake them.
+- **No straight-ahead cues** — superseded the original "straight onto a minor way
+  while the main road bends off" case; only real turns cue.
 - **No way data at all** within ~40 m → silent (don't guess). A genuinely unmapped
   route past a *mapped* alternative is still caught: test 2 keys off the alternative.
+- **Look-through** — a way-match dropout (<300 m, same way both sides) is not a
+  departure + rejoin.
 
 **Turn-confirmation chirp**: after passing a cue and staying on-track ~40 m /
 a few seconds, play the existing back-on-track chirp once. Settings toggle
