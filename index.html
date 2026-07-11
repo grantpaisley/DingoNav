@@ -79,6 +79,8 @@
   body.navving #sideCtl .ctl{opacity:.4; background:rgba(22,28,34,.5)}
   body.navving #sideCtl .ctl:active{opacity:1}
   body.navving #followBtn, body.navving #fitBtn{display:none}
+  body.navving #cueEditBtn{display:none !important} /* planning-only */
+  #cueEditBtn.active{border-color:var(--warn); color:var(--warn)}
   #favBtn{display:none; font-size:22px}
   #favBtn.show{display:flex}
   #favBtn.active{border-color:var(--bad); color:var(--bad); opacity:.75}
@@ -257,6 +259,7 @@
 <div id="bottom">
   <div class="ctl" id="menuBtn">☰</div>
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
+  <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none">✎</div>
   <button id="navBtn" disabled>START</button>
 </div>
 
@@ -301,7 +304,7 @@
 
   <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
   <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
-  <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button></div>
+  <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
   <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
 </div>
 
@@ -806,18 +809,53 @@ async function analyzeRoute(trk) {
 async function analyzeRouteInner(trk) {
   {
     const key = 'cue5-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
-    try { const rec = await idb.get(key); if (rec) { trk.alerts = rec.cues; return; } } catch (e) {}
-    const t0 = performance.now();
-    const g = await decodeCorridor(trk);
-    const hg = S.heat ? heatGrid(S.heat) : null;
-    const m = matchWays(trk, g);
-    const cues = classifyCues(trk, g, hg, m);
-    trk.alerts = cues;
-    window.__cue = { g, m, cues, trk };
-    console.log(`[cue] "${trk.name}": ${cues.length} cues from ${g.px.length} samples / ${g.tiles} tiles in ${(performance.now() - t0).toFixed(0)} ms`,
-      cues.reduce((r, c) => (r[c.type] = (r[c.type] || 0) + 1, r), {}));
-    try { await idb.put({ id: key, kind: 'cues', cues }); } catch (e) {}
+    let cues = null;
+    try { const rec = await idb.get(key); if (rec) cues = rec.cues; } catch (e) {}
+    if (!cues) {
+      const t0 = performance.now();
+      const g = await decodeCorridor(trk);
+      const hg = S.heat ? heatGrid(S.heat) : null;
+      const m = matchWays(trk, g);
+      cues = classifyCues(trk, g, hg, m);
+      window.__cue = { g, m, cues, trk };
+      console.log(`[cue] "${trk.name}": ${cues.length} cues from ${g.px.length} samples / ${g.tiles} tiles in ${(performance.now() - t0).toFixed(0)} ms`,
+        cues.reduce((r, c) => (r[c.type] = (r[c.type] || 0) + 1, r), {}));
+      try { await idb.put({ id: key, kind: 'cues', cues }); } catch (e) {}
+    }
+    trk.baseCues = cues;
+    await loadCueOverlay(trk);
+    applyCueOverlay(trk);
   }
+}
+
+/* ---------------- cue edit overlay: hand edits stored apart from the analyser cache,
+   re-applied after any re-analysis so they survive algorithm upgrades ---------------- */
+async function loadCueOverlay(trk) {
+  if (trk.overlay) return;
+  let ov = null;
+  try { const rec = await idb.get('cueov-' + trk.id); if (rec) ov = rec.ov; } catch (e) {}
+  trk.overlay = ov || { removed: [], added: [] };
+}
+function saveCueOverlay(trk) {
+  idb.put({ id: 'cueov-' + trk.id, kind: 'cueov', ov: trk.overlay }).catch(() => {});
+}
+function cueRemoved(ov, at) { return ov.removed.some(r => Math.abs(r - at) < 25); } // ±25 m: survives re-analysis drift
+function applyCueOverlay(trk) {
+  if (!trk.baseCues) return;
+  const ov = trk.overlay || { removed: [], added: [] };
+  const kept = trk.baseCues.filter(c => !cueRemoved(ov, c.at));
+  const all = kept.concat(ov.added.filter(a => !kept.some(c => Math.abs(c.at - a.at) < 10)));
+  all.sort((a, b) => a.at - b.at);
+  trk.alerts = all;
+}
+function mkManualCue(trk, idx) { // same shape the analyser emits; geometry-only (no way names off-line)
+  const brgAt = i => { const j = Math.max(0, Math.min(trk.n - 2, i)); return bearing(trk.xy[j * 2], trk.xy[j * 2 + 1], trk.xy[j * 2 + 2], trk.xy[j * 2 + 3]); };
+  let deg = 0;
+  for (let j = idx - 3; j < idx + 3; j++) deg += angDiff(brgAt(j), brgAt(j + 1));
+  const after = idx + Math.ceil(25 / RESAMPLE_M);
+  return { at: trk.cum[idx], idx, deg: Math.round(deg), type: deg > 0 ? 'right' : 'left',
+    from: null, onto: null, name: null, manual: true,
+    outBrg: Math.round(brgAt(after)), inBrg: Math.round(brgAt(idx - 3)) };
 }
 
 /* ---------------- audio ---------------- */
@@ -894,6 +932,7 @@ async function initMap() {
   map.on('dragstart', () => { if (S.nav) setFollow(false); });
   // gesture zoom (pinch / wheel / double-tap) while navigating = hold, same as the ± buttons
   map.on('zoomend', e => { if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom()); });
+  map.on('click', e => { if (S.cueEdit && !S.nav) cueEditTap(e.lngLat); });
   initLockGesture();
   map.on('mousedown', closeGlove); map.on('touchstart', closeGlove); // tap the map = dismiss glove overlay
   map.on('rotate', () => { northInner.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
@@ -955,8 +994,10 @@ function addOverlays() {
       'text-allow-overlap': true, 'text-rotation-alignment': 'map' },
     paint: { 'text-color': '#003a44' } });
   map.addLayer({ id: 'alert-dots', type: 'circle', source: 'alerts', minzoom: 12.5,
+    filter: ['!', ['get', 'removed']], // greyed-out deletions only show in edit mode
     paint: { 'circle-radius': 4.5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#0e1216',
-      'circle-color': '#ffb020' } });
+      'circle-color': ['case', ['get', 'removed'], '#5a6a78', ['get', 'manual'], '#42d7f5', '#ffb020'],
+      'circle-opacity': ['case', ['get', 'removed'], 0.55, 1] } });
   map.addLayer({ id: 'friends-dots', type: 'circle', source: 'friends',
     paint: { 'circle-radius': 8, 'circle-color': '#38d178', 'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff' } });
   map.addLayer({ id: 'friends-labels', type: 'symbol', source: 'friends',
@@ -999,9 +1040,15 @@ function refreshMapData() {
   const dir = (S.navState && S.navState.dir) || 1;
   map.getSource('selTrack').setData(trk ? { type: 'Feature', properties: {},
     geometry: { type: 'LineString', coordinates: dir > 0 ? trk.coordsLL : [...trk.coordsLL].reverse() } } : EMPTY);
-  map.getSource('alerts').setData(trk && trk.alerts ? { type: 'FeatureCollection',
-    features: trk.alerts.map(a => { const [la, lo] = toLL(trk.xy[a.idx * 2], trk.xy[a.idx * 2 + 1]);
-      return { type: 'Feature', properties: { t: a.type }, geometry: { type: 'Point', coordinates: [lo, la] } }; }) } : EMPTY);
+  // dots come from the base analysis + hand-added cues; removed ones stay (greyed) for edit mode
+  const cueFeat = (a, removed, manual) => { const [la, lo] = toLL(trk.xy[a.idx * 2], trk.xy[a.idx * 2 + 1]);
+    return { type: 'Feature', properties: { t: a.type, removed, manual }, geometry: { type: 'Point', coordinates: [lo, la] } }; };
+  const ov = trk && trk.overlay, cueFeats = [];
+  if (trk && trk.baseCues) {
+    for (const a of trk.baseCues) cueFeats.push(cueFeat(a, !!(ov && cueRemoved(ov, a.at)), false));
+    if (ov) for (const a of ov.added) cueFeats.push(cueFeat(a, false, true));
+  } else if (trk && trk.alerts) for (const a of trk.alerts) cueFeats.push(cueFeat(a, false, false));
+  map.getSource('alerts').setData({ type: 'FeatureCollection', features: cueFeats });
   applySteepness();
 }
 /* ---------------- steepness coloring (unsigned grade %, same ramp as Dingo web) ---------------- */
@@ -1188,6 +1235,19 @@ fsBtn.onclick = () => document.fullscreenElement
   ? document.exitFullscreen().catch(() => {})
   : document.documentElement.requestFullscreen().catch(() => {});
 
+/* hand-deleted cues are the classifier's false positives — export them for threshold tuning */
+document.getElementById('diagBtn').onclick = async () => {
+  const out = [];
+  for (const t of S.tracks) {
+    await loadCueOverlay(t);
+    out.push({ track: t.name, cues: t.baseCues ? t.baseCues.length : null,
+      overlay: t.overlay, vehicle: S.set.vehicle });
+  }
+  const txt = JSON.stringify(out, null, 1);
+  try { await navigator.clipboard.writeText(txt); toast('Cue diagnostics copied to clipboard'); }
+  catch (e) { console.log('[diag]', txt); toast('Clipboard blocked — diagnostics logged to console'); }
+};
+
 /* ---------------- controller / keyboard (DMD2 remotes pair as BT HID keyboards) ---------------- */
 const KEY_ACTIONS = {
   zin:    { def: ['Equal', 'NumpadAdd', 'ArrowUp', 'MediaTrackNext'], run: () => manualZoom(1) },
@@ -1268,6 +1328,7 @@ function warnDists(ns) {
 }
 function startNav() {
   const trk = S.tracks[S.sel]; if (!trk) return;
+  if (S.cueEdit) setCueEdit(false);
   audio(); // unlock on gesture
   if (!trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
   S.navState = { idx: -1, dir: 1, dirVotes: 0, off: false, lastOffBeep: 0, alertStates: new Map(),
@@ -1741,6 +1802,7 @@ function refreshTrackList() {
   if (!S.tracks.length) el.innerHTML = '<div class="hint">No tracks yet.</div>';
 }
 function selectTrack(i) {
+  if (S.cueEdit) setCueEdit(false);
   S.sel = i;
   const trk = S.tracks[i];
   if (trk && !trk.alerts) analyzeRoute(trk).then(() => { updateBottomBar(); refreshMapData(); if (S.nav) toast(trk.alerts.length + ' cues ready'); });
@@ -1748,13 +1810,67 @@ function selectTrack(i) {
 }
 function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
-  if (S.sel < 0) { nm.textContent = 'No track selected'; sub.textContent = S.tracks.length ? 'tap ☰ to pick a track' : 'load a GPX to begin'; nb.disabled = true; return; }
+  const eb = document.getElementById('cueEditBtn');
+  if (S.sel < 0) { nm.textContent = 'No track selected'; sub.textContent = S.tracks.length ? 'tap ☰ to pick a track' : 'load a GPX to begin'; nb.disabled = true; eb.style.display = 'none'; return; }
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
-  sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' cues';
+  const nE = t.overlay ? t.overlay.removed.length + t.overlay.added.length : 0;
+  sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' cues' + (nE ? ' (' + nE + ' edited)' : '');
   nb.disabled = false;
+  eb.style.display = t.alerts ? 'flex' : 'none';
 }
+
+/* ---------------- cue edit mode: tap a dot to remove/restore, tap the route to add ---------------- */
+function setCueEdit(on) {
+  S.cueEdit = on;
+  const eb = document.getElementById('cueEditBtn');
+  eb.classList.toggle('active', on);
+  if (mapReady) {
+    map.setFilter('alert-dots', on ? null : ['!', ['get', 'removed']]);
+    map.setPaintProperty('alert-dots', 'circle-radius', on ? 9 : 4.5);
+    map.getCanvas().style.cursor = on ? 'crosshair' : '';
+  }
+  if (on) toast('Edit cues — tap a dot to remove it, tap the route to add one');
+  else if (S.sel >= 0) {
+    const t = S.tracks[S.sel], ov = t.overlay;
+    saveCueOverlay(t);
+    toast(t.alerts.length + ' cues (' + (ov ? ov.removed.length + ov.added.length : 0) + ' edited)');
+  }
+  updateBottomBar(); refreshMapData(); drawProgress(true);
+}
+document.getElementById('cueEditBtn').onclick = () => {
+  const trk = S.tracks[S.sel];
+  if (!trk || !trk.baseCues) { toast('Cues still analysing…'); return; }
+  setCueEdit(!S.cueEdit);
+};
+function cueEditTap(lngLat) {
+  const trk = S.tracks[S.sel]; if (!trk || !trk.baseCues) return;
+  const [x, y] = toXY(lngLat.lat, lngLat.lng);
+  // tap radius scales with zoom (~22 px), floor 15 m for fat fingers on a zoomed-in map
+  const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
+  const tapR = Math.max(15, mpp * 22);
+  const ov = cueOverlay(trk);
+  let best = null, bd = Infinity, isAdded = false;
+  for (const c of trk.baseCues) { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; isAdded = false; } }
+  for (const c of ov.added)     { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; isAdded = true; } }
+  if (best && bd <= tapR) {
+    if (isAdded) { ov.added = ov.added.filter(c => c !== best); toast('Added cue deleted'); }
+    else {
+      const ri = ov.removed.findIndex(r => Math.abs(r - best.at) < 25);
+      if (ri >= 0) { ov.removed.splice(ri, 1); toast('Cue restored'); }
+      else { ov.removed.push(best.at); toast('Cue removed — tap again to restore'); }
+    }
+  } else {
+    const near = nearestOnTrack(trk, x, y, -1);
+    if (near.idx < 0 || near.d > tapR) return; // not near the route — ignore
+    ov.added.push(mkManualCue(trk, near.idx));
+    toast('Cue added');
+  }
+  saveCueOverlay(trk); applyCueOverlay(trk);
+  updateBottomBar(); refreshMapData(); drawProgress(true);
+}
+function cueOverlay(trk) { return trk.overlay || (trk.overlay = { removed: [], added: [] }); }
 function refreshEmpty() { document.getElementById('emptyState').classList.toggle('on', !S.tracks.length && !S.heat); }
 let toastT = null;
 function toast(msg) {
