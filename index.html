@@ -24,22 +24,43 @@
   .maplibregl-ctrl-attrib a{color:var(--dim)!important}
 
   /* ---------- top HUD ---------- */
-  #hud{position:fixed; top:0; left:0; right:0; display:none; justify-content:center;
-    padding:calc(env(safe-area-inset-top) + 8px) 12px 8px; pointer-events:none; z-index:10}
-  #hud.on{display:flex}
-  #hudBox{background:rgba(14,18,22,.92); border:1px solid #2a3540; border-radius:16px;
-    padding:10px 20px; display:flex; align-items:center; gap:16px; min-width:230px; justify-content:center}
-  #hudArrow{font-size:44px; line-height:1; width:56px; text-align:center}
+  /* turn strip: one slim semi-transparent bar across the top; its amber fill
+     drains right-to-nothing as the turn point approaches */
+  #hud{position:fixed; top:0; left:0; right:0; display:none; pointer-events:none; z-index:10}
+  #hud.on{display:block}
+  #hudBox{position:relative; overflow:hidden; display:flex; align-items:center; gap:14px;
+    padding:calc(env(safe-area-inset-top) + 8px) 16px 8px;
+    background:rgba(14,18,22,.55); border-bottom:1px solid rgba(42,53,64,.7)}
+  #hudFill{position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,176,32,.22);
+    transition:width .9s linear}
+  #hudArrow{font-size:34px; line-height:1; width:40px; text-align:center; position:relative}
   #hudArrow.left{color:var(--warn)} #hudArrow.right{color:var(--warn)}
-  #hudBox.commit{border-color:var(--ok)}
+  #hudBox.commit{border-bottom-color:var(--ok)}
   #hudBox.commit #hudArrow{color:var(--ok)}
-  #hudDist{font-size:40px; font-weight:800; font-variant-numeric:tabular-nums}
-  #hudDist small{font-size:18px; font-weight:600; color:var(--dim)}
-  #hudType{font-size:13px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em}
+  #hudBox.commit #hudFill{background:rgba(56,209,120,.22)}
+  #hudDist{font-size:30px; font-weight:800; font-variant-numeric:tabular-nums; margin-left:auto; position:relative}
+  #hudDist small{font-size:15px; font-weight:600; color:var(--dim)}
+  #hudType{font-size:14px; color:var(--fg); text-transform:uppercase; letter-spacing:.06em; position:relative;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:12px; z-index:10;
     background:rgba(14,18,22,.85); border-radius:12px; padding:6px 12px; font-size:22px; font-weight:700;
     display:none; font-variant-numeric:tabular-nums}
   #hudSpeed.on{display:block} #hudSpeed small{font-size:12px; color:var(--dim); font-weight:500}
+  /* speed readout + pills drop below the strip while it can appear */
+  body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px)}
+  body.navving #holdPill{top:calc(env(safe-area-inset-top) + 116px)}
+  body.navving #lockPill{top:calc(env(safe-area-inset-top) + 152px)}
+  /* mute: one tap on the riding screen, ghosted like the other ride controls */
+  #muteBtn{position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:10px; z-index:12;
+    width:48px; height:48px; border-radius:14px; background:rgba(22,28,34,.5); border:1px solid #2a3540;
+    display:none; align-items:center; justify-content:center; font-size:24px; opacity:.4; cursor:pointer}
+  #muteBtn:active{opacity:1}
+  body.navving #muteBtn{display:flex}
+  #muteBtn.muted{opacity:.75; border-color:var(--bad)}
+  /* orientation label under the compass rose — makes the N button's mode obvious */
+  #orientLabel{position:fixed; z-index:10; font-size:10px; color:var(--dim); text-transform:uppercase;
+    letter-spacing:.06em; text-align:center; width:70px; display:none; pointer-events:none}
+  body.navving #orientLabel{display:block}
   #banner{position:fixed; top:110px; left:50%; transform:translateX(-50%); z-index:11;
     background:var(--bad); color:#fff; font-weight:800; font-size:20px; padding:10px 22px;
     border-radius:12px; display:none; box-shadow:0 4px 20px rgba(0,0,0,.5)}
@@ -162,11 +183,15 @@
 
   /* ---------- responsive: landscape / split-screen (short viewports) ---------- */
   @media (max-height: 500px) {
-    #hudBox{padding:6px 14px; gap:10px; min-width:0}
-    #hudArrow{font-size:30px; width:38px}
-    #hudDist{font-size:26px} #hudDist small{font-size:13px}
+    #hudBox{padding:calc(env(safe-area-inset-top) + 4px) 12px 4px; gap:10px}
+    #hudArrow{font-size:24px; width:30px}
+    #hudDist{font-size:20px} #hudDist small{font-size:11px}
     #hudType{font-size:11px}
     #hudSpeed{font-size:16px; padding:4px 9px}
+    body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 44px)}
+    body.navving #holdPill{top:calc(env(safe-area-inset-top) + 84px)}
+    body.navving #lockPill{top:calc(env(safe-area-inset-top) + 118px)}
+    #muteBtn{width:40px; height:40px; font-size:19px; top:calc(env(safe-area-inset-top) + 44px)}
     #banner{top:62px; font-size:16px; padding:7px 16px}
     #progress.expanded #progCanvas{height:44px}
     body.navving #bottom{display:none} /* riding: reclaim the bar — STOP lives in the glove overlay */
@@ -185,10 +210,14 @@
 <div id="map"></div>
 
 <div id="hud"><div id="hudBox">
+  <div id="hudFill"></div>
   <div id="hudArrow">↑</div>
-  <div><div id="hudDist">— <small>m</small></div><div id="hudType">next turn</div></div>
+  <div id="hudType">next turn</div>
+  <div id="hudDist">— <small>m</small></div>
 </div></div>
 <div id="hudSpeed">0 <small>km/h</small></div>
+<div id="muteBtn" title="mute / unmute">🔊</div>
+<div id="orientLabel">north up</div>
 <div id="banner">OFF TRACK</div>
 <div id="toast"></div>
 
@@ -272,6 +301,8 @@
 
   <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
   <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
+  <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button></div>
+  <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
 </div>
 
 <input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json" hidden>
@@ -719,7 +750,9 @@ function classifyCues(trk, g, hg, m) {
   const mkCue = (idx, deg) => {
     const after = Math.min(trk.n - 1, idx + Math.ceil(25 / RESAMPLE_M));
     return { at: trk.cum[idx], idx, deg: Math.round(deg), type: deg > 0 ? 'right' : 'left',
-      from: m.cls[Math.max(0, idx - 3)] || null, onto: m.cls[after] || null, name: m.name[after] || null };
+      from: m.cls[Math.max(0, idx - 3)] || null, onto: m.cls[after] || null, name: m.name[after] || null,
+      // exit bearings for the north-up HUD arrow (reverse riding exits back along the way in)
+      outBrg: Math.round(m.brg[after]), inBrg: Math.round(m.brg[Math.max(0, idx - 3)]) };
   };
   const cues = [];
   // way transitions (class or name, incl. mapped -> unmapped) where the old way carries on
@@ -772,7 +805,7 @@ async function analyzeRoute(trk) {
 }
 async function analyzeRouteInner(trk) {
   {
-    const key = 'cue4-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
+    const key = 'cue5-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
     try { const rec = await idb.get(key); if (rec) { trk.alerts = rec.cues; return; } } catch (e) {}
     const t0 = performance.now();
     const g = await decodeCorridor(trk);
@@ -932,15 +965,20 @@ function addOverlays() {
     paint: { 'text-color': '#38d178', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 2 } });
   map.addLayer({ id: 'pos-acc', type: 'fill', source: 'posAcc',
     paint: { 'fill-color': 'rgba(64,150,255,0.12)' } });
-  map.addLayer({ id: 'pos-heading', type: 'symbol', source: 'pos',
-    layout: { 'text-field': '▲', 'text-size': 18, 'text-font': ['Noto Sans Medium'],
-      'text-rotate': ['get', 'heading'], 'text-rotation-alignment': 'map',
-      'text-offset': [0, -1.1], 'text-allow-overlap': true },
-    filter: ['get', 'moving'],
-    paint: { 'text-color': '#4096ff' } });
-  map.addLayer({ id: 'pos-dot', type: 'circle', source: 'pos',
-    paint: { 'circle-radius': 8, 'circle-color': '#4096ff', 'circle-stroke-width': 3, 'circle-stroke-color': '#fff' } });
+  // navigation dart instead of a dot — always points the direction of travel
+  map.addImage('nav-dart', navDartImage(), { pixelRatio: 2 });
+  map.addLayer({ id: 'pos-arrow', type: 'symbol', source: 'pos',
+    layout: { 'icon-image': 'nav-dart', 'icon-size': 1, 'icon-rotate': ['get', 'heading'],
+      'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
   refreshMapData();
+}
+function navDartImage() { // classic location-arrow: triangle with a notched tail, white-outlined
+  const c = document.createElement('canvas'); c.width = c.height = 56;
+  const x = c.getContext('2d');
+  x.beginPath(); x.moveTo(28, 5); x.lineTo(47, 49); x.lineTo(28, 38); x.lineTo(9, 49); x.closePath();
+  x.fillStyle = '#4096ff'; x.strokeStyle = '#fff'; x.lineWidth = 4; x.lineJoin = 'round';
+  x.stroke(); x.fill();
+  return x.getImageData(0, 0, 56, 56);
 }
 function circlePoly(lat, lon, radiusM) {
   const kx = 1 / (R_LON * Math.cos(lat * Math.PI / 180)), ky = 1 / R_LAT;
@@ -995,7 +1033,8 @@ function refreshPosLayers() {
   if (!mapReady || !S.pos) return;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
   map.getSource('pos').setData({ type: 'Feature',
-    properties: { heading: S.pos.heading || 0, moving: !!(S.pos.heading != null && S.pos.speed > 0.8) },
+    // smoothed course bearing; frozen at its last value when stopped (same rule as course-up)
+    properties: { heading: S.courseBearing != null ? S.courseBearing : (S.pos.heading || 0) },
     geometry: { type: 'Point', coordinates: [lo, la] } });
   map.getSource('posAcc').setData(S.pos.acc > 15 ? circlePoly(la, lo, S.pos.acc) : EMPTY);
 }
@@ -1129,12 +1168,31 @@ function initLockGesture() {
   for (const ev of ['touchend', 'touchcancel', 'mouseup', 'wheel']) el.addEventListener(ev, cancel, { passive: true });
 }
 
+/* mute is togglable from four places (button, glove tile, settings, controller) — one sync point */
+const muteBtn = document.getElementById('muteBtn');
+function setSound(on) {
+  S.set.sound = on; saveSet();
+  document.getElementById('setSound').checked = on;
+  muteBtn.textContent = on ? '🔊' : '🔇';
+  muteBtn.classList.toggle('muted', !on);
+}
+muteBtn.onclick = () => { setSound(!S.set.sound); toast(S.set.sound ? 'Sound on' : 'Muted'); };
+
+/* fullscreen: auto while navigating, manual toggle in the menu (iOS Safari lacks the API) */
+const fsBtn = document.getElementById('fsBtn'), fsOK = !!(document.documentElement.requestFullscreen && document.fullscreenEnabled);
+if (!fsOK) {
+  fsBtn.style.display = 'none';
+  document.getElementById('fsHint').textContent = 'This browser has no fullscreen API (iOS Safari) — Add to Home Screen to run DingoNav fullscreen.';
+}
+fsBtn.onclick = () => document.fullscreenElement
+  ? document.exitFullscreen().catch(() => {})
+  : document.documentElement.requestFullscreen().catch(() => {});
+
 /* ---------------- controller / keyboard (DMD2 remotes pair as BT HID keyboards) ---------------- */
 const KEY_ACTIONS = {
   zin:    { def: ['Equal', 'NumpadAdd', 'ArrowUp', 'MediaTrackNext'], run: () => manualZoom(1) },
   zout:   { def: ['Minus', 'NumpadSubtract', 'ArrowDown', 'MediaTrackPrevious'], run: () => manualZoom(-1) },
-  mute:   { def: ['KeyM'], run: () => { S.set.sound = !S.set.sound; saveSet();
-    document.getElementById('setSound').checked = S.set.sound; toast(S.set.sound ? 'Sound on' : 'Muted'); } },
+  mute:   { def: ['KeyM'], run: () => muteBtn.onclick() },
   center: { def: ['KeyC'], run: () => { setFollow(true);
     if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); } } },
   orient: { def: ['KeyN'], run: () => northBtn.onclick() },
@@ -1161,6 +1219,7 @@ function refreshKeyBtns() {
 const northBtn = document.getElementById('north'), northInner = document.getElementById('northInner');
 function applyOrient() {
   northBtn.classList.toggle('course', S.set.orient === 'course');
+  document.getElementById('orientLabel').textContent = S.set.orient === 'course' ? 'course up' : 'north up';
   if (!mapReady) return;
   if (S.set.orient === 'north') map.easeTo({ bearing: 0, duration: 500 });
   else if (S.courseBearing != null) map.easeTo({ bearing: S.courseBearing, duration: 500 });
@@ -1224,6 +1283,7 @@ function startNav() {
   placeProgress(); drawProgress(true);
   const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop');
   if (S.set.wake) requestWake();
+  if (fsOK && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
   if (!S.demo) startGPS();
   startFriends();
   toast('Navigation started — following nearest point on track');
@@ -1240,6 +1300,7 @@ function stopNav() {
   closeGlove();
   placeProgress();
   const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   stopGPS(); releaseWake(); stopDemo();
 }
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
@@ -1330,12 +1391,13 @@ function flashCommit() {
   clearTimeout(commitT); commitT = setTimeout(() => box.classList.remove('commit'), 1200);
 }
 function setHud(alert, dTo, dir, farM) {
-  const box = document.getElementById('hudBox');
+  const box = document.getElementById('hudBox'), fill = document.getElementById('hudFill');
   const arrow = document.getElementById('hudArrow'), distEl = document.getElementById('hudDist'), typeEl = document.getElementById('hudType');
-  // the glance card slides in at the far warning, not permanently (design: minimal riding screen)
-  const show = !!alert && dTo <= Math.max((farM || 160) * 1.5, 250);
+  // the strip slides in at the far warning, not permanently (design: minimal riding screen)
+  const win = Math.max((farM || 160) * 1.5, 250);
+  const show = !!alert && dTo <= win;
   box.style.visibility = show || box.classList.contains('commit') ? '' : 'hidden';
-  if (!show) return;
+  if (!show) { fill.style.width = '0'; return; }
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
   const icons = { left: '⬅', right: '➡' };
@@ -1343,9 +1405,16 @@ function setHud(alert, dTo, dir, farM) {
   // riding the route backwards approaches the cue from the other side — swap the surfaces
   const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
   const ontoTxt = onto && onto !== from ? ' · onto ' + ((dir > 0 && alert.name) || onto) : '';
-  arrow.textContent = icons[type] || '⬆'; arrow.className = type;
+  // north-up: rotate the arrow to the turn's actual exit bearing; course-up: flat left/right
+  if (S.set.orient === 'north' && alert.outBrg != null) {
+    const exit = dir > 0 ? alert.outBrg : (alert.inBrg + 180) % 360;
+    arrow.textContent = '⬆'; arrow.className = type; arrow.style.transform = 'rotate(' + exit + 'deg)';
+  } else {
+    arrow.textContent = icons[type] || '⬆'; arrow.className = type; arrow.style.transform = '';
+  }
   distEl.innerHTML = (dTo >= 995 ? (dTo / 1000).toFixed(1) + ' <small>km</small>' : Math.round(dTo / 5) * 5 + ' <small>m</small>');
   typeEl.textContent = (labels[type] || 'turn') + ontoTxt;
+  fill.style.width = Math.max(0, Math.min(100, dTo / win * 100)) + '%'; // drains to zero at the turn
 }
 
 /* ---------------- progress strip ---------------- */
@@ -1365,6 +1434,9 @@ function placeProgress() {
   // rose shares the left edge with the glove button — stack it on top when they'd collide
   const northAbove = above && S.set.gloveSide === 'left' ? above + gb.offsetHeight + 12 : above;
   document.getElementById('north').style.bottom = northAbove ? northAbove + 'px' : '';
+  // mode label sits just under the rose (riding only)
+  const ol = document.getElementById('orientLabel');
+  ol.style.left = '0px'; ol.style.bottom = ((northAbove || 120) - 15) + 'px';
 }
 window.addEventListener('resize', () => {
   placeProgress(); drawProgress(true);
@@ -1479,10 +1551,7 @@ document.getElementById('gZoom').onclick = gloveTap(() => {
   S.set.autoZoom = !S.set.autoZoom; saveSet();
   document.getElementById('setAutoZoom').checked = S.set.autoZoom;
 });
-document.getElementById('gSound').onclick = gloveTap(() => {
-  S.set.sound = !S.set.sound; saveSet();
-  document.getElementById('setSound').checked = S.set.sound;
-});
+document.getElementById('gSound').onclick = gloveTap(() => setSound(!S.set.sound));
 document.getElementById('gProfile').onclick = gloveTap(() => prog.onclick());
 document.getElementById('gSteep').onclick = gloveTap(() => {
   const trk = S.tracks[S.sel];
@@ -1701,7 +1770,8 @@ function bindSet(id, key, cb) {
   el.checked = S.set[key];
   el.onchange = () => { S.set[key] = el.checked; saveSet(); if (cb) cb(); };
 }
-bindSet('setSound', 'sound');
+bindSet('setSound', 'sound', () => setSound(S.set.sound));
+setSound(S.set.sound); // sync the mute button face at boot
 bindSet('setConfirm', 'confirm');
 bindSet('setAutoZoom', 'autoZoom');
 for (const b of document.querySelectorAll('#vehSeg button')) {
