@@ -54,6 +54,19 @@
     color:var(--fg); font-size:26px; display:flex; align-items:center; justify-content:center; cursor:pointer}
   .ctl:active{background:var(--panel2)}
   .ctl.active{border-color:var(--accent); color:var(--accent)}
+  /* riding screen: ± + heart stay, ghosted; browse-only controls hide (glove overlay has them) */
+  body.navving #sideCtl .ctl{opacity:.4; background:rgba(22,28,34,.5)}
+  body.navving #sideCtl .ctl:active{opacity:1}
+  body.navving #followBtn, body.navving #fitBtn{display:none}
+  #favBtn{display:none; font-size:22px}
+  #favBtn.show{display:flex}
+  #favBtn.active{border-color:var(--bad); color:var(--bad); opacity:.75}
+  /* stacked under the speed readout, clear of the glance card (top centre) */
+  #holdPill, #lockPill{position:fixed; top:64px; left:12px; z-index:14;
+    display:none; padding:6px 14px; border-radius:999px; font-size:14px; color:var(--fg);
+    background:rgba(22,28,34,.75); border:1px solid #2a3540}
+  #holdPill.on{display:block}
+  #lockPill.on{display:block; top:100px; border-color:var(--accent)}
   #north{position:fixed; left:12px; bottom:120px; z-index:10; width:44px; height:44px; border-radius:50%;
     background:rgba(22,28,34,.9); border:1px solid #2a3540; display:flex; align-items:center; justify-content:center;
     font-weight:800; color:var(--bad); font-size:17px; cursor:pointer}
@@ -183,9 +196,12 @@
 <div id="sideCtl">
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl" id="zoomOut">−</div>
+  <div class="ctl" id="favBtn" title="favourite zoom">♡</div>
   <div class="ctl" id="followBtn" title="follow GPS">◎</div>
   <div class="ctl" id="fitBtn" title="fit track">⛶</div>
 </div>
+<div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
+<div id="lockPill" title="centre lock — long-press map to unlock">🔒 locked</div>
 
 <div id="emptyState">
   <div class="big">DingoNav</div>
@@ -240,11 +256,20 @@
   <h3>Settings</h3>
   <div class="row"><label>Turn beeps</label><span class="sw"><input type="checkbox" id="setSound" checked><span></span></span></div>
   <div class="row"><label>Turn confirmation chirp</label><span class="sw"><input type="checkbox" id="setConfirm" checked><span></span></span></div>
-  <div class="row"><label>Vehicle (warning lead)</label><span class="seg" id="vehSeg">
-    <button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
+  <div class="row"><label>Vehicle (alerts + zoom)</label><span class="seg" id="vehSeg">
+    <button data-v="walk">Walk</button><button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
   <div class="row"><label>Auto-zoom with speed</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
   <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
   <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
+
+  <h3>Controller buttons</h3>
+  <div class="hint">Works with any Bluetooth remote that types keys (e.g. a DMD2 handlebar controller). Tap an action, then press the button on your remote. Esc while capturing clears a custom key.</div>
+  <div class="row"><label>Zoom in</label><button class="btn keyBtn" data-k="zin">default</button></div>
+  <div class="row"><label>Zoom out</label><button class="btn keyBtn" data-k="zout">default</button></div>
+  <div class="row"><label>Mute</label><button class="btn keyBtn" data-k="mute">default</button></div>
+  <div class="row"><label>Re-centre</label><button class="btn keyBtn" data-k="center">default</button></div>
+  <div class="row"><label>North / course up</label><button class="btn keyBtn" data-k="orient">default</button></div>
+
   <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
   <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
 </div>
@@ -297,7 +322,7 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null,
   friends: new Map(), demo: null,
-  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false },
+  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false, favSpan: {}, keys: {} },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
@@ -834,6 +859,9 @@ async function initMap() {
   map.keyboard.disableRotation();
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
   map.on('dragstart', () => { if (S.nav) setFollow(false); });
+  // gesture zoom (pinch / wheel / double-tap) while navigating = hold, same as the ± buttons
+  map.on('zoomend', e => { if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom()); });
+  initLockGesture();
   map.on('mousedown', closeGlove); map.on('touchstart', closeGlove); // tap the map = dismiss glove overlay
   map.on('rotate', () => { northInner.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
   window.__map = map;
@@ -982,10 +1010,32 @@ function refreshFriends() {
 }
 
 /* ---------------- follow / zoom ---------------- */
-function speedZoom(speedMs, lat) {
-  const span = Math.max(320, Math.min(1700, (speedMs || 0) * 120 + 200)); // metres of screen height
+function zoomForSpan(span, lat) {
   const h = map.getContainer().clientHeight || 700;
   return Math.log2(156543.03392 * Math.cos(lat * Math.PI / 180) * h / span);
+}
+function spanForZoom(zoom, lat) {
+  const h = map.getContainer().clientHeight || 700;
+  return 156543.03392 * Math.cos(lat * Math.PI / 180) * h / 2 ** zoom;
+}
+function speedZoom(speedMs, lat) {
+  const pts = (VEHICLES[S.set.vehicle] || VEHICLES.enduro).spans, v = speedMs || 0;
+  let span = pts[pts.length - 1][1];
+  if (v <= pts[0][0]) span = pts[0][1];
+  else for (let i = 1; i < pts.length; i++) if (v <= pts[i][0]) {
+    const [v0, s0] = pts[i - 1], [v1, s1] = pts[i];
+    span = s0 + (s1 - s0) * (v - v0) / (v1 - v0); break;
+  }
+  return zoomForSpan(span, lat);
+}
+/* cruise zoom priority: manual hold (until the next cue approach) > heart favourite > speed curve.
+   A cue approach releases the hold and rides the speed curve to frame the turn. */
+function cruiseZoom(la) {
+  const ns = S.navState;
+  if (ns && ns.approach) { setHold(null); return speedZoom(S.pos.speed, la); }
+  if (S.zoomHold != null) return null; // held — leave the camera zoom alone
+  const fav = (S.set.favSpan || {})[S.set.vehicle];
+  return fav ? zoomForSpan(fav, la) : speedZoom(S.pos.speed, la);
 }
 let lastEase = 0;
 function followCamera() {
@@ -994,12 +1044,43 @@ function followCamera() {
   lastEase = now;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
   const opts = { center: [lo, la], duration: 900, easing: t => t };
-  if (S.set.autoZoom) opts.zoom = speedZoom(S.pos.speed, la);
+  if (S.set.autoZoom) { const z = cruiseZoom(la); if (z != null) opts.zoom = z; }
   if (S.set.orient === 'course' && S.courseBearing != null) opts.bearing = S.courseBearing;
   map.easeTo(opts);
 }
-document.getElementById('zoomIn').onclick = () => map && map.zoomIn();
-document.getElementById('zoomOut').onclick = () => map && map.zoomOut();
+/* manual zoom while navigating = hold: stay at that zoom until the next turn approach */
+const holdPill = document.getElementById('holdPill'), favBtn = document.getElementById('favBtn');
+function setHold(z) {
+  S.zoomHold = z;
+  holdPill.classList.toggle('on', z != null && S.nav && S.set.autoZoom);
+  refreshFav();
+}
+function refreshFav() {
+  const fav = (S.set.favSpan || {})[S.set.vehicle];
+  favBtn.textContent = fav ? '♥' : '♡';
+  favBtn.classList.toggle('active', !!fav);
+  // heart offers itself after a manual nudge, and stays while a favourite is set
+  favBtn.classList.toggle('show', !!fav || S.zoomHold != null);
+}
+holdPill.onclick = () => setHold(null);
+favBtn.onclick = () => {
+  if (!S.set.favSpan) S.set.favSpan = {};
+  const had = S.set.favSpan[S.set.vehicle];
+  if (had) { delete S.set.favSpan[S.set.vehicle]; toast('Favourite zoom cleared — back to speed zoom'); }
+  else if (S.pos && mapReady) {
+    const [la] = toLL(S.pos.x, S.pos.y);
+    S.set.favSpan[S.set.vehicle] = Math.round(spanForZoom(map.getZoom(), la));
+    setHold(null); toast('Favourite zoom set for ' + S.set.vehicle);
+  }
+  saveSet(); refreshFav();
+};
+function manualZoom(dir) {
+  if (!map) return;
+  dir > 0 ? map.zoomIn() : map.zoomOut();
+  if (S.nav && S.set.autoZoom) setTimeout(() => setHold(map.getZoom()), 350); // after the ease settles
+}
+document.getElementById('zoomIn').onclick = () => manualZoom(1);
+document.getElementById('zoomOut').onclick = () => manualZoom(-1);
 document.getElementById('fitBtn').onclick = () => { fitSelected(); setFollow(false); };
 document.getElementById('followBtn').onclick = () => {
   setFollow(!S.follow);
@@ -1007,6 +1088,74 @@ document.getElementById('followBtn').onclick = () => {
 };
 function setFollow(on) { S.follow = on; document.getElementById('followBtn').classList.toggle('active', on); }
 setFollow(true);
+
+/* ---------------- centre lock: long-press the map to pin yourself centred ----------------
+   Locked = drag-pan disabled, so a glove brush can't knock the map off you at speed.
+   Long-press again to unlock; while unlocked + panned away, long-press recentres AND locks. */
+const lockPill = document.getElementById('lockPill');
+function setLock(on) {
+  S.lock = on; lockPill.classList.toggle('on', on);
+  if (mapReady) on ? map.dragPan.disable() : map.dragPan.enable();
+}
+lockPill.onclick = () => { setLock(false); toast('Centre lock off'); };
+function initLockGesture() {
+  const el = map.getContainer();
+  let timer = null, start = null;
+  const cancel = () => { if (timer) clearTimeout(timer); timer = null; };
+  const down = e => {
+    if (e.touches && e.touches.length > 1) return cancel();
+    const p = e.touches ? e.touches[0] : e;
+    start = [p.clientX, p.clientY];
+    cancel();
+    timer = setTimeout(() => {
+      timer = null; vib([40]);
+      if (S.lock) { setLock(false); toast('Centre lock off — map can be moved'); }
+      else {
+        setLock(true); setFollow(true);
+        if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 400 }); }
+        toast('Centre lock on — long-press to release');
+      }
+    }, 600);
+  };
+  const move = e => {
+    if (!timer || !start) return;
+    const p = e.touches ? e.touches[0] : e;
+    if (Math.hypot(p.clientX - start[0], p.clientY - start[1]) > 12) cancel();
+  };
+  el.addEventListener('touchstart', down, { passive: true });
+  el.addEventListener('mousedown', down);
+  el.addEventListener('touchmove', move, { passive: true });
+  el.addEventListener('mousemove', move);
+  for (const ev of ['touchend', 'touchcancel', 'mouseup', 'wheel']) el.addEventListener(ev, cancel, { passive: true });
+}
+
+/* ---------------- controller / keyboard (DMD2 remotes pair as BT HID keyboards) ---------------- */
+const KEY_ACTIONS = {
+  zin:    { def: ['Equal', 'NumpadAdd', 'ArrowUp', 'MediaTrackNext'], run: () => manualZoom(1) },
+  zout:   { def: ['Minus', 'NumpadSubtract', 'ArrowDown', 'MediaTrackPrevious'], run: () => manualZoom(-1) },
+  mute:   { def: ['KeyM'], run: () => { S.set.sound = !S.set.sound; saveSet();
+    document.getElementById('setSound').checked = S.set.sound; toast(S.set.sound ? 'Sound on' : 'Muted'); } },
+  center: { def: ['KeyC'], run: () => { setFollow(true);
+    if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); } } },
+  orient: { def: ['KeyN'], run: () => northBtn.onclick() },
+};
+let keyCapture = null;
+window.addEventListener('keydown', e => {
+  if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if (keyCapture) {
+    e.preventDefault();
+    if (!S.set.keys) S.set.keys = {};
+    if (e.code === 'Escape') delete S.set.keys[keyCapture]; else S.set.keys[keyCapture] = e.code;
+    keyCapture = null; saveSet(); refreshKeyBtns();
+    return;
+  }
+  for (const [k, a] of Object.entries(KEY_ACTIONS))
+    if ((S.set.keys && S.set.keys[k]) === e.code || a.def.includes(e.code)) { e.preventDefault(); a.run(); return; }
+});
+function refreshKeyBtns() {
+  for (const b of document.querySelectorAll('.keyBtn'))
+    b.textContent = (S.set.keys || {})[b.dataset.k] || 'default';
+}
 
 /* ---------------- orientation: north-up / course-up ---------------- */
 const northBtn = document.getElementById('north'), northInner = document.getElementById('northInner');
@@ -1040,11 +1189,17 @@ function fitSelected() {
 
 /* ---------------- navigation ---------------- */
 const OFF_M = 60, ON_M = 40;
-// warning lead is time-based (~15 s far / ~5 s near from rolling speed), clamped per vehicle
+// warning lead is time-based (~15 s far / ~5 s near from rolling speed), clamped per vehicle.
+// spans = auto-zoom curve: [speed m/s, metres of visible map height] points, lerped + end-clamped
 const VEHICLES = {
-  mtb:       { farMin: 40,  farMax: 150, nearMin: 15, nearMax: 50,  defSpd: 4 },
-  enduro:    { farMin: 60,  farMax: 250, nearMin: 25, nearMax: 70,  defSpd: 8 },
-  adventure: { farMin: 120, farMax: 400, nearMin: 40, nearMax: 100, defSpd: 14 },
+  walk:      { farMin: 25,  farMax: 60,  nearMin: 10, nearMax: 30,  defSpd: 1.4,
+               spans: [[0, 150], [1.4, 250], [2.2, 400]] },
+  mtb:       { farMin: 40,  farMax: 150, nearMin: 15, nearMax: 50,  defSpd: 4,
+               spans: [[0, 250], [4.2, 500], [9.7, 900]] },
+  enduro:    { farMin: 60,  farMax: 250, nearMin: 25, nearMax: 70,  defSpd: 8,
+               spans: [[0, 300], [8.3, 900], [19.4, 2500]] },
+  adventure: { farMin: 120, farMax: 400, nearMin: 40, nearMax: 100, defSpd: 14,
+               spans: [[0, 400], [13.9, 2000], [27.8, 7000]] },
 };
 function warnDists(ns) {
   const v = VEHICLES[S.set.vehicle] || VEHICLES.enduro;
@@ -1065,7 +1220,7 @@ function startNav() {
   prog.classList.add('on'); prog.classList.remove('offtrack');
   prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
   document.getElementById('gloveBtn').classList.add('on');
-  document.getElementById('sideCtl').style.display = 'none'; // riding screen: one fat button only
+  setHold(null); refreshFav();
   placeProgress(); drawProgress(true);
   const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop');
   if (S.set.wake) requestWake();
@@ -1081,7 +1236,7 @@ function stopNav() {
   document.getElementById('banner').classList.remove('on');
   prog.classList.remove('on', 'offtrack');
   document.getElementById('gloveBtn').classList.remove('on');
-  document.getElementById('sideCtl').style.display = '';
+  setHold(null); setLock(false);
   closeGlove();
   placeProgress();
   const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
@@ -1156,6 +1311,7 @@ function onFix(lat, lon, acc, speed, heading) {
     ns.confirmAt = null; flashCommit();
     if (S.set.confirm) BEEP.back();
   }
+  ns.approach = !!next && dTo <= Math.max(farM * 1.5, 250); // cruiseZoom: frame the turn, release any hold
   setHud(next, dTo, ns.dir, farM);
   if (next) {
     let st = ns.alertStates.get(next); if (!st) ns.alertStates.set(next, st = { far: true, near: true });
@@ -1550,9 +1706,12 @@ bindSet('setConfirm', 'confirm');
 bindSet('setAutoZoom', 'autoZoom');
 for (const b of document.querySelectorAll('#vehSeg button')) {
   b.classList.toggle('active', b.dataset.v === S.set.vehicle);
-  b.onclick = () => { S.set.vehicle = b.dataset.v; saveSet();
+  b.onclick = () => { S.set.vehicle = b.dataset.v; saveSet(); refreshFav(); // heart zoom is per-vehicle
     for (const b2 of document.querySelectorAll('#vehSeg button')) b2.classList.toggle('active', b2.dataset.v === S.set.vehicle); };
 }
+for (const b of document.querySelectorAll('.keyBtn'))
+  b.onclick = () => { keyCapture = b.dataset.k; b.textContent = 'press…'; };
+refreshKeyBtns(); refreshFav();
 bindSet('setWake', 'wake', () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); });
 const gloveRightEl = document.getElementById('setGloveRight');
 gloveRightEl.checked = S.set.gloveSide === 'right';
