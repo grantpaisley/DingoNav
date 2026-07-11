@@ -16,7 +16,7 @@
       "action": "./",
       "accept": {
         "application/x-dingonav": [".dingonav"],
-        "application/zip": [".dingonav"]
+        "application/zip": [".dingonav", ".zip"]
       }
     }
   ]

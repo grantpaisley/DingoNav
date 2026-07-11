@@ -316,7 +316,7 @@
   <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
 </div>
 
-<input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json,.dingonav" hidden>
+<input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json,.dingonav,.zip,application/zip,application/octet-stream" hidden>
 <input type="file" id="baseInput" accept=".pmtiles" hidden>
 
 <script src="vendor/maplibre-gl.js"></script>
@@ -1909,7 +1909,7 @@ async function loadBundleZip(file) {
   }
   if (entries['basemap.pmtiles']) {
     const blob = new Blob([entries['basemap.pmtiles']], { type: 'application/octet-stream' });
-    await idb.put({ id: 'basemap', name: file.name.replace(/\.dingonav$/i, '') + ' basemap', kind: 'basemap', blob });
+    await idb.put({ id: 'basemap', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' basemap', kind: 'basemap', blob });
     basemap = true;
   }
   // Strava corridor tiles → IDB, keyed for the stravatile:// protocol. Track the
@@ -1934,7 +1934,10 @@ async function handleFiles(files) {
   let nT = 0, nH = 0, errs = 0, needReload = false, stravaTiles = 0;
   for (const f of files) {
     try {
-      if (/\.dingonav$/i.test(f.name)) {
+      // Bundles arrive as .dingonav or, via email-friendly renames, .zip — and
+      // Android downloads sometimes mangle names, so trust the PK magic bytes.
+      const head = new Uint8Array(await f.slice(0, 2).arrayBuffer());
+      if (/\.(dingonav|zip)$/i.test(f.name) || (head[0] === 0x50 && head[1] === 0x4B)) {
         const r = await loadBundleZip(f);
         nT += r.tracks; if (r.heatmap) nH++; errs += r.errs; stravaTiles += r.stravaTiles;
         if (r.basemap || r.stravaTiles) needReload = true;
