@@ -281,6 +281,9 @@
   <div class="btnRow"><button class="btn" id="baseBtn">Load .pmtiles basemap…</button></div>
   <div class="hint">A .pmtiles extract gives roads, trails, water and labels offline. One is auto-downloaded on first open when hosted with the app; cut other areas with the <b>pmtiles</b> CLI (see README).</div>
 
+  <div class="row"><label>Strava heatmap overlay</label><span class="sw"><input type="checkbox" id="setStrava"><span></span></span></div>
+  <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
+
   <h3>Group ride (needs signal)</h3>
   <div class="row"><label>Your name</label><input type="text" id="myName" maxlength="12" placeholder="Grant"></div>
   <div class="row"><label>Ride code</label><input type="text" id="rideCode" maxlength="24" placeholder="e.g. watagans-42"></div>
@@ -365,6 +368,14 @@ try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
 let map = null, mapReady = false;
 let basePM = null, basePMKey = 'none'; // PMTiles handle for the cue engine's corridor decode
+let stravaMeta = null; // {count, zmin, zmax} of baked Strava tiles in IDB, or null
+// 1×1 transparent PNG bytes for out-of-corridor Strava tiles (generated, so no
+// hand-copied base64 to get wrong).
+const STRAVA_BLANK = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 1;
+  const b64 = c.toDataURL('image/png').split(',')[1];
+  return Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+})();
 
 /* ---------------- GPX / GeoJSON parsing ---------------- */
 function parseGPX(text, fallbackName) {
@@ -886,6 +897,15 @@ async function initMap() {
   const protocol = new pmtiles.Protocol();
   maplibregl.addProtocol('pmtiles', protocol.tile);
 
+  // Strava corridor tiles served from IDB (baked into the .dingonav bundle).
+  // Missing tiles (outside the corridor) resolve to a 1×1 transparent PNG so the
+  // basemap shows through with no broken-tile errors.
+  maplibregl.addProtocol('stravatile', async (params) => {
+    const key = 'stravatile-' + params.url.replace('stravatile://', '').replaceAll('/', '-');
+    try { const rec = await idb.get(key); if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() }; } catch (e) {}
+    return { data: STRAVA_BLANK.buffer };
+  });
+
   // basemap: IDB blob -> else fetch alongside the app -> else plain dark background
   let baseBlob = null, baseName = '';
   try { const rec = await idb.get('basemap'); if (rec) { baseBlob = rec.blob; baseName = rec.name; } } catch (e) {}
@@ -959,11 +979,23 @@ async function initMap() {
     const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 250);
     map.once('load', () => { clearInterval(t); res(); });
   });
+  try { stravaMeta = await idb.get('strava-meta'); } catch (e) {}
   mapReady = true; // before addOverlays — its refreshMapData() call needs this
   addOverlays();
 }
 const CLS_MATCH = ['match', ['get', 'class'], 'other', '#ff2d2d', 'plan', '#3390ff', '#ff7a00'];
 function addOverlays() {
+  // Strava heatmap raster — added first so it sits directly on the basemap,
+  // UNDER our own heatmap and tracks. Only when a bundle shipped tiles.
+  if (stravaMeta && stravaMeta.count > 0) {
+    map.addSource('strava', { type: 'raster', tiles: ['stravatile://{z}/{x}/{y}'], tileSize: 256,
+      minzoom: stravaMeta.zmin, maxzoom: stravaMeta.zmax });
+    map.addLayer({ id: 'strava-heat', type: 'raster', source: 'strava',
+      layout: { visibility: S.set.strava === false ? 'none' : 'visible' },
+      paint: { 'raster-opacity': 0.55 } });
+    setStravaInfo(stravaMeta.count + ' Strava tiles loaded (z' + stravaMeta.zmin + '–' + stravaMeta.zmax + ')');
+  }
+
   map.addSource('heat', { type: 'geojson', data: S.heat ? S.heat.geojson : EMPTY });
   map.addSource('tracksOther', { type: 'geojson', data: EMPTY });
   map.addSource('selTrack', { type: 'geojson', data: EMPTY, lineMetrics: true }); // lineMetrics: steepness line-gradient
@@ -1740,6 +1772,11 @@ function connectFriendWS(topic) {
 }
 function setFriendStatus(s) { document.getElementById('friendStatus').textContent = s; }
 function setBaseStatus(s) { document.getElementById('baseStatus').textContent = s; }
+function setStravaInfo(s) { document.getElementById('stravaInfo').textContent = s; }
+function applyStrava() {
+  if (map && map.getLayer('strava-heat'))
+    map.setLayoutProperty('strava-heat', 'visibility', S.set.strava === false ? 'none' : 'visible');
+}
 setInterval(refreshFriends, 30000); // age out stale friends
 
 /* ---------------- files: load / persist ---------------- */
@@ -1792,14 +1829,21 @@ async function loadBundleZip(file) {
     await idb.put({ id: 'basemap', name: file.name.replace(/\.dingonav$/i, '') + ' basemap', kind: 'basemap', blob });
     basemap = true;
   }
-  // Strava corridor tiles — persisted now; the raster layer that renders them is
-  // wired separately once the Dingo Strava proxy is producing real tiles.
+  // Strava corridor tiles → IDB, keyed for the stravatile:// protocol. Track the
+  // zoom range so the raster source only requests zooms we actually shipped.
+  let zmin = 99, zmax = 0;
   for (const path in entries) {
     const m = path.match(/^strava\/(\d+)\/(\d+)\/(\d+)\.png$/);
     if (!m) continue;
+    const z = +m[1];
+    zmin = Math.min(zmin, z); zmax = Math.max(zmax, z);
     await idb.put({ id: `stravatile-${m[1]}-${m[2]}-${m[3]}`, kind: 'stravatile',
       blob: new Blob([entries[path]], { type: 'image/png' }) });
     stravaTiles++;
+  }
+  if (stravaTiles) {
+    await idb.put({ id: 'strava-meta', kind: 'stravameta', count: stravaTiles, zmin, zmax });
+    if (S.set.strava === undefined) { S.set.strava = true; saveSet(); } // show by default when first shipped
   }
   return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles };
 }
@@ -1976,6 +2020,7 @@ bindSet('setSound', 'sound', () => setSound(S.set.sound));
 setSound(S.set.sound); // sync the mute button face at boot
 bindSet('setConfirm', 'confirm');
 bindSet('setAutoZoom', 'autoZoom');
+bindSet('setStrava', 'strava', applyStrava);
 for (const b of document.querySelectorAll('#vehSeg button')) {
   b.classList.toggle('active', b.dataset.v === S.set.vehicle);
   b.onclick = () => { S.set.vehicle = b.dataset.v; saveSet(); refreshFav(); // heart zoom is per-vehicle
