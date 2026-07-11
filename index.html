@@ -60,6 +60,26 @@
   #northInner{display:flex; flex-direction:column; align-items:center; line-height:1; will-change:transform}
   #northInner::before{content:''; width:0; height:0; border:4px solid transparent; border-bottom:7px solid var(--bad); margin-bottom:1px}
 
+  /* ---------- glove button + overlay ---------- */
+  #gloveBtn{position:fixed; bottom:120px; z-index:16; width:68px; height:68px; border-radius:18px;
+    background:rgba(22,28,34,.95); border:2px solid #2a3540; color:var(--fg); font-size:30px;
+    display:none; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 12px rgba(0,0,0,.45)}
+  #gloveBtn.on{display:flex}
+  #gloveBtn.left{left:12px} #gloveBtn.right{right:12px}
+  #gloveOverlay{position:fixed; left:0; right:0; bottom:0; z-index:25; display:none;
+    background:rgba(10,13,16,.94); border-top:1px solid #2a3540;
+    padding:14px 12px calc(env(safe-area-inset-bottom) + 14px)}
+  #gloveOverlay.on{display:block}
+  #gloveGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; max-width:560px; margin:0 auto}
+  .gtile{height:96px; border-radius:16px; background:var(--panel2); border:2px solid #2a3540;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer}
+  .gtile:active{background:#26313d}
+  .gtile.active{border-color:var(--accent)}
+  .gtile .gi{font-size:32px; line-height:1}
+  .gtile .gl{font-size:13px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.04em}
+  .gtile.active .gl{color:var(--accent)}
+  .gtile.stop{border-color:var(--bad)} .gtile.stop .gi,.gtile.stop .gl{color:var(--bad)}
+
   /* ---------- progress strip ---------- */
   #progress{position:fixed; left:0; right:0; z-index:14; display:none;
     background:rgba(14,18,22,.92); border-top:1px solid #232d38; padding:4px 10px 0}
@@ -148,6 +168,16 @@
   <button class="btn primary" id="emptyLoad">Load GPX / heatmap files</button>
 </div>
 
+<div id="gloveBtn" class="left" title="ride controls">▦</div>
+<div id="gloveOverlay"><div id="gloveGrid">
+  <div class="gtile" id="gOrient"><div class="gi">N</div><div class="gl">North up</div></div>
+  <div class="gtile" id="gCenter"><div class="gi">◎</div><div class="gl">Re-center</div></div>
+  <div class="gtile" id="gZoom"><div class="gi">⤢</div><div class="gl">Auto zoom</div></div>
+  <div class="gtile" id="gSound"><div class="gi">♪</div><div class="gl">Sound</div></div>
+  <div class="gtile" id="gProfile"><div class="gi">∿</div><div class="gl">Profile</div></div>
+  <div class="gtile stop" id="gEnd"><div class="gi">■</div><div class="gl">End nav</div></div>
+</div></div>
+
 <div id="progress">
   <canvas id="progCanvas"></canvas>
   <div id="progLabels"><span id="progDone">—</span><span id="progTogo">—</span></div>
@@ -186,6 +216,7 @@
   <div class="row"><label>Junction beeps (heatmap crossings)</label><span class="sw"><input type="checkbox" id="setJunctions" checked><span></span></span></div>
   <div class="row"><label>Auto-zoom with speed</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
   <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
+  <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
   <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
   <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
 </div>
@@ -238,7 +269,7 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null,
   friends: new Map(), demo: null,
-  set: { sound: true, junctions: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false },
+  set: { sound: true, junctions: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left' },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
@@ -523,6 +554,7 @@ async function initMap() {
   map.keyboard.disableRotation();
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
   map.on('dragstart', () => { if (S.nav) setFollow(false); });
+  map.on('mousedown', closeGlove); map.on('touchstart', closeGlove); // tap the map = dismiss glove overlay
   map.on('rotate', () => { northInner.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
   window.__map = map;
   // MapLibre's own ResizeObserver doesn't fire in hidden/background tabs — watchdog it,
@@ -707,6 +739,8 @@ function startNav() {
   document.getElementById('hudSpeed').classList.add('on');
   prog.classList.add('on'); prog.classList.remove('offtrack');
   prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
+  document.getElementById('gloveBtn').classList.add('on');
+  document.getElementById('sideCtl').style.display = 'none'; // riding screen: one fat button only
   placeProgress(); drawProgress(true);
   const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop');
   if (S.set.wake) requestWake();
@@ -720,6 +754,9 @@ function stopNav() {
   document.getElementById('hudSpeed').classList.remove('on');
   document.getElementById('banner').classList.remove('on');
   prog.classList.remove('on', 'offtrack');
+  document.getElementById('gloveBtn').classList.remove('on');
+  document.getElementById('sideCtl').style.display = '';
+  closeGlove();
   placeProgress();
   const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
   stopGPS(); releaseWake(); stopDemo();
@@ -811,10 +848,14 @@ const progDone = document.getElementById('progDone'), progTogo = document.getEle
 function placeProgress() {
   const b = document.getElementById('bottom').offsetHeight;
   prog.style.bottom = b + 'px';
-  // keep side controls + rose clear of the strip while navigating; CSS default otherwise
-  const above = S.nav ? (b + prog.offsetHeight + 14) + 'px' : '';
-  document.getElementById('sideCtl').style.bottom = above;
-  document.getElementById('north').style.bottom = above;
+  // keep side controls, rose and glove button clear of the strip while navigating; CSS default otherwise
+  const gb = document.getElementById('gloveBtn');
+  const above = S.nav ? b + prog.offsetHeight + 14 : 0;
+  document.getElementById('sideCtl').style.bottom = above ? above + 'px' : '';
+  gb.style.bottom = above ? above + 'px' : '';
+  // rose shares the left edge with the glove button — stack it on top when they'd collide
+  const northAbove = above && S.set.gloveSide === 'left' ? above + gb.offsetHeight + 12 : above;
+  document.getElementById('north').style.bottom = northAbove ? northAbove + 'px' : '';
 }
 window.addEventListener('resize', () => { placeProgress(); drawProgress(true); });
 prog.onclick = () => {
@@ -882,6 +923,46 @@ function drawProgress(force) {
   const rem = Math.max(0, len - done);
   progTogo.innerHTML = '<b>' + (rem / 1000).toFixed(1) + ' km</b> · ' +
     (ns.avgSpd > 0.5 ? '~' + fmtTime(rem / ns.avgSpd) : '—');
+}
+
+/* ---------------- glove button + overlay (huge tiles for gloved hands) ---------------- */
+const gloveBtn = document.getElementById('gloveBtn'), gloveOverlay = document.getElementById('gloveOverlay');
+let gloveT = null;
+function gloveArm() { clearTimeout(gloveT); gloveT = setTimeout(closeGlove, 8000); }
+function openGlove() { refreshGlove(); gloveOverlay.classList.add('on'); gloveArm(); }
+function closeGlove() { clearTimeout(gloveT); gloveT = null; gloveOverlay.classList.remove('on'); }
+gloveBtn.onclick = () => gloveOverlay.classList.contains('on') ? closeGlove() : openGlove();
+function refreshGlove() {
+  const trk = S.tracks[S.sel];
+  const g = id => document.getElementById(id);
+  g('gOrient').classList.toggle('active', S.set.orient === 'course');
+  g('gOrient').querySelector('.gl').textContent = S.set.orient === 'course' ? 'Course up' : 'North up';
+  g('gCenter').classList.toggle('active', S.follow);
+  g('gZoom').classList.toggle('active', S.set.autoZoom);
+  g('gSound').classList.toggle('active', S.set.sound);
+  g('gSound').querySelector('.gl').textContent = S.set.sound ? 'Sound' : 'Muted';
+  g('gProfile').classList.toggle('active', !!(S.set.profile && trk && trk.hasEle));
+}
+function gloveTap(fn) { return () => { fn(); refreshGlove(); gloveArm(); }; } // act, reflect, re-arm dismiss
+document.getElementById('gOrient').onclick = gloveTap(() => northBtn.onclick());
+document.getElementById('gCenter').onclick = gloveTap(() => {
+  setFollow(true);
+  if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); }
+});
+document.getElementById('gZoom').onclick = gloveTap(() => {
+  S.set.autoZoom = !S.set.autoZoom; saveSet();
+  document.getElementById('setAutoZoom').checked = S.set.autoZoom;
+});
+document.getElementById('gSound').onclick = gloveTap(() => {
+  S.set.sound = !S.set.sound; saveSet();
+  document.getElementById('setSound').checked = S.set.sound;
+});
+document.getElementById('gProfile').onclick = gloveTap(() => prog.onclick());
+document.getElementById('gEnd').onclick = () => { closeGlove(); stopNav(); };
+function applyGloveSide() {
+  gloveBtn.classList.toggle('right', S.set.gloveSide === 'right');
+  gloveBtn.classList.toggle('left', S.set.gloveSide !== 'right');
+  placeProgress();
 }
 
 /* ---------------- GPS ---------------- */
@@ -1072,6 +1153,10 @@ bindSet('setSound', 'sound');
 bindSet('setJunctions', 'junctions', () => { for (const t of S.tracks) t.alerts = null; if (S.sel >= 0) selectTrack(S.sel); });
 bindSet('setAutoZoom', 'autoZoom');
 bindSet('setWake', 'wake', () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); });
+const gloveRightEl = document.getElementById('setGloveRight');
+gloveRightEl.checked = S.set.gloveSide === 'right';
+gloveRightEl.onchange = () => { S.set.gloveSide = gloveRightEl.checked ? 'right' : 'left'; saveSet(); applyGloveSide(); };
+applyGloveSide();
 const nameEl = document.getElementById('myName'), codeEl = document.getElementById('rideCode');
 nameEl.value = S.set.name; codeEl.value = S.set.code;
 nameEl.onchange = () => { S.set.name = nameEl.value.trim(); saveSet(); };
