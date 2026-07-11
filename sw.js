@@ -1,12 +1,14 @@
 // DingoNav service worker — cache-first so the app works fully offline.
 // Bump CACHE when shipping a new version.
-const CACHE = 'dingonav-v4';
+const CACHE = 'dingonav-v5';
 const SHELL = [
   './', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
   './vendor/maplibre-gl.js', './vendor/maplibre-gl.css', './vendor/pmtiles.js', './vendor/fflate.js',
-  './basemap/layers.json',
+  './basemap/layers.json', './basemap/layers-light.json',
   './basemap/sprites/dark.json', './basemap/sprites/dark.png',
   './basemap/sprites/dark@2x.json', './basemap/sprites/dark@2x.png',
+  './basemap/sprites/light.json', './basemap/sprites/light.png',
+  './basemap/sprites/light@2x.json', './basemap/sprites/light@2x.png',
 ];
 const FONTS = ['Noto Sans Regular', 'Noto Sans Medium', 'Noto Sans Italic'];
 const RANGES = ['0-255', '256-511', '512-767'];

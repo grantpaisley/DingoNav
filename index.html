@@ -295,6 +295,8 @@
   <div class="row"><label>Turn confirmation chirp</label><span class="sw"><input type="checkbox" id="setConfirm" checked><span></span></span></div>
   <div class="row"><label>Vehicle (alerts + zoom)</label><span class="seg" id="vehSeg">
     <button data-v="walk">Walk</button><button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
+  <div class="row"><label>Map style</label><span class="seg" id="styleSeg">
+    <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button></span></div>
   <div class="row"><label>Auto-zoom with speed</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
   <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
   <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
@@ -306,6 +308,7 @@
   <div class="row"><label>Mute</label><button class="btn keyBtn" data-k="mute">default</button></div>
   <div class="row"><label>Re-centre</label><button class="btn keyBtn" data-k="center">default</button></div>
   <div class="row"><label>North / course up</label><button class="btn keyBtn" data-k="orient">default</button></div>
+  <div class="row"><label>Map style flip</label><button class="btn keyBtn" data-k="style">default</button></div>
 
   <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
   <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
@@ -362,7 +365,7 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null,
   friends: new Map(), demo: null,
-  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false, favSpan: {}, keys: {} },
+  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false, favSpan: {}, keys: {}, mapStyle: 'daylight' },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
@@ -822,21 +825,24 @@ async function analyzeRoute(trk) {
 }
 async function analyzeRouteInner(trk) {
   {
-    const key = 'cue5-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
-    let cues = null;
-    try { const rec = await idb.get(key); if (rec) cues = rec.cues; } catch (e) {}
+    const key = 'cue6-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
+    let cues = null, cls = null;
+    try { const rec = await idb.get(key); if (rec) { cues = rec.cues; cls = rec.cls || null; } } catch (e) {}
     if (!cues) {
       const t0 = performance.now();
       const g = await decodeCorridor(trk);
       const hg = S.heat ? heatGrid(S.heat) : null;
       const m = matchWays(trk, g);
       cues = classifyCues(trk, g, hg, m);
+      // per-point surface codes for the patterned route line (0 unmapped, 1 sealed, 2 dirt, 3 single)
+      cls = m.cls.map(c => c === 'road' ? 1 : c === 'fire trail' ? 2 : c === 'singletrack' ? 3 : 0);
       window.__cue = { g, m, cues, trk };
       console.log(`[cue] "${trk.name}": ${cues.length} cues from ${g.px.length} samples / ${g.tiles} tiles in ${(performance.now() - t0).toFixed(0)} ms`,
         cues.reduce((r, c) => (r[c.type] = (r[c.type] || 0) + 1, r), {}));
-      try { await idb.put({ id: key, kind: 'cues', cues }); } catch (e) {}
+      try { await idb.put({ id: key, kind: 'cues', cues, cls }); } catch (e) {}
     }
     trk.baseCues = cues;
+    trk.wayCls = cls;
     await loadCueOverlay(trk);
     applyCueOverlay(trk);
   }
@@ -893,6 +899,52 @@ function vib(pat) { if (navigator.vibrate) navigator.vibrate(pat); }
 
 /* ---------------- MapLibre setup ---------------- */
 const EMPTY = { type: 'FeatureCollection', features: [] };
+/* ---------------- map styles: one basemap, three looks ----------------
+   dark = original Protomaps black; daylight/high-contrast share the generated
+   light flavor plus small paint override tables (tracks are near-invisible in
+   stock light — the whole reason for this feature). */
+const TRACK_W = ['interpolate', ['exponential', 1.6], ['zoom'], 13, 1.2, 16, 3.5, 20, 16];
+const MAP_STYLES = {
+  daylight: { label: 'Day', file: 'layers-light.json', sprite: 'light',
+    ov: { roads_other: { 'line-color': '#8a7355' } } },                       // tracks/paths readable brown
+  contrast: { label: 'Trail', file: 'layers-light.json', sprite: 'light',
+    ov: { roads_other: { 'line-color': '#e06d00', 'line-width': TRACK_W },    // loud orange, fattened
+          earth: { 'fill-color': '#eceae4' } } },
+  dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null },
+};
+const STYLE_CYCLE = ['daylight', 'contrast', 'dark'];
+let baseUrlRef = '', hasBasemap = false;
+const baseLayerCache = {};
+function curStyle() { return MAP_STYLES[S.set.mapStyle] || MAP_STYLES.daylight; }
+async function buildStyle() {
+  if (!hasBasemap) return { version: 8,
+    glyphs: new URL('basemap/', location.href).href + 'fonts/{fontstack}/{range}.pbf',
+    sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } }] };
+  const st = curStyle();
+  if (!baseLayerCache[st.file]) baseLayerCache[st.file] = await (await fetch('basemap/' + st.file)).json();
+  let layersArr = baseLayerCache[st.file];
+  if (st.ov) layersArr = layersArr.map(l => st.ov[l.id]
+    ? { ...l, paint: { ...l.paint, ...st.ov[l.id] } } : l);
+  return { version: 8,
+    glyphs: baseUrlRef + 'fonts/{fontstack}/{range}.pbf', // string concat — new URL() would %-encode the tokens
+    sprite: baseUrlRef + 'sprites/' + st.sprite,
+    sources: { protomaps: { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } },
+    layers: layersArr };
+}
+async function setMapStyle(name) {
+  S.set.mapStyle = name; saveSet();
+  for (const b of document.querySelectorAll('#styleSeg button')) b.classList.toggle('active', b.dataset.s === name);
+  if (!map || !mapReady || !hasBasemap) return;
+  map.setStyle(await buildStyle());
+  await new Promise(res => {
+    const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 200);
+    map.once('idle', () => { clearInterval(t); res(); });
+  });
+  addOverlays(); refreshPosLayers(); drawProgress(true);
+  if (S.cueEdit) { map.setFilter('alert-dots', null); map.setPaintProperty('alert-dots', 'circle-radius', 9); }
+  toast('Map style: ' + curStyle().label);
+}
+
 async function initMap() {
   const protocol = new pmtiles.Protocol();
   maplibregl.addProtocol('pmtiles', protocol.tile);
@@ -920,30 +972,17 @@ async function initMap() {
       }
     } catch (e) {}
   }
-  let style;
   if (baseBlob) {
     basePM = new pmtiles.PMTiles(new pmtiles.FileSource(new File([baseBlob], 'base')));
     basePMKey = baseName + ':' + baseBlob.size;
     protocol.add(basePM);
-    const baseLayers = await (await fetch('basemap/layers.json')).json();
-    const baseUrl = new URL('basemap/', location.href).href;
-    style = {
-      version: 8,
-      glyphs: baseUrl + 'fonts/{fontstack}/{range}.pbf', // string concat — new URL() would %-encode the tokens
-      sprite: baseUrl + 'sprites/dark',
-      sources: { protomaps: { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } },
-      layers: baseLayers,
-    };
+    hasBasemap = true;
+    baseUrlRef = new URL('basemap/', location.href).href;
     setBaseStatus('Basemap: ' + baseName + ' (' + (baseBlob.size / 1e6).toFixed(0) + ' MB, on device)');
   } else {
-    style = {
-      version: 8,
-      glyphs: new URL('basemap/', location.href).href + 'fonts/{fontstack}/{range}.pbf',
-      sources: {},
-      layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } }],
-    };
     setBaseStatus('no basemap — tracks on dark background');
   }
+  const style = await buildStyle();
   map = new maplibregl.Map({
     container: 'map', style,
     center: [151.3, -33.3], zoom: 9,
@@ -1019,6 +1058,20 @@ function addOverlays() {
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': '#001318', 'line-opacity': 0.7,
       'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 8] } });
+  // surface-patterned route (solid = sealed, dashes = dirt, dots = singletrack) drawn on the
+  // continuous casing above, so the route never visually breaks. Replaces sel-core whenever
+  // way-class data exists and steepness colouring is off.
+  map.addSource('selSurf', { type: 'geojson', data: EMPTY });
+  const SURF_W = ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 4];
+  map.addLayer({ id: 'surf-sealed', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'sealed'],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': '#00e5ff', 'line-width': SURF_W } });
+  map.addLayer({ id: 'surf-dirt', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'dirt'],
+    layout: { 'line-join': 'round' },
+    paint: { 'line-color': '#00e5ff', 'line-width': SURF_W, 'line-dasharray': [2.4, 1.4] } });
+  map.addLayer({ id: 'surf-single', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'single'],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': '#00e5ff', 'line-width': SURF_W, 'line-dasharray': [0.1, 1.7] } });
   map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': '#00e5ff',
@@ -1041,24 +1094,28 @@ function addOverlays() {
       'text-offset': [0.9, 0], 'text-anchor': 'left', 'text-allow-overlap': true },
     paint: { 'text-color': ['get', 'color'], 'text-opacity': ['get', 'opacity'],
       'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 2 } });
-  // Tap a friend dot → who / how far / how fresh.
-  map.on('click', 'friends-dots', e => {
-    const p = e.features[0].properties, fr = S.friends.get(p.name);
-    if (!fr) return;
-    let away = '';
-    if (S.pos) { const [fx, fy] = toXY(fr.lat, fr.lon); const d = dist(S.pos.x, S.pos.y, fx, fy);
-      away = (d > 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m') + ' away · '; }
-    new maplibregl.Popup({ closeButton: false, offset: 14, className: 'friendPop' })
-      .setLngLat(e.features[0].geometry.coordinates)
-      .setHTML('<b>' + escHtml(p.name) + '</b><br>' + away + friendAgo(Date.now() - fr.t))
-      .addTo(map);
-  });
-  map.on('mouseenter', 'friends-dots', () => map.getCanvas().style.cursor = 'pointer');
-  map.on('mouseleave', 'friends-dots', () => map.getCanvas().style.cursor = '');
+  // Tap a friend dot → who / how far / how fresh. (Wired once — layer-id handlers
+  // survive setStyle, and re-adding them on every style switch would double the popups.)
+  if (!addOverlays._wired) {
+    addOverlays._wired = true;
+    map.on('click', 'friends-dots', e => {
+      const p = e.features[0].properties, fr = S.friends.get(p.name);
+      if (!fr) return;
+      let away = '';
+      if (S.pos) { const [fx, fy] = toXY(fr.lat, fr.lon); const d = dist(S.pos.x, S.pos.y, fx, fy);
+        away = (d > 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m') + ' away · '; }
+      new maplibregl.Popup({ closeButton: false, offset: 14, className: 'friendPop' })
+        .setLngLat(e.features[0].geometry.coordinates)
+        .setHTML('<b>' + escHtml(p.name) + '</b><br>' + away + friendAgo(Date.now() - fr.t))
+        .addTo(map);
+    });
+    map.on('mouseenter', 'friends-dots', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'friends-dots', () => map.getCanvas().style.cursor = '');
+  }
   map.addLayer({ id: 'pos-acc', type: 'fill', source: 'posAcc',
     paint: { 'fill-color': 'rgba(64,150,255,0.12)' } });
   // navigation dart instead of a dot — always points the direction of travel
-  map.addImage('nav-dart', navDartImage(), { pixelRatio: 2 });
+  if (!map.hasImage('nav-dart')) map.addImage('nav-dart', navDartImage(), { pixelRatio: 2 });
   map.addLayer({ id: 'pos-arrow', type: 'symbol', source: 'pos',
     layout: { 'icon-image': 'nav-dart', 'icon-size': 1, 'icon-rotate': ['get', 'heading'],
       'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
@@ -1100,6 +1157,23 @@ function refreshMapData() {
     if (ov) for (const a of ov.added) cueFeats.push(cueFeat(a, false, true));
   } else if (trk && trk.alerts) for (const a of trk.alerts) cueFeats.push(cueFeat(a, false, false));
   map.getSource('alerts').setData({ type: 'FeatureCollection', features: cueFeats });
+  // surface segments: consecutive same-surface runs of the resampled track (unmapped = dirt,
+  // the safe guess out there). End point shared with the next run so the line never gaps.
+  const surfFeats = [];
+  if (trk && trk.wayCls) {
+    const surfOf = c => c === 1 ? 'sealed' : c === 3 ? 'single' : 'dirt';
+    let s0 = 0;
+    for (let i = 1; i <= trk.n; i++) {
+      if (i < trk.n && surfOf(trk.wayCls[i]) === surfOf(trk.wayCls[s0])) continue;
+      const coords = [];
+      for (let j = s0; j <= Math.min(i, trk.n - 1); j++) { const [la, lo] = toLL(trk.xy[j * 2], trk.xy[j * 2 + 1]); coords.push([lo, la]); }
+      if (coords.length > 1) surfFeats.push({ type: 'Feature', properties: { s: surfOf(trk.wayCls[s0]) },
+        geometry: { type: 'LineString', coordinates: coords } });
+      s0 = i;
+    }
+  }
+  map.getSource('selSurf').setData({ type: 'FeatureCollection', features: surfFeats });
+  trk && (trk._hasSurf = surfFeats.length > 0);
   applySteepness();
 }
 /* ---------------- steepness coloring (unsigned grade %, same ramp as Dingo web) ---------------- */
@@ -1111,6 +1185,12 @@ function applySteepness() {
   if (!mapReady) return;
   const trk = S.tracks[S.sel];
   const on = S.set.steep && trk && trk.hasEle && trk.profile && trk.profile.length > 1;
+  // route rendering arbitration: steepness gradient wins; else surface patterns when
+  // way-class data exists; else the plain solid core
+  const surfOn = !on && trk && trk._hasSurf;
+  map.setLayoutProperty('sel-core', 'visibility', surfOn ? 'none' : 'visible');
+  for (const l of ['surf-sealed', 'surf-dirt', 'surf-single'])
+    map.setLayoutProperty(l, 'visibility', surfOn ? 'visible' : 'none');
   if (!on) { map.setPaintProperty('sel-core', 'line-gradient', null); return; }
   const dir = (S.navState && S.navState.dir) || 1;
   const P = trk.profile, len = trk.lengthM || 1;
@@ -1324,6 +1404,9 @@ const KEY_ACTIONS = {
   center: { def: ['KeyC'], run: () => { setFollow(true);
     if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); } } },
   orient: { def: ['KeyN'], run: () => northBtn.onclick() },
+  style:  { def: ['KeyD'], run: () => { // day/night flip from the bars
+    const i = STYLE_CYCLE.indexOf(S.set.mapStyle);
+    setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]); } },
 };
 let keyCapture = null;
 window.addEventListener('keydown', e => {
@@ -2025,6 +2108,10 @@ for (const b of document.querySelectorAll('#vehSeg button')) {
   b.classList.toggle('active', b.dataset.v === S.set.vehicle);
   b.onclick = () => { S.set.vehicle = b.dataset.v; saveSet(); refreshFav(); // heart zoom is per-vehicle
     for (const b2 of document.querySelectorAll('#vehSeg button')) b2.classList.toggle('active', b2.dataset.v === S.set.vehicle); };
+}
+for (const b of document.querySelectorAll('#styleSeg button')) {
+  b.classList.toggle('active', b.dataset.s === (S.set.mapStyle || 'daylight'));
+  b.onclick = () => setMapStyle(b.dataset.s);
 }
 for (const b of document.querySelectorAll('.keyBtn'))
   b.onclick = () => { keyCapture = b.dataset.k; b.textContent = 'press…'; };
