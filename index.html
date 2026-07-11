@@ -31,7 +31,6 @@
     padding:10px 20px; display:flex; align-items:center; gap:16px; min-width:230px; justify-content:center}
   #hudArrow{font-size:44px; line-height:1; width:56px; text-align:center}
   #hudArrow.left{color:var(--warn)} #hudArrow.right{color:var(--warn)}
-  #hudArrow.hairpin{color:var(--bad)}
   #hudBox.commit{border-color:var(--ok)}
   #hudBox.commit #hudArrow{color:var(--ok)}
   #hudDist{font-size:40px; font-weight:800; font-variant-numeric:tabular-nums}
@@ -459,16 +458,16 @@ function heatGrid(heat) {
    CUE ENGINE — import-time route analysis.
    Decodes the z14 `roads` layer from the local PMTiles basemap along
    the route corridor, matches the route to ways (class + name), and
-   emits a cue only where the obvious move is wrong: the route leaves
-   one way for another AND the departed way carries on somewhere the
-   route doesn't go. Straight-ahead departures count (main road bends
-   away, route continues onto a minor way). Seamless renames, bends on
-   the same way, and unmapped-singletrack twists all stay silent;
-   hairpins always cue. Results cached in IDB per route + heatmap +
+   emits a cue only where the obvious move is wrong: the route TURNS
+   off one way onto another AND the departed way carries on somewhere
+   the route doesn't go. Straight-ahead transitions, seamless renames,
+   bends on the same way, hairpins (visible on the map — and recorded
+   obstacle-retry loops fake them), and unmapped-singletrack twists
+   all stay silent. Results cached in IDB per route + heatmap +
    basemap.
    ================================================================ */
 const CUE = { SAMPLE: 10, MATCH_D: 15, MATCH_ANG: 50, ALT_D: 35, ALT_ANG: 28,
-  DEP_D: 45, TURN_MIN: 25, HAIRPIN: 120, MERGE_M: 30, REJOIN_M: 300 };
+  DEP_D: 45, TURN_MIN: 25, MERGE_M: 30, REJOIN_M: 300 };
 
 /* minimal MVT decoder — LineString features + string props of one named layer */
 function mvtLayerLines(buffer, layerName) {
@@ -694,22 +693,11 @@ function classifyCues(trk, g, hg, m) {
   const wayKey = i => m.cls[i] ? m.cls[i] + '\x1f' + (m.name[i] || '') : null;
   const mkCue = (idx, deg) => {
     const after = Math.min(trk.n - 1, idx + Math.ceil(25 / RESAMPLE_M));
-    return { at: trk.cum[idx], idx, deg: Math.round(deg),
-      type: Math.abs(deg) >= CUE.HAIRPIN ? 'hairpin' : Math.abs(deg) >= CUE.TURN_MIN ? (deg > 0 ? 'right' : 'left') : 'ahead',
+    return { at: trk.cum[idx], idx, deg: Math.round(deg), type: deg > 0 ? 'right' : 'left',
       from: m.cls[Math.max(0, idx - 3)] || null, onto: m.cls[after] || null, name: m.name[after] || null };
   };
   const cues = [];
-  // pass 1: hairpins — always cue, way data or not
-  let i = 1;
-  while (i < trk.n - 1) {
-    if (Math.abs(turn[i]) >= CUE.HAIRPIN) {
-      let best = i, j = i;
-      while (j < trk.n && Math.abs(turn[j]) >= CUE.HAIRPIN - 15) { if (Math.abs(turn[j]) > Math.abs(turn[best])) best = j; j++; }
-      cues.push(mkCue(best, turn[best]));
-      i = j + Math.ceil(40 / RESAMPLE_M);
-    } else i++;
-  }
-  // pass 2: way transitions (class or name, incl. mapped -> unmapped) where the old way carries on
+  // way transitions (class or name, incl. mapped -> unmapped) where the old way carries on
   for (let k = 1; k < trk.n; k++) {
     if (wayKey(k) === wayKey(k - 1)) continue;
     // look-through: a null gap with the SAME way on both sides within ~300 m is a
@@ -725,11 +713,16 @@ function classifyCues(trk, g, hg, m) {
     let backOk = 0; for (let j = k - 1; j >= 0 && wayKey(j) === wayKey(k - 1); j--) backOk++;
     let fwdOk = 0; for (let j = k; j < trk.n && wayKey(j) === wayKey(k); j++) fwdOk++;
     if (backOk < 5 || fwdOk < 5) continue;
+    // must be an actual turn — straight-ahead onto another way needs no warning
+    let deg = 0;
+    for (let j = Math.max(0, k - 3); j <= Math.min(trk.n - 1, k + 3); j++)
+      if (Math.abs(turn[j]) > Math.abs(deg)) deg = turn[j];
+    if (Math.abs(deg) < CUE.TURN_MIN) continue;
     const clsB = m.cls[k - 1], nameB = m.name[k - 1];
     if (!(clsB ? departedContinues(k, clsB, nameB) : altContinues(k))) continue; // no decision = no cue
     const dup = cues.find(c => Math.abs(c.at - trk.cum[k]) < CUE.MERGE_M);
     if (dup) { dup.from = clsB; dup.onto = m.cls[k]; dup.name = m.name[k] || dup.name; }
-    else cues.push(mkCue(k, turn[k]));
+    else cues.push(mkCue(k, deg));
   }
   cues.sort((a, b) => a.at - b.at);
   // merge cue clusters
@@ -754,7 +747,7 @@ async function analyzeRoute(trk) {
 }
 async function analyzeRouteInner(trk) {
   {
-    const key = 'cue3-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
+    const key = 'cue4-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
     try { const rec = await idb.get(key); if (rec) { trk.alerts = rec.cues; return; } } catch (e) {}
     const t0 = performance.now();
     const g = await decodeCorridor(trk);
@@ -783,8 +776,6 @@ function tone(freq, dur, when, vol = 0.5) {
 const BEEP = {
   far()      { if (!S.set.sound) return; tone(660, .22, 0); vib([120]); console.log('[beep] far'); },
   turn()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
-  hairpin()  { if (!S.set.sound) return; tone(990, .12, 0); tone(990, .12, .17); tone(1320, .2, .34); vib([80, 50, 80, 50, 160]); console.log('[beep] hairpin'); },
-  ahead()    { if (!S.set.sound) return; tone(520, .12, 0); tone(780, .12, .16); vib([60, 40, 60]); console.log('[beep] ahead'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
 };
@@ -904,7 +895,7 @@ function addOverlays() {
     paint: { 'text-color': '#003a44' } });
   map.addLayer({ id: 'alert-dots', type: 'circle', source: 'alerts', minzoom: 12.5,
     paint: { 'circle-radius': 4.5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#0e1216',
-      'circle-color': ['match', ['get', 't'], 'hairpin', '#ff4545', '#ffb020'] } });
+      'circle-color': '#ffb020' } });
   map.addLayer({ id: 'friends-dots', type: 'circle', source: 'friends',
     paint: { 'circle-radius': 8, 'circle-color': '#38d178', 'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff' } });
   map.addLayer({ id: 'friends-labels', type: 'symbol', source: 'friends',
@@ -1172,7 +1163,7 @@ function onFix(lat, lon, acc, speed, heading) {
     if (dTo <= farM && dTo > nearM && st.far) { st.far = false; BEEP.far(); }
     if (dTo <= nearM && st.near) {
       st.near = false; st.far = false;
-      next.type === 'hairpin' ? BEEP.hairpin() : next.type === 'ahead' ? BEEP.ahead() : BEEP.turn();
+      BEEP.turn();
     }
   }
 }
@@ -1191,8 +1182,8 @@ function setHud(alert, dTo, dir, farM) {
   if (!show) return;
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
-  const icons = { left: '⬅', right: '➡', hairpin: '⟲', ahead: '⬆' };
-  const labels = { left: 'turn left', right: 'turn right', hairpin: 'hairpin', ahead: 'straight ahead' };
+  const icons = { left: '⬅', right: '➡' };
+  const labels = { left: 'turn left', right: 'turn right' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
   const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
   const ontoTxt = onto && onto !== from ? ' · onto ' + ((dir > 0 && alert.name) || onto) : '';
@@ -1291,7 +1282,7 @@ function drawProgress(force) {
   }
   if (trk.alerts) for (const a of trk.alerts) {
     const x = routeX(a.at);
-    ctx.fillStyle = a.type === 'hairpin' ? '#ff4545' : '#ffb020';
+    ctx.fillStyle = '#ffb020';
     if (expanded) ctx.fillRect(x - 1, 0, 2, 8);
     else ctx.fillRect(x - 1, 2, 2, h - 4);
   }
