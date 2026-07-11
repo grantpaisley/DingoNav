@@ -94,8 +94,11 @@
     background:rgba(22,28,34,.9); border:1px solid #2a3540; display:flex; align-items:center; justify-content:center;
     font-weight:800; color:var(--bad); font-size:17px; cursor:pointer}
   #north.course{border-color:var(--accent)}
+  #north.oriented{border-color:var(--warn); color:var(--warn)}
   #northInner{display:flex; flex-direction:column; align-items:center; line-height:1; will-change:transform}
   #northInner::before{content:''; width:0; height:0; border:4px solid transparent; border-bottom:7px solid var(--bad); margin-bottom:1px}
+  /* only the north-up marker carries the little needle; course/compass show their own glyph */
+  #north.course #northInner::before, #north.oriented #northInner::before{display:none}
 
   /* ---------- glove button + overlay ---------- */
   #gloveBtn{position:fixed; bottom:120px; z-index:16; width:68px; height:68px; border-radius:18px;
@@ -225,7 +228,7 @@
 <div id="banner">OFF TRACK</div>
 <div id="toast"></div>
 
-<div id="north" title="toggle north-up / course-up"><span id="northInner">N</span></div>
+<div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div id="sideCtl">
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl" id="zoomOut">−</div>
@@ -307,7 +310,7 @@
   <div class="row"><label>Zoom out</label><button class="btn keyBtn" data-k="zout">default</button></div>
   <div class="row"><label>Mute</label><button class="btn keyBtn" data-k="mute">default</button></div>
   <div class="row"><label>Re-centre</label><button class="btn keyBtn" data-k="center">default</button></div>
-  <div class="row"><label>North / course up</label><button class="btn keyBtn" data-k="orient">default</button></div>
+  <div class="row"><label>North / course / compass</label><button class="btn keyBtn" data-k="orient">default</button></div>
   <div class="row"><label>Map style flip</label><button class="btn keyBtn" data-k="style">default</button></div>
 
   <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
@@ -363,7 +366,7 @@ function angDiff(a, b) { let d = b - a; while (d > 180) d -= 360; while (d < -18
 const S = {
   tracks: [], heat: null, sel: -1,
   follow: true, nav: false,
-  pos: null, navState: null, courseBearing: null,
+  pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false, favSpan: {}, keys: {}, mapStyle: 'daylight' },
 };
@@ -997,7 +1000,6 @@ async function initMap() {
   map.on('click', e => { if (S.cueEdit && !S.nav) cueEditTap(e.lngLat); });
   initLockGesture();
   map.on('mousedown', closeGlove); map.on('touchstart', closeGlove); // tap the map = dismiss glove overlay
-  map.on('rotate', () => { northInner.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
   window.__map = map;
   // MapLibre's own ResizeObserver doesn't fire in hidden/background tabs — watchdog it,
   // installed BEFORE waiting for style load (the map may misreport 400x300 until resized)
@@ -1280,6 +1282,7 @@ function followCamera() {
   const opts = { center: [lo, la], duration: 900, easing: t => t };
   if (S.set.autoZoom) { const z = cruiseZoom(la); if (z != null) opts.zoom = z; }
   if (S.set.orient === 'course' && S.courseBearing != null) opts.bearing = S.courseBearing;
+  else if (S.set.orient === 'oriented' && S.deviceHeading != null) opts.bearing = S.deviceHeading;
   map.easeTo(opts);
 }
 /* manual zoom while navigating = hold: stay at that zoom until the next turn approach */
@@ -1426,18 +1429,97 @@ function refreshKeyBtns() {
     b.textContent = (S.set.keys || {})[b.dataset.k] || 'default';
 }
 
-/* ---------------- orientation: north-up / course-up ---------------- */
+/* ---------------- orientation: north-up / course-up / compass ----------------
+   north    — map fixed, north always up (N marker)
+   course   — map turns to GPS travel direction, held frozen when stopped (↑ arrow)
+   compass  — map turns to the phone's physical heading from the magnetometer, so it
+              tracks which way you're facing even while stopped (🧭). iOS needs a
+              one-time permission grant, requested from the button tap / nav start. */
+const ORIENT_CYCLE = ['north', 'course', 'oriented'];
+const ORIENT_GLYPH = { north: 'N', course: '↑', oriented: '🧭' };
+const ORIENT_LABEL = { north: 'north up', course: 'course up', oriented: 'compass' };
 const northBtn = document.getElementById('north'), northInner = document.getElementById('northInner');
+
+/* --- device magnetometer (compass mode) --- */
+let compassOn = false, compassRAF = 0;
+// Magnetic declination for the riding area (deg, east positive): magnetic north sits this far
+// EAST of true north here, so true = magnetic + declination. ~+12.8° across greater Sydney /
+// Central Coast (WMM2025, 2026); it drifts <0.1°/yr and varies <0.5° over that whole region —
+// well under the magnetometer's own noise. Both the iOS webkitCompassHeading and the Android
+// absolute-alpha paths are magnetic-referenced, so this is applied once, to either.
+// Riding far afield? Update from ngdc.noaa.gov/geomag or geomagnetism.ga.gov.au.
+const MAG_DECLINATION = 12.8;
+function compassHeading(e) {
+  let mag = null;
+  // iOS Safari exposes a ready-made compass heading, degrees clockwise from MAGNETIC north
+  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) mag = e.webkitCompassHeading;
+  // Android 'deviceorientationabsolute': derive magnetic heading from alpha, correct for screen rotation
+  else if (e.absolute && typeof e.alpha === 'number') {
+    const so = (screen.orientation && screen.orientation.angle) || 0;
+    mag = (360 - e.alpha + so + 360) % 360;
+  } else return null; // plain relative 'deviceorientation' on Android — not a compass, ignore
+  return (mag + MAG_DECLINATION + 360) % 360; // magnetic -> true north
+}
+function onDeviceOrient(e) {
+  if (S.set.orient !== 'oriented') return;
+  const h = compassHeading(e); if (h == null) return;
+  // low-pass the magnetometer (it jitters); shortest-arc step so it doesn't wrap the long way
+  S.deviceHeading = S.deviceHeading == null ? h : (S.deviceHeading + angDiff(S.deviceHeading, h) * 0.25 + 360) % 360;
+  scheduleCompassEase();
+}
+function scheduleCompassEase() {
+  if (compassRAF || !mapReady) return;
+  compassRAF = requestAnimationFrame(() => {
+    compassRAF = 0;
+    if (S.set.orient !== 'oriented' || S.deviceHeading == null) return;
+    // while a follow-camera ease is animating (it already carries the bearing) leave it alone;
+    // otherwise (stopped / just browsing) spin the map live as the rider turns
+    if (Date.now() - lastEase > 900) map.setBearing(S.deviceHeading);
+  });
+}
+function enableCompass(gesture) {
+  if (compassOn) return;
+  const attach = () => {
+    compassOn = true;
+    window.addEventListener('deviceorientationabsolute', onDeviceOrient, true);
+    window.addEventListener('deviceorientation', onDeviceOrient, true);
+  };
+  const needsPerm = window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function';
+  if (needsPerm && gesture) {
+    DeviceOrientationEvent.requestPermission()
+      .then(s => s === 'granted' ? attach() : toast('Compass permission denied'))
+      .catch(() => {});
+  } else if (!needsPerm) {
+    attach(); // Android / desktop: no permission gate
+  } // iOS without a gesture: defer — the next N tap or nav start will request it
+}
+function disableCompass() {
+  if (!compassOn) return;
+  compassOn = false;
+  window.removeEventListener('deviceorientationabsolute', onDeviceOrient, true);
+  window.removeEventListener('deviceorientation', onDeviceOrient, true);
+  S.deviceHeading = null;
+}
+
 function applyOrient() {
   northBtn.classList.toggle('course', S.set.orient === 'course');
-  document.getElementById('orientLabel').textContent = S.set.orient === 'course' ? 'course up' : 'north up';
+  northBtn.classList.toggle('oriented', S.set.orient === 'oriented');
+  northInner.textContent = ORIENT_GLYPH[S.set.orient] || 'N';
+  document.getElementById('orientLabel').textContent = ORIENT_LABEL[S.set.orient] || 'north up';
+  if (S.set.orient === 'oriented') enableCompass(false); else disableCompass();
   if (!mapReady) return;
   if (S.set.orient === 'north') map.easeTo({ bearing: 0, duration: 500 });
-  else if (S.courseBearing != null) map.easeTo({ bearing: S.courseBearing, duration: 500 });
+  else if (S.set.orient === 'course' && S.courseBearing != null) map.easeTo({ bearing: S.courseBearing, duration: 500 });
+  else if (S.set.orient === 'oriented' && S.deviceHeading != null) map.easeTo({ bearing: S.deviceHeading, duration: 500 });
 }
 northBtn.onclick = () => {
-  S.set.orient = S.set.orient === 'course' ? 'north' : 'course'; saveSet(); applyOrient();
-  toast(S.set.orient === 'course' ? 'Course up — travel direction points up' : 'North up');
+  S.set.orient = ORIENT_CYCLE[(ORIENT_CYCLE.indexOf(S.set.orient) + 1) % ORIENT_CYCLE.length];
+  saveSet();
+  if (S.set.orient === 'oriented') enableCompass(true); // this tap is a user gesture → can prompt on iOS
+  applyOrient();
+  toast(S.set.orient === 'course' ? 'Course up — travel direction points up'
+    : S.set.orient === 'oriented' ? 'Compass — map turns with your heading'
+    : 'North up');
 };
 applyOrient();
 function fitSelected() {
@@ -1481,6 +1563,7 @@ function startNav() {
   const trk = S.tracks[S.sel]; if (!trk) return;
   if (S.cueEdit) setCueEdit(false);
   audio(); // unlock on gesture
+  if (S.set.orient === 'oriented') enableCompass(true); // gesture → prompt for the magnetometer if needed
   if (!trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
   S.navState = { idx: -1, dir: 1, dirVotes: 0, off: false, lastOffBeep: 0, alertStates: new Map(),
     movingS: 0, avgSpd: null, lastFixT: 0 };
@@ -1745,8 +1828,9 @@ function refreshGlove() {
   const trk = S.tracks[S.sel];
   const g = id => document.getElementById(id);
   g('gSteep').classList.toggle('active', !!(S.set.steep && trk && trk.hasEle));
-  g('gOrient').classList.toggle('active', S.set.orient === 'course');
-  g('gOrient').querySelector('.gl').textContent = S.set.orient === 'course' ? 'Course up' : 'North up';
+  g('gOrient').classList.toggle('active', S.set.orient !== 'north');
+  g('gOrient').querySelector('.gi').textContent = ORIENT_GLYPH[S.set.orient] || 'N';
+  g('gOrient').querySelector('.gl').textContent = S.set.orient === 'course' ? 'Course up' : S.set.orient === 'oriented' ? 'Compass' : 'North up';
   g('gCenter').classList.toggle('active', S.follow);
   g('gZoom').classList.toggle('active', S.set.autoZoom);
   g('gSound').classList.toggle('active', S.set.sound);
