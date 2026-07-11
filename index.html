@@ -1812,6 +1812,19 @@ document.getElementById('clearBtn').onclick = async () => {
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles([...e.dataTransfer.files]); });
 
+// PWA file handler: launched by tapping a .dingonav (from Files / Syncthing /
+// AirDrop / a download) once the app is installed — opens straight into the
+// loader, no ☰ → Load files. Needs the installed PWA + manifest file_handlers;
+// where the OS doesn't support it, the picker and drag-drop still work.
+if ('launchQueue' in window && 'setConsumer' in window.launchQueue) {
+  window.launchQueue.setConsumer(async (params) => {
+    if (!params.files || !params.files.length) return;
+    const files = [];
+    for (const h of params.files) { try { files.push(await h.getFile()); } catch (e) { console.warn('launch file failed', e); } }
+    if (files.length) handleFiles(files);
+  });
+}
+
 /* ---------------- UI: panel, list, bottom bar ---------------- */
 const panel = document.getElementById('panel'), shade = document.getElementById('shade');
 function openPanel() { panel.classList.add('on'); shade.classList.add('on'); }
