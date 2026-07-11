@@ -31,7 +31,9 @@
     padding:10px 20px; display:flex; align-items:center; gap:16px; min-width:230px; justify-content:center}
   #hudArrow{font-size:44px; line-height:1; width:56px; text-align:center}
   #hudArrow.left{color:var(--warn)} #hudArrow.right{color:var(--warn)}
-  #hudArrow.junction{color:var(--accent)} #hudArrow.hairpin{color:var(--bad)}
+  #hudArrow.hairpin{color:var(--bad)}
+  #hudBox.commit{border-color:var(--ok)}
+  #hudBox.commit #hudArrow{color:var(--ok)}
   #hudDist{font-size:40px; font-weight:800; font-variant-numeric:tabular-nums}
   #hudDist small{font-size:18px; font-weight:600; color:var(--dim)}
   #hudType{font-size:13px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em}
@@ -135,6 +137,10 @@
     top:3px; left:3px; transition:.15s}
   .sw input:checked + span{background:var(--accent)}
   .sw input:checked + span::before{background:#fff; transform:translateX(22px)}
+  .seg{display:flex; gap:6px}
+  .seg button{padding:9px 13px; border-radius:10px; border:1px solid #2a3540; background:var(--panel2);
+    color:var(--dim); font-size:14px; font-weight:700; cursor:pointer}
+  .seg button.active{border-color:var(--accent); color:var(--accent)}
   .hint{font-size:12.5px; color:var(--dim); margin-top:6px; line-height:1.45}
   #friendStatus,#baseStatus{font-size:13px; color:var(--dim); padding:4px}
   #emptyState{position:fixed; inset:0; display:none; z-index:5; align-items:center; justify-content:center; flex-direction:column; gap:16px; pointer-events:none}
@@ -231,8 +237,9 @@
   <div class="hint">Everyone with the same code sees each other's position (updates ~20 s via ntfy.sh when online; silently off without signal). Use a code others can't guess.</div>
 
   <h3>Settings</h3>
-  <div class="row"><label>Turn / junction beeps</label><span class="sw"><input type="checkbox" id="setSound" checked><span></span></span></div>
-  <div class="row"><label>Junction beeps (heatmap crossings)</label><span class="sw"><input type="checkbox" id="setJunctions" checked><span></span></span></div>
+  <div class="row"><label>Turn beeps</label><span class="sw"><input type="checkbox" id="setSound" checked><span></span></span></div>
+  <div class="row"><label>Vehicle (warning lead)</label><span class="seg" id="vehSeg">
+    <button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
   <div class="row"><label>Auto-zoom with speed</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
   <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
   <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
@@ -288,11 +295,12 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null,
   friends: new Map(), demo: null,
-  set: { sound: true, junctions: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left' },
+  set: { sound: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro' },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
 let map = null, mapReady = false;
+let basePM = null, basePMKey = 'none'; // PMTiles handle for the cue engine's corridor decode
 
 /* ---------------- GPX / GeoJSON parsing ---------------- */
 function parseGPX(text, fallbackName) {
@@ -448,57 +456,296 @@ function heatGrid(heat) {
   return heat.grid;
 }
 
-/* ---------------- alert extraction (turns + junctions) ---------------- */
-function buildAlerts(trk) {
-  const alerts = [];
-  const W = 5; // 5 samples ≈ 40 m window
-  const brg = new Float32Array(trk.n - 1);
+/* ================================================================
+   CUE ENGINE — import-time route analysis.
+   Decodes the z14 `roads` layer from the local PMTiles basemap along
+   the route corridor, matches the route to way classes (fire trail /
+   singletrack / road), and emits TURN cues only where there is a
+   decision to make: an alternative continues where you don't go, or
+   the route departs one way class for another while the old way
+   carries on. Trail bends with no alternative stay silent (curve
+   warnings are cut from v1 by design). Results cached in IDB per
+   route + heatmap + basemap.
+   ================================================================ */
+const CUE = { SAMPLE: 10, MATCH_D: 15, MATCH_ANG: 50, ALT_D: 35, ALT_ANG: 28,
+  TURN_MIN: 25, TURN_LONE: 60, HAIRPIN: 120, MERGE_M: 30 };
+
+/* minimal MVT decoder — LineString features + string props of one named layer */
+function mvtLayerLines(buffer, layerName) {
+  const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const td = new TextDecoder();
+  let p = 0;
+  function varint() { let r = 0, s = 0, b; do { b = bytes[p++]; r += s < 28 ? (b & 127) << s : (b & 127) * 2 ** s; s += 7; } while (b & 128); return r; }
+  function skip(wt) { if (wt === 0) varint(); else if (wt === 1) p += 8; else if (wt === 2) p += varint(); else if (wt === 5) p += 4; }
+  const out = { features: [], extent: 4096 };
+  while (p < bytes.length) {
+    const tag = varint(), wt = tag & 7;
+    if (tag >> 3 === 3 && wt === 2) {
+      const end = p + varint();
+      const keys = [], values = [], feats = [];
+      let name = '', ext = 4096;
+      while (p < end) {
+        const t2 = varint(), w2 = t2 & 7, f2 = t2 >> 3;
+        if (f2 === 1) { const l = varint(); name = td.decode(bytes.subarray(p, p + l)); p += l; }
+        else if (f2 === 2) { const l = varint(); feats.push([p, p + l]); p += l; }
+        else if (f2 === 3) { const l = varint(); keys.push(td.decode(bytes.subarray(p, p + l))); p += l; }
+        else if (f2 === 4) { const l = varint(), e2 = p + l; let v = null;
+          while (p < e2) { const t3 = varint(), f3 = t3 >> 3;
+            if (f3 === 1) { const l3 = varint(); v = td.decode(bytes.subarray(p, p + l3)); p += l3; }
+            else if (f3 === 2) { p += 4; }         // float — not needed
+            else if (f3 === 3) { p += 8; }         // double — not needed
+            else if (f3 === 4 || f3 === 5) v = varint();
+            else if (f3 === 6) { const z = varint(); v = (z >>> 1) ^ -(z & 1); }
+            else if (f3 === 7) v = !!varint();
+            else skip(t3 & 7); }
+          values.push(v); }
+        else if (f2 === 5) ext = varint();
+        else skip(w2);
+      }
+      if (name === layerName) {
+        out.extent = ext;
+        for (const [fs, fe] of feats) {
+          p = fs;
+          let type = 0, props = {}, geom = null;
+          while (p < fe) {
+            const t2 = varint(), w2 = t2 & 7, f2 = t2 >> 3;
+            if (f2 === 2) { const l = varint(), e2 = p + l;
+              while (p < e2) { const k = varint(), v = varint(); props[keys[k]] = values[v]; } }
+            else if (f2 === 3) type = varint();
+            else if (f2 === 4) { const l = varint(); geom = [p, p + l]; p += l; }
+            else skip(w2);
+          }
+          if (type !== 2 || !geom) continue; // lines only
+          p = geom[0];
+          const lines = []; let line = null, x = 0, y = 0;
+          while (p < geom[1]) {
+            const cmd = varint(), op = cmd & 7, count = cmd >> 3;
+            if (op === 1) { for (let k = 0; k < count; k++) { const zx = varint(), zy = varint();
+              x += (zx >>> 1) ^ -(zx & 1); y += (zy >>> 1) ^ -(zy & 1);
+              line = [[x, y]]; lines.push(line); } }
+            else if (op === 2) { for (let k = 0; k < count; k++) { const zx = varint(), zy = varint();
+              x += (zx >>> 1) ^ -(zx & 1); y += (zy >>> 1) ^ -(zy & 1); line.push([x, y]); } }
+            else break;
+          }
+          out.features.push({ props, lines });
+        }
+      }
+      p = end;
+    } else skip(wt);
+  }
+  return out;
+}
+function lonLatTile(z, lon, lat) {
+  const n = 2 ** z;
+  const x = Math.floor((lon + 180) / 360 * n);
+  const latR = lat * Math.PI / 180;
+  const y = Math.floor((1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n);
+  return { x: Math.max(0, Math.min(n - 1, x)), y: Math.max(0, Math.min(n - 1, y)) };
+}
+function tilePointLL(z, tx, ty, px, py, extent) {
+  const n = 2 ** z;
+  const lon = (tx + px / extent) / n * 360 - 180;
+  const yt = (ty + py / extent) / n;
+  return [Math.atan(Math.sinh(Math.PI * (1 - 2 * yt))) * 180 / Math.PI, lon];
+}
+function wayClass(props) {
+  const kd = String(props.kind_detail || ''), k = String(props.kind || '');
+  if (kd === 'track') return 'fire trail';
+  if (['path', 'footway', 'cycleway', 'bridleway', 'steps'].includes(kd) || k === 'path') return 'singletrack';
+  return 'road';
+}
+
+/* corridor sample grid: basemap roads + heatmap lines, ~10 m samples w/ bearing + class */
+function addCueSample(g, x, y, brg, cls, name) {
+  const j = g.px.length;
+  g.px.push(x); g.py.push(y); g.pb.push(brg); g.pc.push(cls); g.pn.push(name);
+  const k = ((x / g.cell) | 0) + ',' + ((y / g.cell) | 0);
+  let a = g.grid.get(k); if (!a) g.grid.set(k, a = []); a.push(j);
+}
+function nearCueSamples(g, x, y, r) {
+  const out = [], C = g.cell, cx = (x / C) | 0, cy = (y / C) | 0, R = Math.ceil(r / C);
+  for (let ix = cx - R; ix <= cx + R; ix++) for (let iy = cy - R; iy <= cy + R; iy++) {
+    const a = g.grid.get(ix + ',' + iy); if (!a) continue;
+    for (const j of a) { const d = dist(x, y, g.px[j], g.py[j]); if (d <= r) out.push([j, d]); }
+  }
+  return out;
+}
+async function decodeCorridor(trk) {
+  // basemap roads ONLY — the heatmap is queried in place (heatGrid) as
+  // alternative-continuation evidence, never copied and never way-matched:
+  // the route would just match its own historical trace.
+  const g = { px: [], py: [], pb: [], pc: [], pn: [], grid: new Map(), cell: 24, tiles: 0 };
+  if (!basePM) return g;
+  const Z = 14, want = new Map();
+  for (let i = 0; i < trk.n; i += 2) {
+    const [lat, lon] = toLL(trk.xy[i * 2], trk.xy[i * 2 + 1]);
+    const t = lonLatTile(Z, lon, lat);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
+      want.set((t.x + dx) + '/' + (t.y + dy), [t.x + dx, t.y + dy]);
+  }
+  for (const [, [tx, ty]] of want) {
+    let resp = null;
+    try { resp = await basePM.getZxy(Z, tx, ty); } catch (e) {}
+    if (!resp || !resp.data) continue;
+    let layer = null;
+    try { layer = mvtLayerLines(resp.data, 'roads'); } catch (e) { console.warn('[cue] tile decode failed', tx, ty, e); continue; }
+    for (const f of layer.features) {
+      const cls = wayClass(f.props), nm = f.props.name || null;
+      for (const line of f.lines) {
+        let prev = null;
+        for (const [px, py] of line) {
+          const [lat, lon] = tilePointLL(Z, tx, ty, px, py, layer.extent);
+          const [x, y] = toXY(lat, lon);
+          if (prev) {
+            const seg = dist(prev[0], prev[1], x, y);
+            if (seg < 2000) {
+              const brg = bearing(prev[0], prev[1], x, y);
+              const steps = Math.max(1, Math.round(seg / CUE.SAMPLE));
+              for (let s2 = 1; s2 <= steps; s2++) {
+                const t2 = s2 / steps;
+                addCueSample(g, prev[0] + (x - prev[0]) * t2, prev[1] + (y - prev[1]) * t2, brg, cls, nm);
+              }
+            }
+          } else addCueSample(g, x, y, 0, cls, nm);
+          prev = [x, y];
+        }
+      }
+    }
+    g.tiles++;
+  }
+  return g;
+}
+
+/* match each route point to the way it is riding on */
+function matchWays(trk, g) {
+  const cls = new Array(trk.n).fill(null), nm = new Array(trk.n).fill(null);
+  const brg = new Float32Array(trk.n);
   for (let i = 0; i < trk.n - 1; i++) brg[i] = bearing(trk.xy[i * 2], trk.xy[i * 2 + 1], trk.xy[i * 2 + 2], trk.xy[i * 2 + 3]);
+  brg[trk.n - 1] = brg[Math.max(0, trk.n - 2)];
+  for (let i = 0; i < trk.n; i++) {
+    let best = -1, bs = 1e9;
+    for (const [j, d] of nearCueSamples(g, trk.xy[i * 2], trk.xy[i * 2 + 1], CUE.MATCH_D)) {
+      const bd = Math.abs(angDiff(brg[i], g.pb[j])), und = Math.min(bd, 180 - bd);
+      if (und > CUE.MATCH_ANG) continue;
+      if (d < bs) { bs = d; best = j; }
+    }
+    if (best >= 0) { cls[i] = g.pc[best]; nm[i] = g.pn[best]; }
+  }
+  const sm = new Array(trk.n).fill(null); // majority over ±3 kills tile-edge flapping
+  for (let i = 0; i < trk.n; i++) {
+    const cnt = new Map();
+    for (let j = Math.max(0, i - 3); j <= Math.min(trk.n - 1, i + 3); j++)
+      if (cls[j]) cnt.set(cls[j], (cnt.get(cls[j]) || 0) + 1);
+    let bc = null, bn = 0;
+    for (const [c, n2] of cnt) if (n2 > bn) { bn = n2; bc = c; }
+    sm[i] = bc;
+  }
+  return { cls: sm, name: nm, brg };
+}
+
+/* the decision test: does anything continue along the incoming heading where the route doesn't go? */
+function classifyCues(trk, g, hg, m) {
+  const grids = hg ? [g, hg] : [g]; // basemap roads + heatmap (queried in place)
+  const W = 5;
   const turn = new Float32Array(trk.n);
   for (let i = 0; i < trk.n - 1 - W; i++) {
     let sum = 0;
-    for (let j = i; j < i + W; j++) sum += angDiff(brg[j], brg[j + 1]);
+    for (let j = i; j < i + W; j++) sum += angDiff(m.brg[j], m.brg[j + 1]);
     turn[i + ((W / 2) | 0)] = sum;
   }
-  let i = 0;
-  while (i < trk.n) {
-    if (Math.abs(turn[i]) >= 45) {
+  const inHeading = i => {
+    const from = Math.max(0, i - Math.ceil(30 / RESAMPLE_M));
+    let sx = 0, sy = 0;
+    for (let j = from; j < i; j++) { sx += Math.sin(m.brg[j] * Math.PI / 180); sy += Math.cos(m.brg[j] * Math.PI / 180); }
+    return Math.atan2(sx, sy) * 180 / Math.PI;
+  };
+  const altContinues = i => {
+    const x = trk.xy[i * 2], y = trk.xy[i * 2 + 1], hIn = inHeading(i);
+    const dx = Math.sin(hIn * Math.PI / 180), dy = Math.cos(hIn * Math.PI / 180);
+    for (const gr of grids) for (const [j] of nearCueSamples(gr, x, y, CUE.ALT_D)) {
+      if ((gr.px[j] - x) * dx + (gr.py[j] - y) * dy < 10) continue; // must lie ahead of the apex
+      const bd = Math.abs(angDiff(hIn, gr.pb[j])), und = Math.min(bd, 180 - bd);
+      if (und > CUE.ALT_ANG) continue;
+      const near = nearestOnTrack(trk, gr.px[j], gr.py[j], i);
+      if (near.d < 12 && Math.abs(trk.cum[near.idx] - trk.cum[i]) < 120) continue; // that's the route itself
+      return true;
+    }
+    return false;
+  };
+  const hasData = i => grids.some(gr => nearCueSamples(gr, trk.xy[i * 2], trk.xy[i * 2 + 1], 40).length > 0);
+  const mkCue = (idx, deg) => {
+    const after = Math.min(trk.n - 1, idx + Math.ceil(25 / RESAMPLE_M));
+    return { at: trk.cum[idx], idx, deg: Math.round(deg),
+      type: Math.abs(deg) >= CUE.HAIRPIN ? 'hairpin' : deg > 0 ? 'right' : 'left',
+      from: m.cls[Math.max(0, idx - 3)] || null, onto: m.cls[after] || null, name: m.name[after] || null };
+  };
+  const cues = [];
+  // pass 1: angle-based decision points
+  let i = 1;
+  while (i < trk.n - 1) {
+    if (Math.abs(turn[i]) >= CUE.TURN_MIN) {
       let best = i, j = i;
-      while (j < trk.n && Math.abs(turn[j]) >= 40) { if (Math.abs(turn[j]) > Math.abs(turn[best])) best = j; j++; }
-      const a = turn[best];
-      alerts.push({ at: trk.cum[best], idx: best,
-        type: Math.abs(a) >= 120 ? 'hairpin' : (a > 0 ? 'right' : 'left'), deg: Math.round(a) });
-      i = j + Math.ceil(60 / RESAMPLE_M);
+      while (j < trk.n && Math.abs(turn[j]) >= CUE.TURN_MIN - 5) { if (Math.abs(turn[j]) > Math.abs(turn[best])) best = j; j++; }
+      const deg = turn[best];
+      const fire = Math.abs(deg) >= CUE.HAIRPIN ? true                    // hairpins always cue
+        : hasData(best) ? altContinues(best)                              // decision only if something continues
+        : Math.abs(deg) >= CUE.TURN_LONE;                                 // unmapped ground: geometry fallback
+      if (fire) cues.push(mkCue(best, deg));
+      i = j + Math.ceil(40 / RESAMPLE_M);
     } else i++;
   }
-  if (S.heat && S.set.junctions) {
-    const hg = heatGrid(S.heat), C = hg.cell;
-    let lastJ = -1e9;
-    for (let k = 0; k < trk.n - 1; k += 2) { // every 16 m
-      if (trk.cum[k] - lastJ < 60) continue;
-      const x = trk.xy[k * 2], y = trk.xy[k * 2 + 1], myb = brg[Math.min(k, brg.length - 1)];
-      const cx = (x / C) | 0, cy = (y / C) | 0;
-      let hit = false;
-      for (let ix = cx - 1; ix <= cx + 1 && !hit; ix++) for (let iy = cy - 1; iy <= cy + 1 && !hit; iy++) {
-        const a = hg.grid.get(ix + ',' + iy); if (!a) continue;
-        for (const j of a) {
-          const d = dist(x, y, hg.px[j], hg.py[j]); if (d > 15) continue;
-          const bd = Math.abs(angDiff(myb, hg.pb[j])); const cross = Math.min(bd, 180 - bd);
-          if (cross > 35) { hit = true; break; }
-        }
-      }
-      if (hit) {
-        const nearTurn = alerts.some(al => al.type !== 'junction' && Math.abs(al.at - trk.cum[k]) < 50);
-        if (!nearTurn) alerts.push({ at: trk.cum[k], idx: k, type: 'junction', deg: 0 });
-        lastJ = trk.cum[k];
+  // pass 2: way-class departures (fire trail -> singletrack at a shallow angle)
+  let run = null;
+  for (let k = 1; k < trk.n; k++) {
+    if (!m.cls[k] || m.cls[k] === m.cls[k - 1]) continue;
+    if (m.cls[k - 1]) {
+      // require both runs to be substantial (~40 m) so tile seams don't fire
+      let backOk = 0; for (let j = k - 1; j >= 0 && m.cls[j] === m.cls[k - 1]; j--) backOk++;
+      let fwdOk = 0; for (let j = k; j < trk.n && m.cls[j] === m.cls[k]; j++) fwdOk++;
+      if (backOk >= 5 && fwdOk >= 5 && altContinues(k)) {
+        const dup = cues.find(c => Math.abs(c.at - trk.cum[k]) < CUE.MERGE_M);
+        if (dup) { dup.from = m.cls[k - 1]; dup.onto = m.cls[k]; dup.name = m.name[k + 2] || dup.name; }
+        else cues.push(mkCue(k, turn[k]));
       }
     }
+    run = m.cls[k];
   }
-  alerts.sort((a, b) => a.at - b.at);
-  trk.alerts = alerts;
-  console.log(`[dingonav] alerts for "${trk.name}": ${alerts.length}`,
-    alerts.reduce((m, a) => (m[a.type] = (m[a.type] || 0) + 1, m), {}));
-  return alerts;
+  cues.sort((a, b) => a.at - b.at);
+  // merge cue clusters
+  const merged = [];
+  for (const c of cues) {
+    const last = merged[merged.length - 1];
+    if (last && c.at - last.at < CUE.MERGE_M) {
+      if (Math.abs(c.deg) > Math.abs(last.deg)) { c.from = c.from || last.from; merged[merged.length - 1] = c; }
+      else if (c.onto && c.onto !== last.onto) { last.onto = c.onto; last.name = c.name || last.name; }
+    } else merged.push(c);
+  }
+  return merged;
+}
+
+async function analyzeRoute(trk) {
+  if (trk._analyzing) return trk._analyzing;
+  trk._analyzing = (async () => {
+    try { await analyzeRouteInner(trk); }
+    catch (e) { console.error('[cue] analysis failed for "' + trk.name + '"', e); trk.alerts = trk.alerts || []; toast('Route analysis failed — no cues'); }
+  })().finally(() => { trk._analyzing = null; });
+  return trk._analyzing;
+}
+async function analyzeRouteInner(trk) {
+  {
+    const key = 'cue2-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
+    try { const rec = await idb.get(key); if (rec) { trk.alerts = rec.cues; return; } } catch (e) {}
+    const t0 = performance.now();
+    const g = await decodeCorridor(trk);
+    const hg = S.heat ? heatGrid(S.heat) : null;
+    const m = matchWays(trk, g);
+    const cues = classifyCues(trk, g, hg, m);
+    trk.alerts = cues;
+    window.__cue = { g, m, cues, trk };
+    console.log(`[cue] "${trk.name}": ${cues.length} cues from ${g.px.length} samples / ${g.tiles} tiles in ${(performance.now() - t0).toFixed(0)} ms`,
+      cues.reduce((r, c) => (r[c.type] = (r[c.type] || 0) + 1, r), {}));
+    try { await idb.put({ id: key, kind: 'cues', cues }); } catch (e) {}
+  }
 }
 
 /* ---------------- audio ---------------- */
@@ -544,7 +791,9 @@ async function initMap() {
   }
   let style;
   if (baseBlob) {
-    protocol.add(new pmtiles.PMTiles(new pmtiles.FileSource(new File([baseBlob], 'base'))));
+    basePM = new pmtiles.PMTiles(new pmtiles.FileSource(new File([baseBlob], 'base')));
+    basePMKey = baseName + ':' + baseBlob.size;
+    protocol.add(basePM);
     const baseLayers = await (await fetch('basemap/layers.json')).json();
     const baseUrl = new URL('basemap/', location.href).href;
     style = {
@@ -634,7 +883,7 @@ function addOverlays() {
     paint: { 'text-color': '#003a44' } });
   map.addLayer({ id: 'alert-dots', type: 'circle', source: 'alerts', minzoom: 12.5,
     paint: { 'circle-radius': 4.5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#0e1216',
-      'circle-color': ['match', ['get', 't'], 'junction', '#00e5ff', 'hairpin', '#ff4545', '#ffb020'] } });
+      'circle-color': ['match', ['get', 't'], 'hairpin', '#ff4545', '#ffb020'] } });
   map.addLayer({ id: 'friends-dots', type: 'circle', source: 'friends',
     paint: { 'circle-radius': 8, 'circle-color': '#38d178', 'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff' } });
   map.addLayer({ id: 'friends-labels', type: 'symbol', source: 'friends',
@@ -752,11 +1001,23 @@ function fitSelected() {
 }
 
 /* ---------------- navigation ---------------- */
-const FAR_M = 160, NEAR_M = 55, OFF_M = 60, ON_M = 40;
+const OFF_M = 60, ON_M = 40;
+// warning lead is time-based (~15 s far / ~5 s near from rolling speed), clamped per vehicle
+const VEHICLES = {
+  mtb:       { farMin: 40,  farMax: 150, nearMin: 15, nearMax: 50,  defSpd: 4 },
+  enduro:    { farMin: 60,  farMax: 250, nearMin: 25, nearMax: 70,  defSpd: 8 },
+  adventure: { farMin: 120, farMax: 400, nearMin: 40, nearMax: 100, defSpd: 14 },
+};
+function warnDists(ns) {
+  const v = VEHICLES[S.set.vehicle] || VEHICLES.enduro;
+  const spd = (ns && ns.avgSpd) || v.defSpd;
+  return { far: Math.min(v.farMax, Math.max(v.farMin, spd * 15)),
+    near: Math.min(v.nearMax, Math.max(v.nearMin, spd * 5)) };
+}
 function startNav() {
   const trk = S.tracks[S.sel]; if (!trk) return;
   audio(); // unlock on gesture
-  if (!trk.alerts) { buildAlerts(trk); refreshMapData(); }
+  if (!trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
   S.navState = { idx: -1, dir: 1, dirVotes: 0, off: false, lastOffBeep: 0, alertStates: new Map(),
     movingS: 0, avgSpd: null, lastFixT: 0 };
   S.nav = true; setFollow(true);
@@ -838,35 +1099,48 @@ function onFix(lat, lon, acc, speed, heading) {
     ns.avgSpd = ns.avgSpd == null ? spd : ns.avgSpd * 0.98 + spd * 0.02;
   }
   drawProgress();
+  const { far: farM, near: nearM } = warnDists(ns);
   let next = null, dTo = Infinity;
   if (trk.alerts) {
     if (ns.dir > 0) { for (const a of trk.alerts) if (a.at > s + 5) { next = a; dTo = a.at - s; break; } }
     else { for (let i = trk.alerts.length - 1; i >= 0; i--) { const a = trk.alerts[i]; if (a.at < s - 5) { next = a; dTo = s - a.at; break; } } }
   }
-  setHud(next, dTo, ns.dir);
+  if (ns.lastNext && next !== ns.lastNext && !ns.off) flashCommit(); // rode through the cue on-track
+  ns.lastNext = next;
+  setHud(next, dTo, ns.dir, farM);
   if (next) {
     let st = ns.alertStates.get(next); if (!st) ns.alertStates.set(next, st = { far: true, near: true });
-    if (dTo > FAR_M + 80) { st.far = true; st.near = true; } // re-arm on repeat laps
-    // junctions only get the near beep — far warnings for every crossing would be constant noise
-    if (dTo <= FAR_M && dTo > NEAR_M && st.far && next.type !== 'junction') { st.far = false; BEEP.far(); }
-    if (dTo <= NEAR_M && st.near) {
+    if (dTo > farM + 80) { st.far = true; st.near = true; } // re-arm on repeat laps
+    if (dTo <= farM && dTo > nearM && st.far) { st.far = false; BEEP.far(); }
+    if (dTo <= nearM && st.near) {
       st.near = false; st.far = false;
-      if (next.type === 'junction') BEEP.junction();
-      else if (next.type === 'hairpin') BEEP.hairpin();
-      else BEEP.turn();
+      next.type === 'hairpin' ? BEEP.hairpin() : BEEP.turn();
     }
   }
 }
-function setHud(alert, dTo, dir) {
+let commitT = null;
+function flashCommit() {
+  const box = document.getElementById('hudBox');
+  box.classList.add('commit');
+  clearTimeout(commitT); commitT = setTimeout(() => box.classList.remove('commit'), 1200);
+}
+function setHud(alert, dTo, dir, farM) {
+  const box = document.getElementById('hudBox');
   const arrow = document.getElementById('hudArrow'), distEl = document.getElementById('hudDist'), typeEl = document.getElementById('hudType');
-  if (!alert) { arrow.textContent = '↑'; arrow.className = ''; distEl.innerHTML = '— <small>m</small>'; typeEl.textContent = 'no upcoming turns'; return; }
+  // the glance card slides in at the far warning, not permanently (design: minimal riding screen)
+  const show = !!alert && dTo <= Math.max((farM || 160) * 1.5, 250);
+  box.style.visibility = show || box.classList.contains('commit') ? '' : 'hidden';
+  if (!show) return;
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
-  const icons = { left: '⬅', right: '➡', hairpin: '⟲', junction: '✚' };
-  const labels = { left: 'turn left', right: 'turn right', hairpin: 'hairpin', junction: 'junction' };
-  arrow.textContent = icons[type]; arrow.className = type;
+  const icons = { left: '⬅', right: '➡', hairpin: '⟲' };
+  const labels = { left: 'turn left', right: 'turn right', hairpin: 'hairpin' };
+  // riding the route backwards approaches the cue from the other side — swap the surfaces
+  const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
+  const ontoTxt = onto && onto !== from ? ' · onto ' + ((dir > 0 && alert.name) || onto) : '';
+  arrow.textContent = icons[type] || '⬆'; arrow.className = type;
   distEl.innerHTML = (dTo >= 995 ? (dTo / 1000).toFixed(1) + ' <small>km</small>' : Math.round(dTo / 5) * 5 + ' <small>m</small>');
-  typeEl.textContent = labels[type];
+  typeEl.textContent = (labels[type] || 'turn') + ontoTxt;
 }
 
 /* ---------------- progress strip ---------------- */
@@ -1027,6 +1301,7 @@ function startDemo() {
   let d = 0;
   const SPEED = 8.5; // m/s ≈ 30 km/h
   S.demo = setInterval(() => {
+    if (window.__demoJump != null) { d = window.__demoJump; window.__demoJump = null; } // dev: jump along the route
     d += SPEED;
     if (d >= trk.lengthM) { toast('Demo finished'); stopNav(); return; }
     const i = idxAt(trk, d);
@@ -1156,7 +1431,7 @@ function refreshTrackList() {
 function selectTrack(i) {
   S.sel = i;
   const trk = S.tracks[i];
-  if (trk && !trk.alerts) setTimeout(() => { buildAlerts(trk); updateBottomBar(); refreshMapData(); }, 10);
+  if (trk && !trk.alerts) analyzeRoute(trk).then(() => { updateBottomBar(); refreshMapData(); if (S.nav) toast(trk.alerts.length + ' cues ready'); });
   refreshTrackList(); updateBottomBar(); refreshMapData();
 }
 function updateBottomBar() {
@@ -1165,7 +1440,7 @@ function updateBottomBar() {
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
-  sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' alert points';
+  sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' cues';
   nb.disabled = false;
 }
 function refreshEmpty() { document.getElementById('emptyState').classList.toggle('on', !S.tracks.length && !S.heat); }
@@ -1184,8 +1459,12 @@ function bindSet(id, key, cb) {
   el.onchange = () => { S.set[key] = el.checked; saveSet(); if (cb) cb(); };
 }
 bindSet('setSound', 'sound');
-bindSet('setJunctions', 'junctions', () => { for (const t of S.tracks) t.alerts = null; if (S.sel >= 0) selectTrack(S.sel); });
 bindSet('setAutoZoom', 'autoZoom');
+for (const b of document.querySelectorAll('#vehSeg button')) {
+  b.classList.toggle('active', b.dataset.v === S.set.vehicle);
+  b.onclick = () => { S.set.vehicle = b.dataset.v; saveSet();
+    for (const b2 of document.querySelectorAll('#vehSeg button')) b2.classList.toggle('active', b2.dataset.v === S.set.vehicle); };
+}
 bindSet('setWake', 'wake', () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); });
 const gloveRightEl = document.getElementById('setGloveRight');
 gloveRightEl.checked = S.set.gloveSide === 'right';
@@ -1199,7 +1478,7 @@ codeEl.onchange = () => { S.set.code = codeEl.value.trim(); saveSet(); if (S.nav
 /* ---------------- boot ---------------- */
 async function boot() {
   await idb.open();
-  const recs = (await idb.all()).filter(r => r.kind !== 'basemap');
+  const recs = (await idb.all()).filter(r => r.kind === 'gpx' || r.kind === 'heatmap' || !r.kind);
   recs.sort((a, b) => (a.kind === 'heatmap' ? -1 : 1) - (b.kind === 'heatmap' ? -1 : 1));
   for (const r of recs) {
     try {
@@ -1223,9 +1502,11 @@ async function boot() {
       }
     } catch (e) {}
   }
-  if (S.tracks.length && S.sel < 0) { S.sel = 0; const trk = S.tracks[0]; if (!trk.alerts) buildAlerts(trk); }
+  if (S.tracks.length && S.sel < 0) S.sel = 0;
   refreshTrackList(); refreshEmpty(); updateBottomBar();
-  await initMap();
+  await initMap(); // cue analysis needs basePM, so it runs after the map boots
+  if (S.sel >= 0 && !S.tracks[S.sel].alerts)
+    analyzeRoute(S.tracks[S.sel]).then(() => { updateBottomBar(); refreshMapData(); });
   fitSelected();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
