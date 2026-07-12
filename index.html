@@ -927,8 +927,8 @@ const MAP_STYLES = {
   contrast: { label: 'Trail', file: 'layers-light.json', sprite: 'light',
     ov: { roads_other: { 'line-color': '#e06d00', 'line-width': TRACK_W },    // loud orange, fattened
           earth: { 'fill-color': '#eceae4' } }, hill: HILL_LIGHT },
-  dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null,
-    hill: { 'hillshade-exaggeration': 0.2, 'hillshade-shadow-color': '#000000', 'hillshade-highlight-color': '#55606c' } },
+  dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // shading fights the dark flavor
+
 };
 const STYLE_CYCLE = ['daylight', 'contrast', 'dark'];
 let baseUrlRef = '', hasBasemap = false;
@@ -944,7 +944,7 @@ async function buildStyle() {
   if (st.ov) layersArr = layersArr.map(l => st.ov[l.id]
     ? { ...l, paint: { ...l.paint, ...st.ov[l.id] } } : l);
   const sources = { protomaps: { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } };
-  if (hasHillshade) {
+  if (hasHillshade && st.hill) {
     sources.dem = { type: 'raster-dem', url: 'pmtiles://hillshade', encoding: 'terrarium', tileSize: 256 };
     const hill = { id: 'hillshade', type: 'hillshade', source: 'dem',
       layout: { visibility: S.set.hillshade === false ? 'none' : 'visible' }, paint: st.hill };
