@@ -290,6 +290,9 @@
   <div id="baseStatus">no basemap loaded</div>
   <div class="btnRow"><button class="btn" id="baseBtn">Load .pmtiles basemap…</button></div>
   <div class="hint">A .pmtiles extract gives roads, trails, water and labels offline. One is auto-downloaded on first open when hosted with the app; cut other areas with the <b>pmtiles</b> CLI (see README).</div>
+  <div id="hillStatus">no terrain shading loaded</div>
+  <div class="btnRow"><button class="btn" id="hillBtn">Load .pmtiles terrain…</button></div>
+  <div class="hint">Optional elevation extract adds hillshade relief under the trails — gullies and ridges readable at a glance, still flat north-up 2D. Cut one with <b>make_hillshade.py</b> (see README).</div>
 
   <div class="row"><label>Strava heatmap overlay</label><span class="sw"><input type="checkbox" id="setStrava"><span></span></span></div>
   <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
@@ -307,6 +310,7 @@
     <button data-v="walk">Walk</button><button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
   <div class="row"><label>Map style</label><span class="seg" id="styleSeg">
     <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button></span></div>
+  <div class="row"><label>Terrain shading</label><span class="sw"><input type="checkbox" id="setHill" checked><span></span></span></div>
   <div class="row"><label>Auto-zoom with speed</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
   <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
   <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
@@ -328,6 +332,7 @@
 
 <input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json,.dingonav,.zip,application/zip,application/octet-stream" hidden>
 <input type="file" id="baseInput" accept=".pmtiles" hidden>
+<input type="file" id="hillInput" accept=".pmtiles" hidden>
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/pmtiles.js"></script>
@@ -375,12 +380,13 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
-  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false, favSpan: {}, keys: {}, mapStyle: 'daylight' },
+  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false, favSpan: {}, keys: {}, mapStyle: 'daylight', hillshade: true },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
 let map = null, mapReady = false;
 let basePM = null, basePMKey = 'none'; // PMTiles handle for the cue engine's corridor decode
+let hasHillshade = false; // optional terrarium DEM .pmtiles → hillshade layer
 let stravaMeta = null; // {count, zmin, zmax} of baked Strava tiles in IDB, or null
 // 1×1 transparent PNG bytes for out-of-corridor Strava tiles (generated, so no
 // hand-copied base64 to get wrong).
@@ -914,13 +920,15 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
    light flavor plus small paint override tables (tracks are near-invisible in
    stock light — the whole reason for this feature). */
 const TRACK_W = ['interpolate', ['exponential', 1.6], ['zoom'], 13, 1.2, 16, 3.5, 20, 16];
+const HILL_LIGHT = { 'hillshade-exaggeration': 0.3, 'hillshade-shadow-color': '#5b4933', 'hillshade-highlight-color': '#ffffff' };
 const MAP_STYLES = {
   daylight: { label: 'Day', file: 'layers-light.json', sprite: 'light',
-    ov: { roads_other: { 'line-color': '#8a7355' } } },                       // tracks/paths readable brown
+    ov: { roads_other: { 'line-color': '#8a7355' } }, hill: HILL_LIGHT },     // tracks/paths readable brown
   contrast: { label: 'Trail', file: 'layers-light.json', sprite: 'light',
     ov: { roads_other: { 'line-color': '#e06d00', 'line-width': TRACK_W },    // loud orange, fattened
-          earth: { 'fill-color': '#eceae4' } } },
-  dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null },
+          earth: { 'fill-color': '#eceae4' } }, hill: HILL_LIGHT },
+  dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null,
+    hill: { 'hillshade-exaggeration': 0.2, 'hillshade-shadow-color': '#000000', 'hillshade-highlight-color': '#55606c' } },
 };
 const STYLE_CYCLE = ['daylight', 'contrast', 'dark'];
 let baseUrlRef = '', hasBasemap = false;
@@ -935,10 +943,18 @@ async function buildStyle() {
   let layersArr = baseLayerCache[st.file];
   if (st.ov) layersArr = layersArr.map(l => st.ov[l.id]
     ? { ...l, paint: { ...l.paint, ...st.ov[l.id] } } : l);
+  const sources = { protomaps: { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } };
+  if (hasHillshade) {
+    sources.dem = { type: 'raster-dem', url: 'pmtiles://hillshade', encoding: 'terrarium', tileSize: 256 };
+    const hill = { id: 'hillshade', type: 'hillshade', source: 'dem',
+      layout: { visibility: S.set.hillshade === false ? 'none' : 'visible' }, paint: st.hill };
+    const at = layersArr.findIndex(l => l.id === 'water'); // relief under water, roads and labels
+    layersArr = at < 0 ? [...layersArr, hill] : [...layersArr.slice(0, at), hill, ...layersArr.slice(at)];
+  }
   return { version: 8,
     glyphs: baseUrlRef + 'fonts/{fontstack}/{range}.pbf', // string concat — new URL() would %-encode the tokens
     sprite: baseUrlRef + 'sprites/' + st.sprite,
-    sources: { protomaps: { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } },
+    sources,
     layers: layersArr };
 }
 async function setMapStyle(name) {
@@ -991,6 +1007,32 @@ async function initMap() {
     setBaseStatus('Basemap: ' + baseName + ' (' + (baseBlob.size / 1e6).toFixed(0) + ' MB, on device)');
   } else {
     setBaseStatus('no basemap — tracks on dark background');
+  }
+
+  // optional terrain DEM for hillshade: IDB blob -> else fetch alongside the app -> else absent
+  let hillBlob = null, hillName = '';
+  try { const rec = await idb.get('hillshade'); if (rec) { hillBlob = rec.blob; hillName = rec.name; } } catch (e) {}
+  if (!hillBlob && hasBasemap) {
+    try {
+      const resp = await fetch('basemap/hillshade.pmtiles');
+      if (resp.ok) {
+        const blob = await resp.blob();
+        // guard against SPA-fallback HTML masquerading as the file
+        const magic = new TextDecoder().decode(new Uint8Array(await blob.slice(0, 7).arrayBuffer()));
+        if (magic === 'PMTiles') {
+          hillBlob = blob; hillName = 'hillshade.pmtiles';
+          await idb.put({ id: 'hillshade', name: hillName, kind: 'hillshade', blob: hillBlob });
+          toast('Terrain shading stored for offline use (' + (hillBlob.size / 1e6).toFixed(0) + ' MB)');
+        }
+      }
+    } catch (e) {}
+  }
+  if (hillBlob) {
+    protocol.add(new pmtiles.PMTiles(new pmtiles.FileSource(new File([hillBlob], 'hillshade'))));
+    hasHillshade = true;
+    setHillStatus('Terrain: ' + hillName + ' (' + (hillBlob.size / 1e6).toFixed(0) + ' MB, on device)');
+  } else {
+    setHillStatus('no terrain shading (optional)');
   }
   const style = await buildStyle();
   map = new maplibregl.Map({
@@ -1981,10 +2023,15 @@ function connectFriendWS(topic) {
 }
 function setFriendStatus(s) { document.getElementById('friendStatus').textContent = s; }
 function setBaseStatus(s) { document.getElementById('baseStatus').textContent = s; }
+function setHillStatus(s) { document.getElementById('hillStatus').textContent = s; }
 function setStravaInfo(s) { document.getElementById('stravaInfo').textContent = s; }
 function applyStrava() {
   if (map && map.getLayer('strava-heat'))
     map.setLayoutProperty('strava-heat', 'visibility', S.set.strava === false ? 'none' : 'visible');
+}
+function applyHill() {
+  if (map && map.getLayer('hillshade'))
+    map.setLayoutProperty('hillshade', 'visibility', S.set.hillshade === false ? 'none' : 'visible');
 }
 setInterval(refreshFriends, 30000); // age out stale friends
 
@@ -2094,8 +2141,15 @@ document.getElementById('baseInput').addEventListener('change', async e => {
   await idb.put({ id: 'basemap', name: f.name, kind: 'basemap', blob: f });
   toast('Basemap saved — reloading'); setTimeout(() => location.reload(), 800);
 });
+document.getElementById('hillBtn').onclick = () => document.getElementById('hillInput').click();
+document.getElementById('hillInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  await idb.put({ id: 'hillshade', name: f.name, kind: 'hillshade', blob: f });
+  toast('Terrain shading saved — reloading'); setTimeout(() => location.reload(), 800);
+});
 document.getElementById('clearBtn').onclick = async () => {
-  if (!confirm('Remove all loaded tracks, heatmap and basemap from this device?')) return;
+  if (!confirm('Remove all loaded tracks, heatmap, basemap and terrain from this device?')) return;
   stopNav(); await idb.clear();
   S.tracks = []; S.heat = null; S.sel = -1;
   refreshTrackList(); refreshEmpty(); updateBottomBar(); refreshMapData();
@@ -2241,6 +2295,7 @@ setSound(S.set.sound); // sync the mute button face at boot
 bindSet('setConfirm', 'confirm');
 bindSet('setAutoZoom', 'autoZoom');
 bindSet('setStrava', 'strava', applyStrava);
+bindSet('setHill', 'hillshade', applyHill);
 for (const b of document.querySelectorAll('#vehSeg button')) {
   b.classList.toggle('active', b.dataset.v === S.set.vehicle);
   b.onclick = () => { S.set.vehicle = b.dataset.v; saveSet(); refreshFav(); // heart zoom is per-vehicle
