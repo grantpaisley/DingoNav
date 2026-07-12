@@ -52,8 +52,8 @@
   body.navving #lockPill{top:calc(env(safe-area-inset-top) + 152px)}
   /* mute: one tap on the riding screen, ghosted like the other ride controls */
   #muteBtn{position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:10px; z-index:12;
-    width:48px; height:48px; border-radius:14px; background:rgba(22,28,34,.5); border:1px solid #2a3540;
-    display:none; align-items:center; justify-content:center; font-size:24px; opacity:.4; cursor:pointer}
+    width:96px; height:96px; border-radius:28px; background:rgba(22,28,34,.5); border:1px solid #2a3540;
+    display:none; align-items:center; justify-content:center; font-size:44px; opacity:.4; cursor:pointer}
   #muteBtn:active{opacity:1}
   body.navving #muteBtn{display:flex}
   #muteBtn.muted{opacity:.75; border-color:var(--bad)}
@@ -75,11 +75,13 @@
     color:var(--fg); font-size:26px; display:flex; align-items:center; justify-content:center; cursor:pointer}
   .ctl:active{background:var(--panel2)}
   .ctl.active{border-color:var(--accent); color:var(--accent)}
+  /* riding-screen floating controls are twice the size for gloved hands */
+  #sideCtl .ctl{width:108px; height:108px; border-radius:28px; font-size:48px}
   /* riding screen: ± + heart stay, ghosted; browse-only controls hide (glove overlay has them) */
   body.navving #sideCtl .ctl{opacity:.4; background:rgba(22,28,34,.5)}
   body.navving #sideCtl .ctl:active{opacity:1}
-  body.navving #followBtn, body.navving #fitBtn{display:none}
-  body.navving #cueEditBtn{display:none !important} /* planning-only */
+  body.navving #followBtn{display:none} /* fitBtn stays: zoom out to the whole track while navigating */
+  body.navving #cueEditBtn, body.navving #revBtn{display:none !important} /* planning-only */
   #cueEditBtn.active{border-color:var(--warn); color:var(--warn)}
   #favBtn{display:none; font-size:22px}
   #favBtn.show{display:flex}
@@ -90,19 +92,19 @@
     background:rgba(22,28,34,.75); border:1px solid #2a3540}
   #holdPill.on{display:block}
   #lockPill.on{display:block; top:100px; border-color:var(--accent)}
-  #north{position:fixed; left:12px; bottom:120px; z-index:10; width:44px; height:44px; border-radius:50%;
+  #north{position:fixed; left:12px; bottom:120px; z-index:10; width:88px; height:88px; border-radius:50%;
     background:rgba(22,28,34,.9); border:1px solid #2a3540; display:flex; align-items:center; justify-content:center;
-    font-weight:800; color:var(--bad); font-size:17px; cursor:pointer}
+    font-weight:800; color:var(--bad); font-size:30px; cursor:pointer}
   #north.course{border-color:var(--accent)}
   #north.oriented{border-color:var(--warn); color:var(--warn)}
   #northInner{display:flex; flex-direction:column; align-items:center; line-height:1; will-change:transform}
-  #northInner::before{content:''; width:0; height:0; border:4px solid transparent; border-bottom:7px solid var(--bad); margin-bottom:1px}
+  #northInner::before{content:''; width:0; height:0; border:8px solid transparent; border-bottom:14px solid var(--bad); margin-bottom:2px}
   /* only the north-up marker carries the little needle; course/compass show their own glyph */
   #north.course #northInner::before, #north.oriented #northInner::before{display:none}
 
   /* ---------- glove button + overlay ---------- */
-  #gloveBtn{position:fixed; bottom:120px; z-index:16; width:68px; height:68px; border-radius:18px;
-    background:rgba(22,28,34,.95); border:2px solid #2a3540; color:var(--fg); font-size:30px;
+  #gloveBtn{position:fixed; bottom:120px; z-index:16; width:136px; height:136px; border-radius:36px;
+    background:rgba(22,28,34,.95); border:2px solid #2a3540; color:var(--fg); font-size:56px;
     display:none; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 12px rgba(0,0,0,.45)}
   #gloveBtn.on{display:flex}
   #gloveBtn.left{left:12px} #gloveBtn.right{right:12px}
@@ -199,6 +201,10 @@
     body.navving #holdPill{top:calc(env(safe-area-inset-top) + 84px)}
     body.navving #lockPill{top:calc(env(safe-area-inset-top) + 118px)}
     #muteBtn{width:40px; height:40px; font-size:19px; top:calc(env(safe-area-inset-top) + 44px)}
+    /* short viewports: keep the enlarged controls from overflowing the landscape column */
+    #sideCtl .ctl{width:64px; height:64px; border-radius:16px; font-size:30px}
+    #north{width:56px; height:56px; font-size:20px}
+    #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
     #progress.expanded #progCanvas{height:44px}
     body.navving #bottom{display:none} /* riding: reclaim the bar — STOP lives in the glove overlay */
@@ -230,9 +236,9 @@
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div id="sideCtl">
+  <div class="ctl" id="favBtn" title="favourite zoom">♡</div>
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl" id="zoomOut">−</div>
-  <div class="ctl" id="favBtn" title="favourite zoom">♡</div>
   <div class="ctl" id="followBtn" title="follow GPS">◎</div>
   <div class="ctl" id="fitBtn" title="fit track">⛶</div>
 </div>
@@ -264,6 +270,7 @@
 <div id="bottom">
   <div class="ctl" id="menuBtn">☰</div>
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
+  <div class="ctl" id="revBtn" title="reverse direction" style="display:none">⇄</div>
   <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none">✎</div>
   <button id="navBtn" disabled>START</button>
 </div>
@@ -1113,13 +1120,19 @@ function addOverlays() {
     });
     map.on('mouseenter', 'friends-dots', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'friends-dots', () => map.getCanvas().style.cursor = '');
+    // redraw the progress strip as the map moves/zooms so it keeps matching the visible track
+    let progMoveRAF = 0;
+    map.on('move', () => {
+      if (progMoveRAF || !S.nav) return;
+      progMoveRAF = requestAnimationFrame(() => { progMoveRAF = 0; drawProgress(); });
+    });
   }
   map.addLayer({ id: 'pos-acc', type: 'fill', source: 'posAcc',
     paint: { 'fill-color': 'rgba(64,150,255,0.12)' } });
   // navigation dart instead of a dot — always points the direction of travel
   if (!map.hasImage('nav-dart')) map.addImage('nav-dart', navDartImage(), { pixelRatio: 2 });
   map.addLayer({ id: 'pos-arrow', type: 'symbol', source: 'pos',
-    layout: { 'icon-image': 'nav-dart', 'icon-size': 1, 'icon-rotate': ['get', 'heading'],
+    layout: { 'icon-image': 'nav-dart', 'icon-size': 1.5, 'icon-rotate': ['get', 'heading'],
       'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
   refreshMapData();
 }
@@ -1147,7 +1160,7 @@ function refreshMapData() {
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
       geometry: { type: 'LineString', coordinates: t.coordsLL } })) });
   const trk = S.tracks[S.sel];
-  const dir = (S.navState && S.navState.dir) || 1;
+  const dir = S.navState ? S.navState.dir : (trk && trk.reverse ? -1 : 1);
   map.getSource('selTrack').setData(trk ? { type: 'Feature', properties: {},
     geometry: { type: 'LineString', coordinates: dir > 0 ? trk.coordsLL : [...trk.coordsLL].reverse() } } : EMPTY);
   // dots come from the base analysis + hand-added cues; removed ones stay (greyed) for edit mode
@@ -1194,7 +1207,7 @@ function applySteepness() {
   for (const l of ['surf-sealed', 'surf-dirt', 'surf-single'])
     map.setLayoutProperty(l, 'visibility', surfOn ? 'visible' : 'none');
   if (!on) { map.setPaintProperty('sel-core', 'line-gradient', null); return; }
-  const dir = (S.navState && S.navState.dir) || 1;
+  const dir = S.navState ? S.navState.dir : (trk && trk.reverse ? -1 : 1);
   const P = trk.profile, len = trk.lengthM || 1;
   // banded step gradient over line-progress; the displayed line is reversed when dir < 0
   const segs = [];
@@ -1280,7 +1293,8 @@ function followCamera() {
   lastEase = now;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
   const opts = { center: [lo, la], duration: 900, easing: t => t };
-  if (S.set.autoZoom) { const z = cruiseZoom(la); if (z != null) opts.zoom = z; }
+  // off track: freeze the zoom (keep centring) until back on track — no lurching auto-zoom while lost
+  if (S.set.autoZoom && !(S.navState && S.navState.off)) { const z = cruiseZoom(la); if (z != null) opts.zoom = z; }
   if (S.set.orient === 'course' && S.courseBearing != null) opts.bearing = S.courseBearing;
   else if (S.set.orient === 'oriented' && S.deviceHeading != null) opts.bearing = S.deviceHeading;
   map.easeTo(opts);
@@ -1473,8 +1487,10 @@ function scheduleCompassEase() {
     compassRAF = 0;
     if (S.set.orient !== 'oriented' || S.deviceHeading == null) return;
     // while a follow-camera ease is animating (it already carries the bearing) leave it alone;
-    // otherwise (stopped / just browsing) spin the map live as the rider turns
-    if (Date.now() - lastEase > 900) map.setBearing(S.deviceHeading);
+    // otherwise (stopped / just browsing) spin the map live as the rider turns.
+    // Skip while the map is already moving (a manual/pinch zoom, pan or rotate) — a bearing
+    // jump would cancel that animation, which is why zoom felt dead in compass mode.
+    if (Date.now() - lastEase > 900 && !map.isMoving()) map.setBearing(S.deviceHeading);
   });
 }
 function enableCompass(gesture) {
@@ -1565,7 +1581,10 @@ function startNav() {
   audio(); // unlock on gesture
   if (S.set.orient === 'oriented') enableCompass(true); // gesture → prompt for the magnetometer if needed
   if (!trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
-  S.navState = { idx: -1, dir: 1, dirVotes: 0, off: false, lastOffBeep: 0, alertStates: new Map(),
+  // start in the direction the rider picked (reverse toggle); auto-voting can still correct it if
+  // they actually ride the other way, but it holds this direction from the first fix
+  const rev = !!trk.reverse;
+  S.navState = { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0, alertStates: new Map(),
     movingS: 0, avgSpd: null, lastFixT: 0 };
   S.nav = true; setFollow(true);
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
@@ -1596,7 +1615,8 @@ function stopNav() {
   placeProgress();
   const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  stopGPS(); releaseWake(); stopDemo();
+  // leave GPS running so the location dot stays on the map after navigation ends
+  releaseWake(); stopDemo();
 }
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
 
@@ -1749,6 +1769,22 @@ function fmtTime(sec) {
   sec = Math.max(0, sec | 0);
   return ((sec / 3600) | 0) + ':' + String(((sec % 3600) / 60) | 0).padStart(2, '0');
 }
+// route-distance range [lo,hi] of the track currently inside the map viewport, so the progress
+// strip can zoom with the map. null when the track isn't on screen (caller falls back to full track).
+function visibleWindow(trk) {
+  if (!mapReady || !REF) return null;
+  const b = map.getBounds();
+  const [minX, minY] = toXY(b.getSouth(), b.getWest());
+  const [maxX, maxY] = toXY(b.getNorth(), b.getEast());
+  const xy = trk.xy, cum = trk.cum, n = trk.n;
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const x = xy[i * 2], y = xy[i * 2 + 1];
+    if (x < minX || x > maxX || y < minY || y > maxY) continue;
+    const d = cum[i]; if (d < lo) lo = d; if (d > hi) hi = d;
+  }
+  return hi > lo ? [lo, hi] : null;
+}
 function drawProgress(force) {
   if (!S.nav) return;
   const trk = S.tracks[S.sel], ns = S.navState;
@@ -1763,8 +1799,11 @@ function drawProgress(force) {
   ctx.clearRect(0, 0, w, h);
   const len = trk.lengthM || 1, sRaw = ns.idx >= 0 ? trk.cum[ns.idx] : (ns.dir > 0 ? 0 : len);
   const done = ns.dir > 0 ? sRaw : len - sRaw;
-  const frac = Math.max(0, Math.min(1, done / len));
-  const routeX = d => (ns.dir > 0 ? d : len - d) / len * w; // strip always reads left→right in riding direction
+  // strip spans only the stretch of track currently on screen, so its scale matches the map
+  const win = visibleWindow(trk);
+  const winLo = win ? win[0] : 0, winHi = win ? win[1] : len, span = (winHi - winLo) || len;
+  const routeX = d => (ns.dir > 0 ? d - winLo : winHi - d) / span * w; // reads left→right in riding direction
+  const posX = Math.max(0, Math.min(w, routeX(sRaw))); // current position, clamped into the window
   const expanded = prog.classList.contains('expanded') && trk.profile;
   let dotY = h / 2;
   if (expanded) {
@@ -1789,10 +1828,10 @@ function drawProgress(force) {
         ctx.moveTo(routeX(a.d), eY(a.e)); ctx.lineTo(routeX(b.d), eY(b.e));
         ctx.lineTo(routeX(b.d), h); ctx.lineTo(routeX(a.d), h); ctx.closePath(); ctx.fill();
       }
-      ctx.fillStyle = 'rgba(14,18,22,.6)'; ctx.fillRect(frac * w, 0, w - frac * w, h);
+      ctx.fillStyle = 'rgba(14,18,22,.6)'; ctx.fillRect(posX, 0, w - posX, h);
     } else {
       tracePath(true); ctx.fillStyle = '#26313d'; ctx.fill();
-      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, frac * w, h); ctx.clip();
+      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, posX, h); ctx.clip();
       tracePath(true); ctx.fillStyle = 'rgba(0,229,255,.4)'; ctx.fill(); ctx.restore();
     }
     tracePath(false); ctx.strokeStyle = '#55677a'; ctx.lineWidth = 1; ctx.stroke();
@@ -1801,16 +1840,17 @@ function drawProgress(force) {
   } else {
     const yC = h / 2;
     ctx.fillStyle = '#26313d'; ctx.fillRect(0, yC - 2.5, w, 5);
-    ctx.fillStyle = '#00e5ff'; ctx.fillRect(0, yC - 2.5, frac * w, 5);
+    ctx.fillStyle = '#00e5ff'; ctx.fillRect(0, yC - 2.5, posX, 5);
   }
   if (trk.alerts) for (const a of trk.alerts) {
     const x = routeX(a.at);
+    if (x < -1 || x > w + 1) continue; // cue outside the visible window
     ctx.fillStyle = '#ffb020';
     if (expanded) ctx.fillRect(x - 1, 0, 2, 8);
     else ctx.fillRect(x - 1, 2, 2, h - 4);
   }
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(frac * w, dotY, 4.5, 0, 7); ctx.fill();
-  ctx.fillStyle = '#4096ff'; ctx.beginPath(); ctx.arc(frac * w, dotY, 3, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(posX, dotY, 4.5, 0, 7); ctx.fill();
+  ctx.fillStyle = '#4096ff'; ctx.beginPath(); ctx.arc(posX, dotY, 3, 0, 7); ctx.fill();
   progDone.innerHTML = '<b>' + (done / 1000).toFixed(1) + ' km</b> · ' + fmtTime(ns.movingS);
   const rem = Math.max(0, len - done);
   progTogo.innerHTML = '<b>' + (rem / 1000).toFixed(1) + ' km</b> · ' +
@@ -1865,6 +1905,7 @@ function applyGloveSide() {
 /* ---------------- GPS ---------------- */
 let watchId = null;
 function startGPS() {
+  if (watchId != null) return; // already watching — GPS runs continuously so the dot shows even when idle
   if (!navigator.geolocation) { toast('No GPS available'); return; }
   watchId = navigator.geolocation.watchPosition(
     p => onFix(p.coords.latitude, p.coords.longitude, p.coords.accuracy, p.coords.speed, p.coords.heading),
@@ -1887,6 +1928,7 @@ function releaseWake() { if (wakeLock) { wakeLock.release().catch(() => {}); wak
 function startDemo() {
   const trk = S.tracks[S.sel]; if (!trk) { toast('Select a track first'); return; }
   stopDemo();
+  stopGPS(); // real GPS would fight the simulated fixes
   let d = 0;
   const SPEED = 8.5; // m/s ≈ 30 km/h
   S.demo = setInterval(() => {
@@ -1901,7 +1943,7 @@ function startDemo() {
   if (!S.nav) startNav();
   toast('Demo ride at 30 km/h — listen for beeps');
 }
-function stopDemo() { if (S.demo) { clearInterval(S.demo); S.demo = null; } }
+function stopDemo() { if (S.demo) { clearInterval(S.demo); S.demo = null; startGPS(); } } // resume real GPS
 document.getElementById('demoBtn').onclick = () => { closePanel(); S.demo ? (stopDemo(), stopNav()) : startDemo(); };
 document.getElementById('testBeep').onclick = () => { audio(); BEEP.turn(); };
 
@@ -2110,16 +2152,24 @@ function selectTrack(i) {
 }
 function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
-  const eb = document.getElementById('cueEditBtn');
-  if (S.sel < 0) { nm.textContent = 'No track selected'; sub.textContent = S.tracks.length ? 'tap ☰ to pick a track' : 'load a GPX to begin'; nb.disabled = true; eb.style.display = 'none'; return; }
+  const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revBtn');
+  if (S.sel < 0) { nm.textContent = 'No track selected'; sub.textContent = S.tracks.length ? 'tap ☰ to pick a track' : 'load a GPX to begin'; nb.disabled = true; eb.style.display = 'none'; rb.style.display = 'none'; return; }
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
   const nE = t.overlay ? t.overlay.removed.length + t.overlay.added.length : 0;
-  sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' cues' + (nE ? ' (' + nE + ' edited)' : '');
+  sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' cues' + (nE ? ' (' + nE + ' edited)' : '') + (t.reverse ? ' · reversed' : '');
   nb.disabled = false;
   eb.style.display = t.alerts ? 'flex' : 'none';
+  rb.style.display = 'flex'; rb.classList.toggle('active', !!t.reverse);
 }
+// reverse toggle: pick which way to ride the track before starting nav
+document.getElementById('revBtn').onclick = () => {
+  const t = S.tracks[S.sel]; if (!t) return;
+  t.reverse = !t.reverse;
+  updateBottomBar(); refreshMapData(); drawProgress(true);
+  toast(t.reverse ? 'Reverse — this track will navigate backwards' : 'Forward — normal track direction');
+};
 
 /* ---------------- cue edit mode: tap a dot to remove/restore, tap the route to add ---------------- */
 function setCueEdit(on) {
@@ -2246,6 +2296,7 @@ async function boot() {
   if (S.sel >= 0 && !S.tracks[S.sel].alerts)
     analyzeRoute(S.tracks[S.sel]).then(() => { updateBottomBar(); refreshMapData(); });
   fitSelected();
+  if (!S.demo) startGPS(); // show the location dot from the start, not only while navigating
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
