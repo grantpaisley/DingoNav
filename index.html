@@ -453,7 +453,8 @@ const ADV_D = {
   btnOp: 0.4, trailGap: 20, haloOp: 0.3, haloMul: 2.2,
   chevSize: 15, chevGap: 90, chevCol: '#003a44',
   colRoute: '#00e5ff', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
-  colTrail: '#e06d00', trailProm: 1, gpsAcc: 0,
+  colTrail: '#e06d00', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0,
+  dirtDash: 2.4, dirtGap: 1.4, singleDash: 0.1, singleGap: 1.7,
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
@@ -1145,6 +1146,13 @@ function addOverlays() {
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': clsMatch(), 'line-opacity': 0.35,
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
+  // heatmap under the route corridor — its own layer so the opacity is a knob
+  // (0 = dash gaps show pure basemap; raise it to see the recordings beneath the route)
+  map.addSource('heatU', { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'heat-under', type: 'line', source: 'heatU',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': clsMatch(), 'line-opacity': ADV('heatUnderOp'),
+      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
   map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
     layout: { 'line-join': 'round' },
     paint: { 'line-color': '#b4c8d7', 'line-opacity': 0.4, 'line-width': 1.6 } });
@@ -1168,21 +1176,22 @@ function addOverlays() {
   map.addLayer({ id: 'surf-halo-sealed', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'sealed'],
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W } });
+  const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
   map.addLayer({ id: 'surf-halo-dirt', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'dirt'],
     layout: { 'line-join': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W, 'line-dasharray': hd([2.4, 1.4]) } });
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W, 'line-dasharray': hd(dashDirt) } });
   map.addLayer({ id: 'surf-halo-single', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'single'],
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W, 'line-dasharray': hd([0.1, 1.7]) } });
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W, 'line-dasharray': hd(dashSingle) } });
   map.addLayer({ id: 'surf-sealed', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'sealed'],
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W } });
   map.addLayer({ id: 'surf-dirt', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'dirt'],
     layout: { 'line-join': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W, 'line-dasharray': [2.4, 1.4] } });
+    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W, 'line-dasharray': dashDirt } });
   map.addLayer({ id: 'surf-single', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'single'],
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W, 'line-dasharray': [0.1, 1.7] } });
+    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W, 'line-dasharray': dashSingle } });
   map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': ADV('colRoute'),
@@ -1257,9 +1266,90 @@ function circlePoly(lat, lon, radiusM) {
   }
   return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] } };
 }
+/* heatmap knocked out along the selected route, so the dash gaps in the route line show the
+   basemap underneath instead of heatmap orange. Data-level clip: heatmap vertices within
+   heatMask metres of the route (long segments get sampled so a straight run can't sneak
+   across) are split off into an "under" collection drawn by heat-under at its own opacity
+   (default fully transparent — dial heatUnderOp up to see the recordings beneath the route).
+   Cached per track — it's a one-off sweep. */
+let heatMaskCache = { src: null, key: '', data: null };
+function maskedHeatData() {
+  if (!S.heat) return { keep: EMPTY, under: EMPTY };
+  const trk = S.tracks[S.sel], M = ADV('heatMask');
+  if (!trk || !M) return { keep: S.heat.geojson, under: EMPTY };
+  const key = trk.id + ':' + M;
+  if (heatMaskCache.src === S.heat && heatMaskCache.key === key) return heatMaskCache.data;
+  const M2 = M * M, C = trk.cell;
+  // route bbox (+M) fast-rejects the bulk of the heatmap before any grid lookups
+  let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+  for (let i = 0; i < trk.n; i++) {
+    const x = trk.xy[i * 2], y = trk.xy[i * 2 + 1];
+    if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+    if (y < by0) by0 = y; if (y > by1) by1 = y;
+  }
+  bx0 -= M; by0 -= M; bx1 += M; by1 += M;
+  const nearRoute = (x, y) => { // 3×3 grid cells around the point cover the mask radius
+    if (x < bx0 || x > bx1 || y < by0 || y > by1) return false;
+    const cx = (x / C) | 0, cy = (y / C) | 0;
+    for (let ix = cx - 1; ix <= cx + 1; ix++) for (let iy = cy - 1; iy <= cy + 1; iy++) {
+      const a = trk.grid.get(ix + ',' + iy); if (!a) continue;
+      for (const i of a) { const dx = trk.xy[i * 2] - x, dy = trk.xy[i * 2 + 1] - y; if (dx * dx + dy * dy < M2) return true; }
+    }
+    return false;
+  };
+  const featsK = [], featsU = [];
+  for (const f of S.heat.geojson.features) {
+    const g = f.geometry; if (!g) continue;
+    const parts = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : null;
+    if (!parts) { featsK.push(f); continue; }
+    const runsK = [], runsU = [];
+    for (const coords of parts) {
+      let curK = [], curU = [], px = null, py = null, pc = null;
+      // boundary points join the under-run so the faint layer stays continuous with the kept line
+      const emit = (ll, keep) => {
+        if (keep) {
+          if (curU.length) { curU.push(ll); if (curU.length > 1) runsU.push(curU); curU = []; }
+          curK.push(ll);
+        } else {
+          if (curK.length) { curU.push(curK[curK.length - 1]); if (curK.length > 1) runsK.push(curK); curK = []; }
+          curU.push(ll);
+        }
+      };
+      for (const c of coords) {
+        const [x, y] = toXY(c[1], c[0]);
+        if (px != null) {
+          const seg = dist(px, py, x, y);
+          // sample long segments so the check can't be jumped — but only near the route bbox
+          if (seg > 30 && seg < 2000 &&
+              !(Math.max(px, x) < bx0 || Math.min(px, x) > bx1 || Math.max(py, y) < by0 || Math.min(py, y) > by1)) {
+            const steps = Math.ceil(seg / 15);
+            for (let s = 1; s < steps; s++) {
+              const t = s / steps;
+              emit([pc[0] + (c[0] - pc[0]) * t, pc[1] + (c[1] - pc[1]) * t], !nearRoute(px + (x - px) * t, py + (y - py) * t));
+            }
+          }
+        }
+        emit(c, !nearRoute(x, y));
+        px = x; py = y; pc = c;
+      }
+      if (curK.length > 1) runsK.push(curK);
+      if (curU.length > 1) runsU.push(curU);
+    }
+    for (const r of runsK) featsK.push({ type: 'Feature', properties: f.properties,
+      geometry: { type: 'LineString', coordinates: r } });
+    for (const r of runsU) featsU.push({ type: 'Feature', properties: f.properties,
+      geometry: { type: 'LineString', coordinates: r } });
+  }
+  heatMaskCache = { src: S.heat, key, data: {
+    keep: { type: 'FeatureCollection', features: featsK },
+    under: { type: 'FeatureCollection', features: featsU } } };
+  return heatMaskCache.data;
+}
 function refreshMapData() {
   if (!mapReady) return;
-  map.getSource('heat').setData(S.heat ? S.heat.geojson : EMPTY);
+  const heat = maskedHeatData();
+  map.getSource('heat').setData(heat.keep);
+  map.getSource('heatU').setData(heat.under);
   map.getSource('tracksOther').setData({ type: 'FeatureCollection',
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
       geometry: { type: 'LineString', coordinates: t.coordsLL } })) });
@@ -2536,6 +2626,12 @@ const ADV_UI = [
   { h: 'Rendering & misc' },
   { k: 'btnOp', l: 'Riding button opacity', min: 0.1, max: 1, step: 0.05 },
   { k: 'trailGap', l: 'Trail dot spacing (m)', min: 5, max: 100, step: 5 },
+  { k: 'heatMask', l: 'Heatmap knockout along route (m, 0 = off)', min: 0, max: 60, step: 2 },
+  { k: 'heatUnderOp', l: 'Heatmap under route opacity', min: 0, max: 0.5, step: 0.02 },
+  { k: 'dirtDash', l: 'Dirt dash length (×width)', min: 0.5, max: 8, step: 0.1 },
+  { k: 'dirtGap', l: 'Dirt gap length (×width)', min: 0.2, max: 8, step: 0.1 },
+  { k: 'singleDash', l: 'Singletrack dot length (×width)', min: 0.05, max: 4, step: 0.05 },
+  { k: 'singleGap', l: 'Singletrack gap length (×width)', min: 0.2, max: 8, step: 0.1 },
   { k: 'haloOp', l: 'Route halo opacity', min: 0, max: 1, step: 0.05 },
   { k: 'haloMul', l: 'Route halo width ×', min: 1.2, max: 4, step: 0.1 },
   { k: 'chevSize', l: 'Direction arrow size (0 off)', min: 0, max: 30, step: 1 },
@@ -2564,6 +2660,7 @@ let restyleT = null;
 function advApply(k) {
   if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // surface features bake the colour in
+  else if (k === 'heatMask') { heatMaskCache.key = ''; refreshMapData(); } // re-clip with the new radius
   else if (k === 'colTrail' || k === 'trailProm') { clearTimeout(restyleT); restyleT = setTimeout(() => setMapStyle(S.set.mapStyle), 400); }
   else applyAdvPaint();
 }
@@ -2580,8 +2677,13 @@ function applyAdvPaint() {
     map.setPaintProperty('surf-halo-' + s, 'line-width', HW);
     map.setPaintProperty('surf-halo-' + s, 'line-opacity', ADV('haloOp'));
   }
-  map.setPaintProperty('surf-halo-dirt', 'line-dasharray', hd([2.4, 1.4]));
-  map.setPaintProperty('surf-halo-single', 'line-dasharray', hd([0.1, 1.7]));
+  const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
+  map.setPaintProperty('surf-dirt', 'line-dasharray', dashDirt);
+  map.setPaintProperty('surf-single', 'line-dasharray', dashSingle);
+  map.setPaintProperty('surf-halo-dirt', 'line-dasharray', hd(dashDirt));
+  map.setPaintProperty('surf-halo-single', 'line-dasharray', hd(dashSingle));
+  map.setPaintProperty('heat-under', 'line-opacity', ADV('heatUnderOp'));
+  map.setPaintProperty('heat-under', 'line-color', clsMatch());
   map.setLayoutProperty('sel-chevrons', 'visibility', ADV('chevSize') > 0 ? 'visible' : 'none');
   map.setLayoutProperty('sel-chevrons', 'text-size', Math.max(1, ADV('chevSize')));
   map.setLayoutProperty('sel-chevrons', 'symbol-spacing', ADV('chevGap'));
