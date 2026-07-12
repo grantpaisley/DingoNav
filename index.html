@@ -2290,6 +2290,22 @@ async function boot() {
       }
     } catch (e) {}
   }
+  // Shared link: ?bundle=<url> (Dingo planner's share-by-link — a secret
+  // gist holding bundle.json). Fetch + import, then strip the param so
+  // reloads don't refetch; the import persists to IDB like any load.
+  const shared = new URLSearchParams(location.search).get('bundle');
+  if (shared) {
+    history.replaceState(null, '', location.pathname + location.hash);
+    try {
+      const resp = await fetch(shared);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const r = await addFile('shared-bundle.json', await resp.text());
+      if (r && r.bundle) {
+        toast(`Shared ride loaded — ${r.tracks} track${r.tracks === 1 ? '' : 's'}${r.heatmap ? ' + heatmap' : ''}${r.errs ? ' · ' + r.errs + ' failed' : ''}`);
+        if (r.tracks) S.sel = S.tracks.length - 1;
+      } else toast('Shared file loaded');
+    } catch (e) { console.warn('shared bundle failed', e); toast('Could not load the shared link — are you online?'); }
+  }
   if (S.tracks.length && S.sel < 0) S.sel = 0;
   refreshTrackList(); refreshEmpty(); updateBottomBar();
   await initMap(); // cue analysis needs basePM, so it runs after the map boots
