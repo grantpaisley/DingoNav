@@ -53,7 +53,7 @@
   /* mute: one tap on the riding screen, ghosted like the other ride controls */
   #muteBtn{position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:10px; z-index:12;
     width:96px; height:96px; border-radius:28px; background:rgba(22,28,34,.5); border:1px solid #2a3540;
-    display:none; align-items:center; justify-content:center; font-size:44px; opacity:.4; cursor:pointer}
+    display:none; align-items:center; justify-content:center; font-size:44px; opacity:var(--navOp,.4); cursor:pointer}
   #muteBtn:active{opacity:1}
   body.navving #muteBtn{display:flex}
   #muteBtn.muted{opacity:.75; border-color:var(--bad)}
@@ -76,16 +76,18 @@
   .ctl:active{background:var(--panel2)}
   .ctl.active{border-color:var(--accent); color:var(--accent)}
   /* riding-screen floating controls are twice the size for gloved hands */
+  #sideCtl{gap:8px}
   #sideCtl .ctl{width:108px; height:108px; border-radius:28px; font-size:48px}
-  /* riding screen: ± + heart stay, ghosted; browse-only controls hide (glove overlay has them) */
-  body.navving #sideCtl .ctl{opacity:.4; background:rgba(22,28,34,.5)}
+  /* zoom presets are squeezed between ± and ▢/◎ — shorter so the stack fits a phone */
+  #sideCtl .ctl.preset{height:60px; font-size:19px; font-weight:800; color:var(--dim)}
+  #sideCtl .ctl.preset.set{color:var(--fg)}
+  /* riding screen: every floating button ghosts to --navOp (advanced knob) until touched */
+  body.navving #sideCtl .ctl{opacity:var(--navOp,.4); background:rgba(22,28,34,.5)}
   body.navving #sideCtl .ctl:active{opacity:1}
-  body.navving #followBtn{display:none} /* fitBtn stays: zoom out to the whole track while navigating */
+  body.navving #north, body.navving #gloveBtn{opacity:var(--navOp,.4)}
+  body.navving #north:active, body.navving #gloveBtn:active{opacity:1}
   body.navving #cueEditBtn, body.navving #revBtn{display:none !important} /* planning-only */
   #cueEditBtn.active{border-color:var(--warn); color:var(--warn)}
-  #favBtn{display:none; font-size:22px}
-  #favBtn.show{display:flex}
-  #favBtn.active{border-color:var(--bad); color:var(--bad); opacity:.75}
   /* stacked under the speed readout, clear of the glance card (top centre) */
   #holdPill, #lockPill{position:fixed; top:64px; left:12px; z-index:14;
     display:none; padding:6px 14px; border-radius:999px; font-size:14px; color:var(--fg);
@@ -132,6 +134,9 @@
   #progLabels{display:flex; justify-content:space-between; font-size:12px; color:var(--dim);
     font-variant-numeric:tabular-nums; padding:2px 2px 4px}
   #progLabels b{color:var(--fg); font-weight:700}
+  /* turn-approach countdown: strip becomes a fixed full-width bar with a big number */
+  #progress.countdown #progCanvas{height:40px}
+  #progress.countdown #progLabels{display:none}
 
   /* ---------- bottom bar ---------- */
   #bottom{position:fixed; left:0; right:0; bottom:0; z-index:15;
@@ -154,7 +159,22 @@
     transform:translateY(105%); transition:transform .22s ease}
   #panel.on{transform:translateY(0)}
   #panel h3{font-size:13px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); margin:18px 0 8px}
-  #panel h3:first-child{margin-top:4px}
+  #panelNav{display:flex; gap:10px; margin-bottom:6px}
+  #panelNav #navBtn{flex:1}
+  #panelNav .ctl{width:56px; height:56px; flex:none}
+  #setTabs{display:flex; gap:6px; margin:18px 0 4px}
+  #setTabs button{flex:1; padding:11px 0; border-radius:10px; border:1px solid #2a3540; background:var(--panel2);
+    color:var(--dim); font-size:14px; font-weight:700; cursor:pointer}
+  #setTabs button.active{border-color:var(--accent); color:var(--accent)}
+  .tabSec{display:none}
+  .tabSec.on{display:block}
+  /* advanced tuning rows */
+  #advList .row{padding:8px 4px}
+  #advList .row label{font-size:13.5px; flex:1}
+  #advList input[type=range]{width:132px; accent-color:var(--accent)}
+  #advList input[type=color]{width:44px; height:30px; border:none; background:none; padding:0}
+  .advVal{font-size:13px; width:50px; text-align:right; font-variant-numeric:tabular-nums; flex:none}
+  .advRst{color:var(--dim); font-size:15px; padding:2px 4px; cursor:pointer; flex:none}
   .trk{display:flex; align-items:center; gap:12px; padding:12px 10px; border-radius:12px; cursor:pointer}
   .trk.sel{background:var(--panel2); outline:1px solid var(--accent)}
   .trk .dot{width:14px; height:14px; border-radius:50%; flex:none}
@@ -202,7 +222,9 @@
     body.navving #lockPill{top:calc(env(safe-area-inset-top) + 118px)}
     #muteBtn{width:40px; height:40px; font-size:19px; top:calc(env(safe-area-inset-top) + 44px)}
     /* short viewports: keep the enlarged controls from overflowing the landscape column */
+    #sideCtl{gap:6px}
     #sideCtl .ctl{width:64px; height:64px; border-radius:16px; font-size:30px}
+    #sideCtl .ctl.preset{height:38px; font-size:13px}
     #north{width:56px; height:56px; font-size:20px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
@@ -236,11 +258,13 @@
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div id="sideCtl">
-  <div class="ctl" id="favBtn" title="favourite zoom">♡</div>
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl" id="zoomOut">−</div>
-  <div class="ctl" id="followBtn" title="follow GPS">◎</div>
+  <div class="ctl preset" data-p="min" title="min zoom — tap to jump, hold to set">min</div>
+  <div class="ctl preset" data-p="med" title="mid zoom — tap to jump, hold to set">med</div>
+  <div class="ctl preset" data-p="max" title="max zoom — tap to jump, hold to set">max</div>
   <div class="ctl" id="fitBtn" title="fit track">⛶</div>
+  <div class="ctl" id="followBtn" title="centre on location">◎</div>
 </div>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
 <div id="lockPill" title="centre lock — long-press map to unlock">🔒 locked</div>
@@ -270,13 +294,16 @@
 <div id="bottom">
   <div class="ctl" id="menuBtn">☰</div>
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
-  <div class="ctl" id="revBtn" title="reverse direction" style="display:none">⇄</div>
   <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none">✎</div>
-  <button id="navBtn" disabled>START</button>
 </div>
 
 <div id="shade"></div>
 <div id="panel">
+  <div id="panelNav">
+    <button id="navBtn" disabled>START</button>
+    <div class="ctl" id="revBtn" title="reverse direction" style="display:none">⇄</div>
+  </div>
+
   <h3>Tracks</h3>
   <div id="trackList"></div>
   <div class="btnRow">
@@ -286,44 +313,70 @@
   <div class="hint">Load .gpx tracks and a heatmap .geojson (exported from <b>Dingo</b>). Everything is stored on this device and works fully offline.</div>
   <div class="hint" id="heatInfo"></div>
 
-  <h3>Offline basemap</h3>
-  <div id="baseStatus">no basemap loaded</div>
-  <div class="btnRow"><button class="btn" id="baseBtn">Load .pmtiles basemap…</button></div>
-  <div class="hint">A .pmtiles extract gives roads, trails, water and labels offline. One is auto-downloaded on first open when hosted with the app; cut other areas with the <b>pmtiles</b> CLI (see README).</div>
+  <div id="setTabs">
+    <button data-t="General" class="active">General</button>
+    <button data-t="Nav">Nav</button>
+    <button data-t="Keys">Keys</button>
+    <button data-t="Adv" id="advTabBtn" style="display:none">Adv</button>
+  </div>
 
-  <div class="row"><label>Strava heatmap overlay</label><span class="sw"><input type="checkbox" id="setStrava"><span></span></span></div>
-  <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
+  <div class="tabSec on" id="tabGeneral">
+    <h3>Offline basemap</h3>
+    <div id="baseStatus">no basemap loaded</div>
+    <div class="btnRow"><button class="btn" id="baseBtn">Load .pmtiles basemap…</button></div>
+    <div class="hint">A .pmtiles extract gives roads, trails, water and labels offline. One is auto-downloaded on first open when hosted with the app; cut other areas with the <b>pmtiles</b> CLI (see README).</div>
 
-  <h3>Group ride (needs signal)</h3>
-  <div class="row"><label>Your name</label><input type="text" id="myName" maxlength="12" placeholder="Grant"></div>
-  <div class="row"><label>Ride code</label><input type="text" id="rideCode" maxlength="24" placeholder="e.g. watagans-42"></div>
-  <div id="friendStatus">off — enter a shared code to see friends</div>
-  <div class="hint">Everyone with the same code sees each other's position (updates ~20 s via ntfy.sh when online; silently off without signal). Use a code others can't guess.</div>
+    <div class="row"><label>Strava heatmap overlay</label><span class="sw"><input type="checkbox" id="setStrava"><span></span></span></div>
+    <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
+    <div class="row"><label>Map style</label><span class="seg" id="styleSeg">
+      <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button></span></div>
+    <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
+    <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
 
-  <h3>Settings</h3>
-  <div class="row"><label>Turn beeps</label><span class="sw"><input type="checkbox" id="setSound" checked><span></span></span></div>
-  <div class="row"><label>Turn confirmation chirp</label><span class="sw"><input type="checkbox" id="setConfirm" checked><span></span></span></div>
-  <div class="row"><label>Vehicle (alerts + zoom)</label><span class="seg" id="vehSeg">
-    <button data-v="walk">Walk</button><button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
-  <div class="row"><label>Map style</label><span class="seg" id="styleSeg">
-    <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button></span></div>
-  <div class="row"><label>Auto-zoom with speed</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
-  <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
-  <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
+    <h3>Group ride (needs signal)</h3>
+    <div class="row"><label>Your name</label><input type="text" id="myName" maxlength="12" placeholder="Grant"></div>
+    <div class="row"><label>Ride code</label><input type="text" id="rideCode" maxlength="24" placeholder="e.g. watagans-42"></div>
+    <div id="friendStatus">off — enter a shared code to see friends</div>
+    <div class="hint">Everyone with the same code sees each other's position (updates ~20 s via ntfy.sh when online; silently off without signal). Use a code others can't guess.</div>
 
-  <h3>Controller buttons</h3>
-  <div class="hint">Works with any Bluetooth remote that types keys (e.g. a DMD2 handlebar controller). Tap an action, then press the button on your remote. Esc while capturing clears a custom key.</div>
-  <div class="row"><label>Zoom in</label><button class="btn keyBtn" data-k="zin">default</button></div>
-  <div class="row"><label>Zoom out</label><button class="btn keyBtn" data-k="zout">default</button></div>
-  <div class="row"><label>Mute</label><button class="btn keyBtn" data-k="mute">default</button></div>
-  <div class="row"><label>Re-centre</label><button class="btn keyBtn" data-k="center">default</button></div>
-  <div class="row"><label>North / course / compass</label><button class="btn keyBtn" data-k="orient">default</button></div>
-  <div class="row"><label>Map style flip</label><button class="btn keyBtn" data-k="style">default</button></div>
+    <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
+    <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
+    <div class="row"><label>Show advanced tab</label><span class="sw"><input type="checkbox" id="setShowAdv"><span></span></span></div>
+  </div>
 
-  <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
-  <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
-  <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
-  <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
+  <div class="tabSec" id="tabNav">
+    <div class="row"><label>Turn beeps</label><span class="sw"><input type="checkbox" id="setSound" checked><span></span></span></div>
+    <div class="row"><label>Turn confirmation chirp</label><span class="sw"><input type="checkbox" id="setConfirm" checked><span></span></span></div>
+    <div class="row"><label>Vehicle (alerts + zoom)</label><span class="seg" id="vehSeg">
+      <button data-v="walk">Walk</button><button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
+    <div class="row"><label>Auto-zoom</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
+    <div class="row"><label>Compass when zoomed in</label><span class="seg" id="compassSeg">
+      <button data-c="turns">Turns</button><button data-c="thresh">Zoom</button><button data-c="off">Off</button></span></div>
+    <div class="row"><label>Countdown units</label><span class="seg" id="cdSeg">
+      <button data-u="m">Metres</button><button data-u="s">Seconds</button></span></div>
+    <div class="row"><label>Steepness colouring</label><span class="sw"><input type="checkbox" id="setSteep"><span></span></span></div>
+    <div class="row"><label>Road-surface patterns</label><span class="sw"><input type="checkbox" id="setSurf"><span></span></span></div>
+    <div class="row"><label>Backtrack trail</label><span class="sw"><input type="checkbox" id="setTrail"><span></span></span></div>
+    <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
+    <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
+  </div>
+
+  <div class="tabSec" id="tabKeys">
+    <h3>Controller buttons</h3>
+    <div class="hint">Works with any Bluetooth remote that types keys (e.g. a DMD2 handlebar controller). Tap an action, then press the button on your remote. Esc while capturing clears a custom key.</div>
+    <div class="row"><label>Zoom in</label><button class="btn keyBtn" data-k="zin">default</button></div>
+    <div class="row"><label>Zoom out</label><button class="btn keyBtn" data-k="zout">default</button></div>
+    <div class="row"><label>Mute</label><button class="btn keyBtn" data-k="mute">default</button></div>
+    <div class="row"><label>Re-centre</label><button class="btn keyBtn" data-k="center">default</button></div>
+    <div class="row"><label>North / course / compass</label><button class="btn keyBtn" data-k="orient">default</button></div>
+    <div class="row"><label>Map style flip</label><button class="btn keyBtn" data-k="style">default</button></div>
+  </div>
+
+  <div class="tabSec" id="tabAdv">
+    <div class="hint">Live tuning knobs — changes apply immediately and persist on this device. ↺ resets a row to default.</div>
+    <div id="advList"></div>
+    <div class="btnRow"><button class="btn" id="advCopy">Copy tuning JSON</button></div>
+  </div>
 </div>
 
 <input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json,.dingonav,.zip,application/zip,application/octet-stream" hidden>
@@ -375,10 +428,34 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
-  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north', profile: false, gloveSide: 'left', vehicle: 'enduro', steep: false, favSpan: {}, keys: {}, mapStyle: 'daylight' },
+  trail: [], trailTrack: null, autoOrient: false, autoBlock: false,
+  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north',
+    profile: false, gloveSide: 'left', vehicle: 'enduro', steep: true, surf: true, trail: true,
+    compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight' },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
+S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
+// v2 migration: steepness becomes default-on, ♥ favourite spans become the max zoom preset
+if (!S.set._v2) {
+  S.set._v2 = 1; S.set.steep = true;
+  if (S.set.favSpan) for (const v in S.set.favSpan)
+    (S.set.zoomPresets[v] = S.set.zoomPresets[v] || {}).max = S.set.favSpan[v];
+  delete S.set.favSpan;
+  saveSet();
+}
+
+/* advanced tuning knobs: hand-tuned constants promoted to sliders while the feel is dialled in.
+   ADV(k) reads the override or the shipping default; the Adv tab writes S.set.adv. */
+const ADV_D = {
+  headDamp: 0.12, headDead: 2, rotHz: 4, easeMs: 900, zoomThresh: 15,
+  apprMul: 1.5, apprFloor: 250, offM: 60, onM: 40, beepVol: 0.5, cdDist: 300,
+  btnOp: 0.4, trailGap: 20, haloOp: 0.3, haloMul: 2.2,
+  chevSize: 15, chevGap: 90, chevCol: '#003a44',
+  colRoute: '#00e5ff', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
+  colTrail: '#e06d00', trailProm: 1, gpsAcc: 0,
+};
+function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
 let basePM = null, basePMKey = 'none'; // PMTiles handle for the cue engine's corridor decode
 let stravaMeta = null; // {count, zmin, zmax} of baked Strava tiles in IDB, or null
@@ -891,7 +968,8 @@ function mkManualCue(trk, idx) { // same shape the analyser emits; geometry-only
 /* ---------------- audio ---------------- */
 let AC = null;
 function audio() { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); return AC; }
-function tone(freq, dur, when, vol = 0.5) {
+function tone(freq, dur, when, vol) {
+  vol = vol == null ? ADV('beepVol') : vol;
   const ctx = audio(), t = ctx.currentTime + when;
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.type = 'square'; o.frequency.value = freq;
@@ -916,10 +994,13 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 const TRACK_W = ['interpolate', ['exponential', 1.6], ['zoom'], 13, 1.2, 16, 3.5, 20, 16];
 const MAP_STYLES = {
   daylight: { label: 'Day', file: 'layers-light.json', sprite: 'light',
-    ov: { roads_other: { 'line-color': '#8a7355' } } },                       // tracks/paths readable brown
+    ov: () => ({ roads_other: { 'line-color': '#8a7355' } }) },               // tracks/paths readable brown
   contrast: { label: 'Trail', file: 'layers-light.json', sprite: 'light',
-    ov: { roads_other: { 'line-color': '#e06d00', 'line-width': TRACK_W },    // loud orange, fattened
-          earth: { 'fill-color': '#eceae4' } } },
+    // minor-trail colour + prominence are advanced knobs — the default orange clashes with the heatmap
+    ov: () => { const p = ADV('trailProm');
+      return { roads_other: { 'line-color': ADV('colTrail'),
+        'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 13, 1.2 * p, 16, 3.5 * p, 20, 16 * p] },
+        earth: { 'fill-color': '#eceae4' } }; } },
   dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null },
 };
 const STYLE_CYCLE = ['daylight', 'contrast', 'dark'];
@@ -933,8 +1014,9 @@ async function buildStyle() {
   const st = curStyle();
   if (!baseLayerCache[st.file]) baseLayerCache[st.file] = await (await fetch('basemap/' + st.file)).json();
   let layersArr = baseLayerCache[st.file];
-  if (st.ov) layersArr = layersArr.map(l => st.ov[l.id]
-    ? { ...l, paint: { ...l.paint, ...st.ov[l.id] } } : l);
+  const ov = st.ov && st.ov();
+  if (ov) layersArr = layersArr.map(l => ov[l.id]
+    ? { ...l, paint: { ...l.paint, ...ov[l.id] } } : l);
   return { version: 8,
     glyphs: baseUrlRef + 'fonts/{fontstack}/{range}.pbf', // string concat — new URL() would %-encode the tokens
     sprite: baseUrlRef + 'sprites/' + st.sprite,
@@ -1003,7 +1085,10 @@ async function initMap() {
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
   map.on('dragstart', () => { if (S.nav) setFollow(false); });
   // gesture zoom (pinch / wheel / double-tap) while navigating = hold, same as the ± buttons
-  map.on('zoomend', e => { if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom()); });
+  map.on('zoomend', e => {
+    if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom());
+    if (S.nav) autoCompass(); // threshold-mode compass tracks zoom level
+  });
   map.on('click', e => { if (S.cueEdit && !S.nav) cueEditTap(e.lngLat); });
   initLockGesture();
   map.on('mousedown', closeGlove); map.on('touchstart', closeGlove); // tap the map = dismiss glove overlay
@@ -1031,7 +1116,7 @@ async function initMap() {
   mapReady = true; // before addOverlays — its refreshMapData() call needs this
   addOverlays();
 }
-const CLS_MATCH = ['match', ['get', 'class'], 'other', '#ff2d2d', 'plan', '#3390ff', '#ff7a00'];
+function clsMatch() { return ['match', ['get', 'class'], 'other', ADV('colOther'), 'plan', ADV('colPlan'), ADV('colOwn')]; }
 function addOverlays() {
   // Strava heatmap raster — added first so it sits directly on the basemap,
   // UNDER our own heatmap and tracks. Only when a bundle shipped tiles.
@@ -1054,42 +1139,61 @@ function addOverlays() {
 
   map.addLayer({ id: 'heat-halo', type: 'line', source: 'heat',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': CLS_MATCH, 'line-opacity': 0.10, 'line-blur': 4,
+    paint: { 'line-color': clsMatch(), 'line-opacity': 0.10, 'line-blur': 4,
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 2, 12, 6, 15, 14, 17, 26] } });
   map.addLayer({ id: 'heat-core', type: 'line', source: 'heat',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': CLS_MATCH, 'line-opacity': 0.35,
+    paint: { 'line-color': clsMatch(), 'line-opacity': 0.35,
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
   map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
     layout: { 'line-join': 'round' },
     paint: { 'line-color': '#b4c8d7', 'line-opacity': 0.4, 'line-width': 1.6 } });
-  map.addLayer({ id: 'sel-casing', type: 'line', source: 'selTrack',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': '#001318', 'line-opacity': 0.7,
-      'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 8] } });
-  // surface-patterned route (solid = sealed, dashes = dirt, dots = singletrack) drawn on the
-  // continuous casing above, so the route never visually breaks. Replaces sel-core whenever
-  // way-class data exists and steepness colouring is off.
+  // backtrack trail: muted dotted thread of where you've actually been, under the route
+  map.addSource('trail', { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'trail-dots', type: 'line', source: 'trail',
+    layout: { 'line-cap': 'round' },
+    paint: { 'line-color': '#9fb4c6', 'line-opacity': 0.85, 'line-width': 3.5, 'line-dasharray': [0.1, 2] } });
+  /* route rendering: colour = steepness (grade bands baked into feature colours),
+     pattern = surface (solid sealed / dashed dirt / dotted singletrack). Halo layers give a
+     same-colour translucent edge — dash patterns scaled by width so the gaps stay transparent
+     (no dark casing underneath any more). Steepness-only mode rides bare on sel-core. */
   map.addSource('selSurf', { type: 'geojson', data: EMPTY });
   const SURF_W = ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 4];
+  const m = ADV('haloMul');
+  const HALO_W = ['interpolate', ['linear'], ['zoom'], 10, 2.5 * m, 15, 4 * m];
+  const hd = a => a.map(x => +(x / m).toFixed(2)); // dash lengths are in line-widths — rescale for the fat halo
+  map.addLayer({ id: 'sel-halo', type: 'line', source: 'selTrack',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': ADV('colRoute'), 'line-opacity': ADV('haloOp'), 'line-width': HALO_W } });
+  map.addLayer({ id: 'surf-halo-sealed', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'sealed'],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W } });
+  map.addLayer({ id: 'surf-halo-dirt', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'dirt'],
+    layout: { 'line-join': 'round' },
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W, 'line-dasharray': hd([2.4, 1.4]) } });
+  map.addLayer({ id: 'surf-halo-single', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'single'],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W, 'line-dasharray': hd([0.1, 1.7]) } });
   map.addLayer({ id: 'surf-sealed', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'sealed'],
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': '#00e5ff', 'line-width': SURF_W } });
+    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W } });
   map.addLayer({ id: 'surf-dirt', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'dirt'],
     layout: { 'line-join': 'round' },
-    paint: { 'line-color': '#00e5ff', 'line-width': SURF_W, 'line-dasharray': [2.4, 1.4] } });
+    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W, 'line-dasharray': [2.4, 1.4] } });
   map.addLayer({ id: 'surf-single', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'single'],
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': '#00e5ff', 'line-width': SURF_W, 'line-dasharray': [0.1, 1.7] } });
+    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W, 'line-dasharray': [0.1, 1.7] } });
   map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': '#00e5ff',
+    paint: { 'line-color': ADV('colRoute'),
       'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 4] } });
   map.addLayer({ id: 'sel-chevrons', type: 'symbol', source: 'selTrack',
-    layout: { 'symbol-placement': 'line', 'symbol-spacing': 90, 'text-field': '›',
-      'text-size': 15, 'text-font': ['Noto Sans Medium'], 'text-keep-upright': false,
-      'text-allow-overlap': true, 'text-rotation-alignment': 'map' },
-    paint: { 'text-color': '#003a44' } });
+    layout: { 'symbol-placement': 'line', 'symbol-spacing': ADV('chevGap'), 'text-field': '›',
+      'text-size': Math.max(1, ADV('chevSize')), 'text-font': ['Noto Sans Medium'], 'text-keep-upright': false,
+      'text-allow-overlap': true, 'text-rotation-alignment': 'map',
+      visibility: ADV('chevSize') > 0 ? 'visible' : 'none' },
+    paint: { 'text-color': ADV('chevCol'),
+      'text-halo-color': 'rgba(255,255,255,0.9)', 'text-halo-width': 1.4 } }); // halo keeps arrows legible over grade colours
   map.addLayer({ id: 'alert-dots', type: 'circle', source: 'alerts', minzoom: 12.5,
     filter: ['!', ['get', 'removed']], // greyed-out deletions only show in edit mode
     paint: { 'circle-radius': 4.5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#0e1216',
@@ -1134,7 +1238,7 @@ function addOverlays() {
   map.addLayer({ id: 'pos-arrow', type: 'symbol', source: 'pos',
     layout: { 'icon-image': 'nav-dart', 'icon-size': 1.5, 'icon-rotate': ['get', 'heading'],
       'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
-  refreshMapData();
+  refreshMapData(); refreshTrail(); applyAdvPaint(); refreshPresets();
 }
 function navDartImage() { // classic location-arrow: triangle with a notched tail, white-outlined
   const c = document.createElement('canvas'); c.width = c.height = 56;
@@ -1174,17 +1278,28 @@ function refreshMapData() {
   map.getSource('alerts').setData({ type: 'FeatureCollection', features: cueFeats });
   // surface segments: consecutive same-surface runs of the resampled track (unmapped = dirt,
   // the safe guess out there). End point shared with the next run so the line never gaps.
+  // Each run also carries its colour: the steepness grade band when steepness is on
+  // (colour = steepness, pattern = surface), else the flat route colour.
   const surfFeats = [];
   if (trk && trk.wayCls) {
     const surfOf = c => c === 1 ? 'sealed' : c === 3 ? 'single' : 'dirt';
-    let s0 = 0;
+    const steepOn = !!(S.set.steep && trk.hasEle && trk.profile && trk.profile.length > 1);
+    const P = trk.profile;
+    let pi = 1;
+    const colAt = d => { // monotonic walk — cum only ever increases
+      if (!steepOn) return ADV('colRoute');
+      while (pi < P.length - 1 && P[pi].d < d) pi++;
+      return gradeColor(segGrade(P[pi - 1], P[pi]));
+    };
+    let s0 = 0, col0 = colAt(trk.cum[0]);
     for (let i = 1; i <= trk.n; i++) {
-      if (i < trk.n && surfOf(trk.wayCls[i]) === surfOf(trk.wayCls[s0])) continue;
+      const col = i < trk.n ? colAt(trk.cum[i]) : null;
+      if (i < trk.n && surfOf(trk.wayCls[i]) === surfOf(trk.wayCls[s0]) && col === col0) continue;
       const coords = [];
       for (let j = s0; j <= Math.min(i, trk.n - 1); j++) { const [la, lo] = toLL(trk.xy[j * 2], trk.xy[j * 2 + 1]); coords.push([lo, la]); }
-      if (coords.length > 1) surfFeats.push({ type: 'Feature', properties: { s: surfOf(trk.wayCls[s0]) },
+      if (coords.length > 1) surfFeats.push({ type: 'Feature', properties: { s: surfOf(trk.wayCls[s0]), c: col0 },
         geometry: { type: 'LineString', coordinates: coords } });
-      s0 = i;
+      s0 = i; col0 = col;
     }
   }
   map.getSource('selSurf').setData({ type: 'FeatureCollection', features: surfFeats });
@@ -1197,15 +1312,18 @@ const GRADE_COLORS = ['#2ecc71', '#f1c40f', '#ff8c00', '#ff3b30', '#e040fb'];
 function gradeColor(g) { let i = 0; while (i < GRADE_BOUNDS.length && g >= GRADE_BOUNDS[i]) i++; return GRADE_COLORS[i]; }
 function segGrade(a, b) { return Math.abs(b.e - a.e) / Math.max(1, Math.abs(b.d - a.d)) * 100; }
 function applySteepness() {
-  if (!mapReady) return;
+  if (!mapReady || !map.getLayer('sel-core')) return;
   const trk = S.tracks[S.sel];
-  const on = S.set.steep && trk && trk.hasEle && trk.profile && trk.profile.length > 1;
-  // route rendering arbitration: steepness gradient wins; else surface patterns when
-  // way-class data exists; else the plain solid core
-  const surfOn = !on && trk && trk._hasSurf;
-  map.setLayoutProperty('sel-core', 'visibility', surfOn ? 'none' : 'visible');
-  for (const l of ['surf-sealed', 'surf-dirt', 'surf-single'])
-    map.setLayoutProperty(l, 'visibility', surfOn ? 'visible' : 'none');
+  const steepOn = !!(S.set.steep && trk && trk.hasEle && trk.profile && trk.profile.length > 1);
+  // arbitration: surface patterns carry the route (with steepness colours baked into the
+  // features when both are on); sel-core covers surface-off / no-way-class tracks.
+  // Steepness rides bare — halos (the same-colour outline) only show when it's off.
+  const surfOn = S.set.surf !== false && trk && trk._hasSurf;
+  const vis = (l, on) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none');
+  vis('sel-core', !surfOn);
+  vis('sel-halo', !surfOn && !steepOn);
+  for (const s of ['sealed', 'dirt', 'single']) { vis('surf-' + s, surfOn); vis('surf-halo-' + s, surfOn && !steepOn); }
+  const on = steepOn && !surfOn; // line-gradient path: steepness on a plain core line
   if (!on) { map.setPaintProperty('sel-core', 'line-gradient', null); return; }
   const dir = S.navState ? S.navState.dir : (trk && trk.reverse ? -1 : 1);
   const P = trk.profile, len = trk.lengthM || 1;
@@ -1260,31 +1378,30 @@ function refreshFriends() {
 
 /* ---------------- follow / zoom ---------------- */
 function zoomForSpan(span, lat) {
-  const h = map.getContainer().clientHeight || 700;
+  const h = (map && map.getContainer().clientHeight) || 700; // pre-map callers (boot labels) use a nominal screen
   return Math.log2(156543.03392 * Math.cos(lat * Math.PI / 180) * h / span);
 }
 function spanForZoom(zoom, lat) {
-  const h = map.getContainer().clientHeight || 700;
+  const h = (map && map.getContainer().clientHeight) || 700;
   return 156543.03392 * Math.cos(lat * Math.PI / 180) * h / 2 ** zoom;
 }
-function speedZoom(speedMs, lat) {
-  const pts = (VEHICLES[S.set.vehicle] || VEHICLES.enduro).spans, v = speedMs || 0;
-  let span = pts[pts.length - 1][1];
-  if (v <= pts[0][0]) span = pts[0][1];
-  else for (let i = 1; i < pts.length; i++) if (v <= pts[i][0]) {
-    const [v0, s0] = pts[i - 1], [v1, s1] = pts[i];
-    span = s0 + (s1 - s0) * (v - v0) / (v1 - v0); break;
-  }
-  return zoomForSpan(span, lat);
+/* zoom presets: min = turn framing, med = manual bookmark, max = cruise. Stored per vehicle
+   as metres of visible map height (screen-size independent); unset presets fall back to the
+   vehicle span curve's endpoints (midpoint for med). */
+function presetSpan(k) {
+  const p = S.set.zoomPresets[S.set.vehicle] || {};
+  if (p[k]) return p[k];
+  const spans = (VEHICLES[S.set.vehicle] || VEHICLES.enduro).spans;
+  const mn = spans[0][1], mx = spans[spans.length - 1][1];
+  return k === 'min' ? mn : k === 'max' ? mx : Math.round(Math.sqrt(mn * mx));
 }
-/* cruise zoom priority: manual hold (until the next cue approach) > heart favourite > speed curve.
-   A cue approach releases the hold and rides the speed curve to frame the turn. */
+/* cruise zoom priority: manual hold (until the next cue approach) > max preset.
+   A cue approach releases the hold and dives to the min preset to frame the turn. */
 function cruiseZoom(la) {
   const ns = S.navState;
-  if (ns && ns.approach) { setHold(null); return speedZoom(S.pos.speed, la); }
+  if (ns && ns.approach) { setHold(null); return zoomForSpan(presetSpan('min'), la); }
   if (S.zoomHold != null) return null; // held — leave the camera zoom alone
-  const fav = (S.set.favSpan || {})[S.set.vehicle];
-  return fav ? zoomForSpan(fav, la) : speedZoom(S.pos.speed, la);
+  return zoomForSpan(presetSpan('max'), la);
 }
 let lastEase = 0;
 function followCamera() {
@@ -1292,39 +1409,21 @@ function followCamera() {
   const now = Date.now(); if (now - lastEase < 800) return;
   lastEase = now;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
-  const opts = { center: [lo, la], duration: 900, easing: t => t };
+  const opts = { center: [lo, la], duration: ADV('easeMs'), easing: t => t };
   // off track: freeze the zoom (keep centring) until back on track — no lurching auto-zoom while lost
   if (S.set.autoZoom && !(S.navState && S.navState.off)) { const z = cruiseZoom(la); if (z != null) opts.zoom = z; }
-  if (S.set.orient === 'course' && S.courseBearing != null) opts.bearing = S.courseBearing;
-  else if (S.set.orient === 'oriented' && S.deviceHeading != null) opts.bearing = S.deviceHeading;
+  const o = effOrient();
+  if (o === 'course' && S.courseBearing != null) opts.bearing = S.courseBearing;
+  else if (o === 'oriented' && S.deviceHeading != null) opts.bearing = S.deviceHeading;
   map.easeTo(opts);
 }
 /* manual zoom while navigating = hold: stay at that zoom until the next turn approach */
-const holdPill = document.getElementById('holdPill'), favBtn = document.getElementById('favBtn');
+const holdPill = document.getElementById('holdPill');
 function setHold(z) {
   S.zoomHold = z;
   holdPill.classList.toggle('on', z != null && S.nav && S.set.autoZoom);
-  refreshFav();
-}
-function refreshFav() {
-  const fav = (S.set.favSpan || {})[S.set.vehicle];
-  favBtn.textContent = fav ? '♥' : '♡';
-  favBtn.classList.toggle('active', !!fav);
-  // heart offers itself after a manual nudge, and stays while a favourite is set
-  favBtn.classList.toggle('show', !!fav || S.zoomHold != null);
 }
 holdPill.onclick = () => setHold(null);
-favBtn.onclick = () => {
-  if (!S.set.favSpan) S.set.favSpan = {};
-  const had = S.set.favSpan[S.set.vehicle];
-  if (had) { delete S.set.favSpan[S.set.vehicle]; toast('Favourite zoom cleared — back to speed zoom'); }
-  else if (S.pos && mapReady) {
-    const [la] = toLL(S.pos.x, S.pos.y);
-    S.set.favSpan[S.set.vehicle] = Math.round(spanForZoom(map.getZoom(), la));
-    setHold(null); toast('Favourite zoom set for ' + S.set.vehicle);
-  }
-  saveSet(); refreshFav();
-};
 function manualZoom(dir) {
   if (!map) return;
   dir > 0 ? map.zoomIn() : map.zoomOut();
@@ -1332,6 +1431,44 @@ function manualZoom(dir) {
 }
 document.getElementById('zoomIn').onclick = () => manualZoom(1);
 document.getElementById('zoomOut').onclick = () => manualZoom(-1);
+
+/* preset buttons: tap = jump there & lock (same semantics as a manual nudge),
+   hold ~600 ms = capture the current zoom as that preset. Labels show the stored level. */
+const PRESET_LABEL = { min: 'min', med: 'med', max: 'max' };
+function centerLat() { return mapReady ? map.getCenter().lat : -33; }
+function refreshPresets() {
+  for (const b of document.querySelectorAll('.ctl.preset')) {
+    const k = b.dataset.p, p = S.set.zoomPresets[S.set.vehicle] || {};
+    b.textContent = p[k] ? 'L' + Math.round(zoomForSpan(p[k], centerLat())) : PRESET_LABEL[k];
+    b.classList.toggle('set', !!p[k]);
+  }
+}
+function presetTap(k) {
+  if (!mapReady) return;
+  const z = zoomForSpan(presetSpan(k), centerLat());
+  map.easeTo({ zoom: z, duration: 350 });
+  if (S.nav && S.set.autoZoom) setTimeout(() => setHold(z), 400);
+}
+function presetSet(k) {
+  if (!mapReady) return;
+  const z = map.getZoom();
+  const zp = S.set.zoomPresets[S.set.vehicle] = S.set.zoomPresets[S.set.vehicle] || {};
+  zp[k] = Math.round(spanForZoom(z, centerLat()));
+  saveSet(); vib([40]); refreshPresets();
+  toast(PRESET_LABEL[k] + ' zoom set to L' + z.toFixed(1) + ' (' + S.set.vehicle + ')');
+}
+for (const b of document.querySelectorAll('.ctl.preset')) {
+  const k = b.dataset.p;
+  let t = null, held = false;
+  const down = () => { held = false; clearTimeout(t); t = setTimeout(() => { held = true; presetSet(k); }, 600); };
+  const up = () => { clearTimeout(t); if (!held) presetTap(k); held = false; };
+  b.addEventListener('touchstart', e => { e.preventDefault(); down(); }, { passive: false }); // no synthetic mouse double-fire
+  b.addEventListener('touchend', up);
+  b.addEventListener('touchcancel', () => clearTimeout(t));
+  b.addEventListener('mousedown', down);
+  b.addEventListener('mouseup', up);
+  b.addEventListener('mouseleave', () => clearTimeout(t));
+}
 document.getElementById('fitBtn').onclick = () => { fitSelected(); setFollow(false); };
 document.getElementById('followBtn').onclick = () => {
   setFollow(!S.follow);
@@ -1474,24 +1611,50 @@ function compassHeading(e) {
   } else return null; // plain relative 'deviceorientation' on Android — not a compass, ignore
   return (mag + MAG_DECLINATION + 360) % 360; // magnetic -> true north
 }
+/* effective orientation: the rider's chosen mode, or compass while auto-compass has taken over */
+function effOrient() { return S.autoOrient ? 'oriented' : S.set.orient; }
 function onDeviceOrient(e) {
-  if (S.set.orient !== 'oriented') return;
+  if (effOrient() !== 'oriented') return;
   const h = compassHeading(e); if (h == null) return;
-  // low-pass the magnetometer (it jitters); shortest-arc step so it doesn't wrap the long way
-  S.deviceHeading = S.deviceHeading == null ? h : (S.deviceHeading + angDiff(S.deviceHeading, h) * 0.25 + 360) % 360;
+  // low-pass the magnetometer (it jitters); shortest-arc step so it doesn't wrap the long way.
+  // Dead-band swallows micro-jitter, and damping doubles when stopped — that's when it's worst.
+  if (S.deviceHeading == null) S.deviceHeading = h;
+  else {
+    const d = angDiff(S.deviceHeading, h);
+    if (Math.abs(d) < ADV('headDead')) return;
+    const moving = S.pos && S.pos.speed > 1;
+    S.deviceHeading = (S.deviceHeading + d * ADV('headDamp') * (moving ? 1 : 0.5) + 360) % 360;
+  }
   scheduleCompassEase();
 }
+let lastRot = 0;
 function scheduleCompassEase() {
   if (compassRAF || !mapReady) return;
   compassRAF = requestAnimationFrame(() => {
     compassRAF = 0;
-    if (S.set.orient !== 'oriented' || S.deviceHeading == null) return;
+    if (effOrient() !== 'oriented' || S.deviceHeading == null) return;
     // while a follow-camera ease is animating (it already carries the bearing) leave it alone;
     // otherwise (stopped / just browsing) spin the map live as the rider turns.
     // Skip while the map is already moving (a manual/pinch zoom, pan or rotate) — a bearing
     // jump would cancel that animation, which is why zoom felt dead in compass mode.
-    if (Date.now() - lastEase > 900 && !map.isMoving()) map.setBearing(S.deviceHeading);
+    const gap = 1000 / ADV('rotHz');
+    if (Date.now() - lastRot < gap) return; // rate-limited: full-rate rotation reads as jitter
+    if (Date.now() - lastEase > 900 && !map.isMoving()) {
+      lastRot = Date.now();
+      map.rotateTo(S.deviceHeading, { duration: gap * 0.9, easing: t => t });
+    }
   });
+}
+/* auto-compass: flip to compass while zoomed in on a turn approach (or past a zoom threshold),
+   restore the rider's own mode after. A manual N tap wins until the next approach. */
+function autoCompass() {
+  const ns = S.navState, appr = !!(ns && ns.approach);
+  const mode = S.set.compassAuto || 'turns';
+  if (!appr) S.autoBlock = false;
+  const want = S.nav && mode !== 'off' && S.set.orient !== 'oriented' &&
+    (mode === 'turns' ? appr : mapReady && map.getZoom() >= ADV('zoomThresh'));
+  if (want && !S.autoOrient && !S.autoBlock) { S.autoOrient = true; applyOrient(); }
+  else if (!want && S.autoOrient) { S.autoOrient = false; applyOrient(); }
 }
 function enableCompass(gesture) {
   if (compassOn) return;
@@ -1518,17 +1681,19 @@ function disableCompass() {
 }
 
 function applyOrient() {
-  northBtn.classList.toggle('course', S.set.orient === 'course');
-  northBtn.classList.toggle('oriented', S.set.orient === 'oriented');
-  northInner.textContent = ORIENT_GLYPH[S.set.orient] || 'N';
-  document.getElementById('orientLabel').textContent = ORIENT_LABEL[S.set.orient] || 'north up';
-  if (S.set.orient === 'oriented') enableCompass(false); else disableCompass();
+  const o = effOrient();
+  northBtn.classList.toggle('course', o === 'course');
+  northBtn.classList.toggle('oriented', o === 'oriented');
+  northInner.textContent = ORIENT_GLYPH[o] || 'N';
+  document.getElementById('orientLabel').textContent = (ORIENT_LABEL[o] || 'north up') + (S.autoOrient ? ' · auto' : '');
+  if (o === 'oriented') enableCompass(false); else disableCompass();
   if (!mapReady) return;
-  if (S.set.orient === 'north') map.easeTo({ bearing: 0, duration: 500 });
-  else if (S.set.orient === 'course' && S.courseBearing != null) map.easeTo({ bearing: S.courseBearing, duration: 500 });
-  else if (S.set.orient === 'oriented' && S.deviceHeading != null) map.easeTo({ bearing: S.deviceHeading, duration: 500 });
+  if (o === 'north') map.easeTo({ bearing: 0, duration: 500 });
+  else if (o === 'course' && S.courseBearing != null) map.easeTo({ bearing: S.courseBearing, duration: 500 });
+  else if (o === 'oriented' && S.deviceHeading != null) map.easeTo({ bearing: S.deviceHeading, duration: 500 });
 }
 northBtn.onclick = () => {
+  if (S.autoOrient) { S.autoOrient = false; S.autoBlock = true; } // manual tap wins until the next approach
   S.set.orient = ORIENT_CYCLE[(ORIENT_CYCLE.indexOf(S.set.orient) + 1) % ORIENT_CYCLE.length];
   saveSet();
   if (S.set.orient === 'oriented') enableCompass(true); // this tap is a user gesture → can prompt on iOS
@@ -1556,7 +1721,6 @@ function fitSelected() {
 }
 
 /* ---------------- navigation ---------------- */
-const OFF_M = 60, ON_M = 40;
 // warning lead is time-based (~15 s far / ~5 s near from rolling speed), clamped per vehicle.
 // spans = auto-zoom curve: [speed m/s, metres of visible map height] points, lerped + end-clamped
 const VEHICLES = {
@@ -1569,17 +1733,27 @@ const VEHICLES = {
   adventure: { farMin: 120, farMax: 400, nearMin: 40, nearMax: 100, defSpd: 14,
                spans: [[0, 400], [13.9, 2000], [27.8, 7000]] },
 };
+// per-vehicle value with any advanced-tab override for the current vehicle applied
+function vehVal(k) {
+  const o = S.set.adv.veh && S.set.adv.veh[S.set.vehicle];
+  if (o && o[k] != null) return o[k];
+  return (VEHICLES[S.set.vehicle] || VEHICLES.enduro)[k];
+}
 function warnDists(ns) {
-  const v = VEHICLES[S.set.vehicle] || VEHICLES.enduro;
-  const spd = (ns && ns.avgSpd) || v.defSpd;
-  return { far: Math.min(v.farMax, Math.max(v.farMin, spd * 15)),
-    near: Math.min(v.nearMax, Math.max(v.nearMin, spd * 5)) };
+  const spd = (ns && ns.avgSpd) || vehVal('defSpd');
+  return { far: Math.min(vehVal('farMax'), Math.max(vehVal('farMin'), spd * 15)),
+    near: Math.min(vehVal('nearMax'), Math.max(vehVal('nearMin'), spd * 5)) };
 }
 function startNav() {
   const trk = S.tracks[S.sel]; if (!trk) return;
   if (S.cueEdit) setCueEdit(false);
   audio(); // unlock on gesture
-  if (S.set.orient === 'oriented') enableCompass(true); // gesture → prompt for the magnetometer if needed
+  // gesture → prompt for the magnetometer if needed (also for auto-compass flips later)
+  if (S.set.orient === 'oriented' || (S.set.compassAuto || 'turns') !== 'off') enableCompass(true);
+  // a new route starts a fresh backtrack trail; re-starting the same one keeps the thread
+  if (S.trailTrack !== trk.id) { S.trail = []; trailLast = null; trailDirty = true; refreshTrail(); }
+  S.trailTrack = trk.id;
+  closePanel(); // START lives in the ☰ panel now
   if (!trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
   // start in the direction the rider picked (reverse toggle); auto-voting can still correct it if
   // they actually ride the other way, but it holds this direction from the first fix
@@ -1590,10 +1764,10 @@ function startNav() {
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
   document.getElementById('hud').classList.add('on');
   document.getElementById('hudSpeed').classList.add('on');
-  prog.classList.add('on'); prog.classList.remove('offtrack');
+  prog.classList.add('on'); prog.classList.remove('offtrack', 'countdown');
   prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
   document.getElementById('gloveBtn').classList.add('on');
-  setHold(null); refreshFav();
+  setHold(null);
   placeProgress(); drawProgress(true);
   const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop');
   if (S.set.wake) requestWake();
@@ -1604,11 +1778,12 @@ function startNav() {
 }
 function stopNav() {
   S.nav = false;
+  S.autoOrient = false; S.autoBlock = false; applyOrient(); // hand orientation back to the rider's mode
   document.body.classList.remove('navving');
   document.getElementById('hud').classList.remove('on');
   document.getElementById('hudSpeed').classList.remove('on');
   document.getElementById('banner').classList.remove('on');
-  prog.classList.remove('on', 'offtrack');
+  prog.classList.remove('on', 'offtrack', 'countdown');
   document.getElementById('gloveBtn').classList.remove('on');
   setHold(null); setLock(false);
   closeGlove();
@@ -1622,6 +1797,7 @@ document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav()
 
 function onFix(lat, lon, acc, speed, heading) {
   if (!REF) return;
+  if (ADV('gpsAcc') > 0 && (acc || 0) > ADV('gpsAcc')) return; // junk fix — below the accuracy floor
   const [x, y] = toXY(lat, lon);
   const t = Date.now();
   const ns = S.navState;
@@ -1636,10 +1812,11 @@ function onFix(lat, lon, acc, speed, heading) {
   document.getElementById('hudSpeed').innerHTML = Math.round((spd || 0) * 3.6) + ' <small>km/h</small>';
   refreshPosLayers(); followCamera();
   if (!S.nav || S.sel < 0 || !ns) return;
+  if (S.set.trail !== false) trailPush(x, y); // breadcrumb keeps dropping off-track too — the thread back
 
   const trk = S.tracks[S.sel];
   const near = nearestOnTrack(trk, x, y, ns.idx);
-  if (ns.idx >= 0 && near.d < OFF_M) {
+  if (ns.idx >= 0 && near.d < ADV('offM')) {
     const delta = near.idx - ns.idx;
     if (delta !== 0) ns.dirVotes = Math.max(-8, Math.min(8, ns.dirVotes + Math.sign(delta)));
     const newDir = ns.dirVotes <= -4 ? -1 : ns.dirVotes >= 4 ? 1 : ns.dir;
@@ -1650,8 +1827,8 @@ function onFix(lat, lon, acc, speed, heading) {
   }
   ns.idx = near.idx;
 
-  if (near.d > OFF_M && !ns.off) ns.off = true;
-  if (near.d < ON_M && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); }
+  if (near.d > ADV('offM') && !ns.off) ns.off = true;
+  if (near.d < ADV('onM') && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); }
   if (ns.off) {
     const bn = document.getElementById('banner');
     bn.textContent = 'OFF TRACK · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
@@ -1668,7 +1845,6 @@ function onFix(lat, lon, acc, speed, heading) {
     ns.movingS += dts;
     ns.avgSpd = ns.avgSpd == null ? spd : ns.avgSpd * 0.98 + spd * 0.02;
   }
-  drawProgress();
   const { far: farM, near: nearM } = warnDists(ns);
   let next = null, dTo = Infinity;
   if (trk.alerts) {
@@ -1687,7 +1863,12 @@ function onFix(lat, lon, acc, speed, heading) {
     ns.confirmAt = null; flashCommit();
     if (S.set.confirm) BEEP.back();
   }
-  ns.approach = !!next && dTo <= Math.max(farM * 1.5, 250); // cruiseZoom: frame the turn, release any hold
+  ns.approach = !!next && dTo <= Math.max(farM * ADV('apprMul'), ADV('apprFloor')); // cruiseZoom: frame the turn, release any hold
+  autoCompass();
+  // countdown mode: the bottom strip flips to a fill-toward-the-turn bar inside this window
+  ns.cdOn = !!next && dTo <= ADV('cdDist');
+  ns.cdD = dTo; ns.cdNear = nearM;
+  drawProgress();
   setHud(next, dTo, ns.dir, farM);
   if (next) {
     let st = ns.alertStates.get(next); if (!st) ns.alertStates.set(next, st = { far: true, near: true });
@@ -1709,7 +1890,7 @@ function setHud(alert, dTo, dir, farM) {
   const box = document.getElementById('hudBox'), fill = document.getElementById('hudFill');
   const arrow = document.getElementById('hudArrow'), distEl = document.getElementById('hudDist'), typeEl = document.getElementById('hudType');
   // the strip slides in at the far warning, not permanently (design: minimal riding screen)
-  const win = Math.max((farM || 160) * 1.5, 250);
+  const win = Math.max((farM || 160) * ADV('apprMul'), ADV('apprFloor'));
   const show = !!alert && dTo <= win;
   box.style.visibility = show || box.classList.contains('commit') ? '' : 'hidden';
   if (!show) { fill.style.width = '0'; return; }
@@ -1789,6 +1970,9 @@ function drawProgress(force) {
   if (!S.nav) return;
   const trk = S.tracks[S.sel], ns = S.navState;
   if (!trk || !ns) return;
+  // turn approach: the strip flips to a fixed-length countdown bar (fills toward the turn)
+  const cdOn = !!ns.cdOn;
+  if (cdOn !== prog.classList.contains('countdown')) { prog.classList.toggle('countdown', cdOn); placeProgress(); force = true; }
   const dpr = window.devicePixelRatio || 1, w = progCanvas.clientWidth, h = progCanvas.clientHeight;
   if (!w || !h) return;
   if (force || progCanvas.width !== ((w * dpr) | 0) || progCanvas.height !== ((h * dpr) | 0)) {
@@ -1797,6 +1981,7 @@ function drawProgress(force) {
   const ctx = progCanvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
+  if (cdOn) { drawCountdown(ctx, w, h, ns); return; }
   const len = trk.lengthM || 1, sRaw = ns.idx >= 0 ? trk.cum[ns.idx] : (ns.dir > 0 ? 0 : len);
   const done = ns.dir > 0 ? sRaw : len - sRaw;
   // strip spans only the stretch of track currently on screen, so its scale matches the map
@@ -1856,6 +2041,48 @@ function drawProgress(force) {
   progTogo.innerHTML = '<b>' + (rem / 1000).toFixed(1) + ' km</b> · ' +
     (ns.avgSpd > 0.5 ? '~' + fmtTime(rem / ns.avgSpd) : '—');
 }
+/* countdown bar: fixed full width, fills left→right as the next cue closes in; big number
+   in metres or seconds (settings). Seconds freeze at the last value when stopped — never ∞. */
+function drawCountdown(ctx, w, h, ns) {
+  const act = ADV('cdDist'), d = Math.max(0, ns.cdD || 0);
+  const frac = Math.max(0, Math.min(1, 1 - d / act));
+  const near = d <= (ns.cdNear || 0);
+  ctx.fillStyle = '#26313d'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = near ? '#ffb020' : '#00e5ff'; ctx.fillRect(0, 0, frac * w, h);
+  let txt;
+  if (S.set.countUnit === 's') {
+    const spd = S.pos && S.pos.speed > 0.5 ? S.pos.speed : null;
+    txt = spd ? Math.ceil(d / spd) + ' s' : drawCountdown.last || '·';
+    drawCountdown.last = txt;
+  } else txt = Math.round(d / 5) * 5 + ' m';
+  ctx.font = '800 26px -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 4; ctx.lineJoin = 'round';
+  ctx.strokeText(txt, w / 2, h / 2 + 1);
+  ctx.fillStyle = '#fff'; ctx.fillText(txt, w / 2, h / 2 + 1);
+}
+
+/* ---------------- backtrack trail: breadcrumb of where you've actually been ---------------- */
+let trailLast = null, trailDirty = false;
+function trailPush(x, y) {
+  if (trailLast && dist(x, y, trailLast[0], trailLast[1]) < ADV('trailGap')) return;
+  trailLast = [x, y];
+  const [la, lo] = toLL(x, y);
+  S.trail.push([lo, la]); trailDirty = true;
+  if (S.trail.length > 20000) S.trail.splice(0, 5000); // cap memory on epic rides
+  refreshTrail();
+}
+function refreshTrail() {
+  if (!mapReady) return;
+  map.getSource('trail').setData(S.trail.length > 1 ? { type: 'Feature', properties: {},
+    geometry: { type: 'LineString', coordinates: S.trail } } : EMPTY);
+}
+// persist once a minute so an app restart mid-ride keeps the thread
+setInterval(() => {
+  if (!trailDirty) return;
+  trailDirty = false;
+  idb.put({ id: 'trail', kind: 'trail', trackId: S.trailTrack || '', pts: S.trail }).catch(() => {});
+}, 60000);
 
 /* ---------------- glove button + overlay (huge tiles for gloved hands) ---------------- */
 const gloveBtn = document.getElementById('gloveBtn'), gloveOverlay = document.getElementById('gloveOverlay');
@@ -1868,9 +2095,10 @@ function refreshGlove() {
   const trk = S.tracks[S.sel];
   const g = id => document.getElementById(id);
   g('gSteep').classList.toggle('active', !!(S.set.steep && trk && trk.hasEle));
-  g('gOrient').classList.toggle('active', S.set.orient !== 'north');
-  g('gOrient').querySelector('.gi').textContent = ORIENT_GLYPH[S.set.orient] || 'N';
-  g('gOrient').querySelector('.gl').textContent = S.set.orient === 'course' ? 'Course up' : S.set.orient === 'oriented' ? 'Compass' : 'North up';
+  const o = effOrient();
+  g('gOrient').classList.toggle('active', o !== 'north');
+  g('gOrient').querySelector('.gi').textContent = ORIENT_GLYPH[o] || 'N';
+  g('gOrient').querySelector('.gl').textContent = o === 'course' ? 'Course up' : o === 'oriented' ? 'Compass' : 'North up';
   g('gCenter').classList.toggle('active', S.follow);
   g('gZoom').classList.toggle('active', S.set.autoZoom);
   g('gSound').classList.toggle('active', S.set.sound);
@@ -1893,7 +2121,8 @@ document.getElementById('gSteep').onclick = gloveTap(() => {
   const trk = S.tracks[S.sel];
   if (!trk || !trk.hasEle) { toast('No elevation data in this track'); return; }
   S.set.steep = !S.set.steep; saveSet();
-  applySteepness(); drawProgress(true);
+  document.getElementById('setSteep').checked = S.set.steep;
+  refreshMapData(); drawProgress(true); // surface features re-bake their steepness colours
 });
 document.getElementById('gEnd').onclick = () => { closeGlove(); stopNav(); };
 function applyGloveSide() {
@@ -2236,23 +2465,162 @@ function bindSet(id, key, cb) {
   el.checked = S.set[key];
   el.onchange = () => { S.set[key] = el.checked; saveSet(); if (cb) cb(); };
 }
+// one active segment button per group, persisted to a settings key
+function bindSeg(segId, dataKey, setKey, cb) {
+  for (const b of document.querySelectorAll('#' + segId + ' button')) {
+    b.classList.toggle('active', b.dataset[dataKey] === S.set[setKey]);
+    b.onclick = () => {
+      S.set[setKey] = b.dataset[dataKey]; saveSet();
+      for (const b2 of document.querySelectorAll('#' + segId + ' button')) b2.classList.toggle('active', b2 === b);
+      if (cb) cb();
+    };
+  }
+}
 bindSet('setSound', 'sound', () => setSound(S.set.sound));
 setSound(S.set.sound); // sync the mute button face at boot
 bindSet('setConfirm', 'confirm');
 bindSet('setAutoZoom', 'autoZoom');
 bindSet('setStrava', 'strava', applyStrava);
-for (const b of document.querySelectorAll('#vehSeg button')) {
-  b.classList.toggle('active', b.dataset.v === S.set.vehicle);
-  b.onclick = () => { S.set.vehicle = b.dataset.v; saveSet(); refreshFav(); // heart zoom is per-vehicle
-    for (const b2 of document.querySelectorAll('#vehSeg button')) b2.classList.toggle('active', b2.dataset.v === S.set.vehicle); };
-}
+bindSet('setSteep', 'steep', () => { refreshMapData(); drawProgress(true); });
+bindSet('setSurf', 'surf', () => refreshMapData());
+bindSet('setTrail', 'trail', () => { if (mapReady) map.setLayoutProperty('trail-dots', 'visibility', S.set.trail ? 'visible' : 'none'); });
+bindSeg('vehSeg', 'v', 'vehicle', () => { refreshPresets(); buildAdv(); }); // presets + adv overrides are per-vehicle
+bindSeg('compassSeg', 'c', 'compassAuto');
+bindSeg('cdSeg', 'u', 'countUnit');
 for (const b of document.querySelectorAll('#styleSeg button')) {
   b.classList.toggle('active', b.dataset.s === (S.set.mapStyle || 'daylight'));
   b.onclick = () => setMapStyle(b.dataset.s);
 }
 for (const b of document.querySelectorAll('.keyBtn'))
   b.onclick = () => { keyCapture = b.dataset.k; b.textContent = 'press…'; };
-refreshKeyBtns(); refreshFav();
+refreshKeyBtns(); refreshPresets();
+
+/* settings tabs */
+for (const b of document.querySelectorAll('#setTabs button'))
+  b.onclick = () => {
+    for (const b2 of document.querySelectorAll('#setTabs button')) b2.classList.toggle('active', b2 === b);
+    for (const s of document.querySelectorAll('.tabSec')) s.classList.toggle('on', s.id === 'tab' + b.dataset.t);
+    if (b.dataset.t === 'Adv') buildAdv();
+  };
+function applyShowAdv() {
+  document.getElementById('advTabBtn').style.display = S.set.showAdv ? '' : 'none';
+  if (!S.set.showAdv && document.getElementById('tabAdv').classList.contains('on'))
+    document.querySelector('#setTabs button[data-t="General"]').click();
+}
+bindSet('setShowAdv', 'showAdv', applyShowAdv);
+applyShowAdv();
+
+/* ---------------- advanced tab: live tuning console ----------------
+   Sliders over the ADV_D defaults (plus current-vehicle alert distances).
+   Values apply immediately; "Copy tuning" exports the overrides so a good
+   setup can be promoted to new shipped defaults. */
+const ADV_UI = [
+  { h: 'Compass & camera' },
+  { k: 'headDamp', l: 'Heading damping', min: 0.02, max: 0.5, step: 0.01 },
+  { k: 'headDead', l: 'Heading dead-band (°)', min: 0, max: 8, step: 0.5 },
+  { k: 'rotHz', l: 'Map rotation rate (Hz)', min: 1, max: 20, step: 1 },
+  { k: 'easeMs', l: 'Follow ease (ms)', min: 200, max: 2000, step: 50 },
+  { k: 'zoomThresh', l: 'Compass zoom threshold', min: 10, max: 18, step: 0.5 },
+  { h: 'Alerts & cues (current vehicle)' },
+  { k: 'farMin', veh: 1, l: 'Far warn min (m)', min: 10, max: 300, step: 5 },
+  { k: 'farMax', veh: 1, l: 'Far warn max (m)', min: 40, max: 800, step: 10 },
+  { k: 'nearMin', veh: 1, l: 'Near warn min (m)', min: 5, max: 150, step: 5 },
+  { k: 'nearMax', veh: 1, l: 'Near warn max (m)', min: 15, max: 300, step: 5 },
+  { k: 'apprMul', l: 'Approach window ×far', min: 1, max: 4, step: 0.1 },
+  { k: 'apprFloor', l: 'Approach floor (m)', min: 100, max: 600, step: 25 },
+  { k: 'offM', l: 'Off-track beyond (m)', min: 20, max: 200, step: 5 },
+  { k: 'onM', l: 'Back on within (m)', min: 10, max: 150, step: 5 },
+  { k: 'beepVol', l: 'Beep volume', min: 0, max: 1, step: 0.05 },
+  { h: 'Zoom & countdown' },
+  { k: 'cdDist', l: 'Countdown from (m)', min: 100, max: 1000, step: 25 },
+  { h: 'Rendering & misc' },
+  { k: 'btnOp', l: 'Riding button opacity', min: 0.1, max: 1, step: 0.05 },
+  { k: 'trailGap', l: 'Trail dot spacing (m)', min: 5, max: 100, step: 5 },
+  { k: 'haloOp', l: 'Route halo opacity', min: 0, max: 1, step: 0.05 },
+  { k: 'haloMul', l: 'Route halo width ×', min: 1.2, max: 4, step: 0.1 },
+  { k: 'chevSize', l: 'Direction arrow size (0 off)', min: 0, max: 30, step: 1 },
+  { k: 'chevGap', l: 'Direction arrow spacing', min: 30, max: 300, step: 10 },
+  { k: 'chevCol', l: 'Direction arrow colour', col: 1 },
+  { k: 'colRoute', l: 'Route colour', col: 1 },
+  { k: 'colOwn', l: 'Heatmap: own rides', col: 1 },
+  { k: 'colOther', l: 'Heatmap: other riders', col: 1 },
+  { k: 'colPlan', l: 'Heatmap: planned', col: 1 },
+  { k: 'colTrail', l: 'Basemap minor trails (Trail style)', col: 1 },
+  { k: 'trailProm', l: 'Basemap trail width ×', min: 0.3, max: 3, step: 0.1 },
+  { k: 'gpsAcc', l: 'GPS accuracy floor (m, 0 = off)', min: 0, max: 100, step: 5 },
+];
+function advGet(r) { return r.veh ? vehVal(r.k) : ADV(r.k); }
+function advSet(r, v) {
+  if (r.veh) ((S.set.adv.veh = S.set.adv.veh || {})[S.set.vehicle] = S.set.adv.veh[S.set.vehicle] || {})[r.k] = v;
+  else S.set.adv[r.k] = v;
+  saveSet(); advApply(r.k);
+}
+function advReset(r) {
+  if (r.veh) { const o = S.set.adv.veh && S.set.adv.veh[S.set.vehicle]; if (o) delete o[r.k]; }
+  else delete S.set.adv[r.k];
+  saveSet(); advApply(r.k); buildAdv();
+}
+let restyleT = null;
+function advApply(k) {
+  if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
+  else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // surface features bake the colour in
+  else if (k === 'colTrail' || k === 'trailProm') { clearTimeout(restyleT); restyleT = setTimeout(() => setMapStyle(S.set.mapStyle), 400); }
+  else applyAdvPaint();
+}
+function applyAdvPaint() {
+  if (!mapReady || !map.getLayer('sel-core')) return;
+  const m = ADV('haloMul');
+  const HW = ['interpolate', ['linear'], ['zoom'], 10, 2.5 * m, 15, 4 * m];
+  const hd = a => a.map(x => +(x / m).toFixed(2));
+  map.setPaintProperty('sel-core', 'line-color', ADV('colRoute'));
+  map.setPaintProperty('sel-halo', 'line-color', ADV('colRoute'));
+  map.setPaintProperty('sel-halo', 'line-width', HW);
+  map.setPaintProperty('sel-halo', 'line-opacity', ADV('haloOp'));
+  for (const s of ['sealed', 'dirt', 'single']) {
+    map.setPaintProperty('surf-halo-' + s, 'line-width', HW);
+    map.setPaintProperty('surf-halo-' + s, 'line-opacity', ADV('haloOp'));
+  }
+  map.setPaintProperty('surf-halo-dirt', 'line-dasharray', hd([2.4, 1.4]));
+  map.setPaintProperty('surf-halo-single', 'line-dasharray', hd([0.1, 1.7]));
+  map.setLayoutProperty('sel-chevrons', 'visibility', ADV('chevSize') > 0 ? 'visible' : 'none');
+  map.setLayoutProperty('sel-chevrons', 'text-size', Math.max(1, ADV('chevSize')));
+  map.setLayoutProperty('sel-chevrons', 'symbol-spacing', ADV('chevGap'));
+  map.setPaintProperty('sel-chevrons', 'text-color', ADV('chevCol'));
+  for (const l of ['heat-halo', 'heat-core']) map.setPaintProperty(l, 'line-color', clsMatch());
+  map.setLayoutProperty('trail-dots', 'visibility', S.set.trail !== false ? 'visible' : 'none');
+}
+function buildAdv() {
+  const el = document.getElementById('advList');
+  el.innerHTML = '';
+  for (const r of ADV_UI) {
+    if (r.h) {
+      const h = document.createElement('h3');
+      h.textContent = r.h + (r.h.includes('vehicle') ? ' — ' + S.set.vehicle : '');
+      el.appendChild(h); continue;
+    }
+    const row = document.createElement('div');
+    row.className = 'row';
+    const v = advGet(r);
+    if (r.col) {
+      row.innerHTML = `<label>${r.l}</label><input type="color" value="${v}"><span class="advRst" title="reset">↺</span>`;
+      const inp = row.querySelector('input');
+      inp.oninput = () => advSet(r, inp.value);
+    } else {
+      row.innerHTML = `<label>${r.l}</label><input type="range" min="${r.min}" max="${r.max}" step="${r.step}" value="${v}">
+        <span class="advVal">${v}</span><span class="advRst" title="reset">↺</span>`;
+      const inp = row.querySelector('input'), val = row.querySelector('.advVal');
+      inp.oninput = () => { const n = +inp.value; val.textContent = n; advSet(r, n); };
+    }
+    row.querySelector('.advRst').onclick = () => advReset(r);
+    el.appendChild(row);
+  }
+}
+document.getElementById('advCopy').onclick = async () => {
+  const txt = JSON.stringify({ adv: S.set.adv, zoomPresets: S.set.zoomPresets }, null, 1);
+  try { await navigator.clipboard.writeText(txt); toast('Tuning JSON copied to clipboard'); }
+  catch (e) { console.log('[tuning]', txt); toast('Clipboard blocked — tuning logged to console'); }
+};
+document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
 bindSet('setWake', 'wake', () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); });
 const gloveRightEl = document.getElementById('setGloveRight');
 gloveRightEl.checked = S.set.gloveSide === 'right';
@@ -2306,6 +2674,8 @@ async function boot() {
       } else toast('Shared file loaded');
     } catch (e) { console.warn('shared bundle failed', e); toast('Could not load the shared link — are you online?'); }
   }
+  // backtrack trail from the last ride survives an app restart
+  try { const tr = await idb.get('trail'); if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; } } catch (e) {}
   if (S.tracks.length && S.sel < 0) S.sel = 0;
   refreshTrackList(); refreshEmpty(); updateBottomBar();
   await initMap(); // cue analysis needs basePM, so it runs after the map boots
