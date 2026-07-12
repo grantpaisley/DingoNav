@@ -7,6 +7,8 @@ bundle.json
 # GitHub Pages deploy can auto-download it on first open.
 basemap/*.pmtiles
 !basemap/central-coast.pmtiles
+# hillshade DEM for the same area (8 MB) — committed for the same reason
+!basemap/hillshade.pmtiles
 
 node_modules/
 .DS_Store

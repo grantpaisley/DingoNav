@@ -10,6 +10,10 @@ with the Dingo heatmap and track overlays on top. North is always up.
 - **Offline basemap**: one `.pmtiles` file covers the whole riding area (roads, tracks,
   rivers, place labels). Auto-downloaded on first open and stored on-device (IndexedDB);
   swap areas via ☰ → *Load .pmtiles basemap…*.
+- **Terrain shading**: an optional second `.pmtiles` (elevation, ~8 MB per area) adds
+  hillshade relief under the trails — gullies and ridges readable at a glance, still flat
+  north-up 2D so nothing about the fast-follower UX changes. Auto-downloaded like the
+  basemap; toggle in settings; cut other areas with `make_hillshade.py`.
 - Load **GPX tracks** + a **heatmap GeoJSON** exported from Dingo — persisted on-device,
   everything works with zero signal after first load.
 - Select a track → **START** → follows you from the **nearest point on the track**, either
@@ -31,11 +35,12 @@ with the Dingo heatmap and track overlays on top. North is always up.
 ```
 index.html        the app (single file of app code)
 vendor/           maplibre-gl.js/.css, pmtiles.js (vendored, no CDN — offline)
-basemap/          layers.json (style), fonts/, sprites/, central-coast.pmtiles (gitignored)
+basemap/          layers.json (style), fonts/, sprites/, central-coast.pmtiles, hillshade.pmtiles
 sw.js             service worker: index.html network-first, assets cache-first
 manifest.json     PWA manifest (Add to Home Screen)
 bundle.json       optional pre-baked tracks+heatmap, auto-loaded on first open (gitignored)
 make_bundle.py    builds bundle.json from a heatmap + GPX files
+make_hillshade.py cuts basemap/hillshade.pmtiles (terrain DEM) for an area
 make_icons.py     regenerates the PWA icons
 serve.js          tiny static server (node serve.js [port]) for local hosting
 sample-data/      Central Coast heatmap export + 4 real loops (gitignored)
@@ -65,6 +70,18 @@ pmtiles extract https://build.protomaps.com/$(date -v-1d +%Y%m%d).pmtiles my-are
 The Central Coast + Watagans extract (150.85,-33.75 → 151.85,-32.85, zoom 0-15) is 33 MB.
 Drop the file at `basemap/central-coast.pmtiles` for auto-download, or load any `.pmtiles`
 in-app via ☰. Protomaps daily builds are OSM-derived and free (attribution included).
+
+## Cutting terrain shading for another area
+
+```bash
+pip install pmtiles
+./make_hillshade.py --bbox <minLon>,<minLat>,<maxLon>,<maxLat>   # or --basemap my-area.pmtiles
+```
+Downloads Terrarium elevation tiles (AWS Open Data, free, no key) at z6–12 and packs them
+into a raster-dem `.pmtiles`; MapLibre renders the hillshade on-device (a cheap shading
+pass — not live 3D terrain). With no arguments it reuses the bounds of
+`basemap/central-coast.pmtiles` (~8 MB output). Drop the file at `basemap/hillshade.pmtiles`
+for auto-download, or load any file in-app via ☰ → *Load .pmtiles terrain…*.
 
 ## Putting it on the phone
 
