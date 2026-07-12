@@ -162,10 +162,12 @@
   #panelNav{display:flex; gap:10px; margin-bottom:6px}
   #panelNav #navBtn{flex:1}
   #panelNav .ctl{width:56px; height:56px; flex:none}
-  #setTabs{display:flex; gap:6px; margin:18px 0 4px}
-  #setTabs button{flex:1; padding:11px 0; border-radius:10px; border:1px solid #2a3540; background:var(--panel2);
-    color:var(--dim); font-size:14px; font-weight:700; cursor:pointer}
+  #setTabs{display:flex; gap:5px; margin:14px 0 4px}
+  #setTabs button{flex:1; padding:10px 0; border-radius:10px; border:1px solid #2a3540; background:var(--panel2);
+    color:var(--dim); font-size:13px; font-weight:700; cursor:pointer}
   #setTabs button.active{border-color:var(--accent); color:var(--accent)}
+  #trackSearch{width:100%; margin:8px 0 4px; background:var(--bg); border:1px solid #2a3540; color:var(--fg);
+    border-radius:10px; padding:11px 12px; font-size:15px}
   .tabSec{display:none}
   .tabSec.on{display:block}
   /* advanced tuning rows */
@@ -304,23 +306,36 @@
     <div class="ctl" id="revBtn" title="reverse direction" style="display:none">⇄</div>
   </div>
 
-  <h3>Tracks</h3>
-  <div id="trackList"></div>
-  <div class="btnRow">
-    <button class="btn primary" id="loadBtn">Load files…</button>
-    <button class="btn danger" id="clearBtn">Clear all data</button>
-  </div>
-  <div class="hint">Load .gpx tracks and a heatmap .geojson (exported from <b>Dingo</b>). Everything is stored on this device and works fully offline.</div>
-  <div class="hint" id="heatInfo"></div>
-
   <div id="setTabs">
-    <button data-t="General" class="active">General</button>
+    <button data-t="Account">Account</button>
+    <button data-t="Tracks" class="active">Tracks</button>
+    <button data-t="General">General</button>
     <button data-t="Nav">Nav</button>
     <button data-t="Keys">Keys</button>
     <button data-t="Adv" id="advTabBtn" style="display:none">Adv</button>
   </div>
 
-  <div class="tabSec on" id="tabGeneral">
+  <div class="tabSec" id="tabAccount">
+    <div class="row"><label>Your name</label><input type="text" id="myName" maxlength="12" placeholder="Grant"></div>
+    <div class="row"><label>Email</label><input type="text" id="myEmail" maxlength="60" placeholder="you@example.com"></div>
+    <h3>Group ride (needs signal)</h3>
+    <div class="row"><label>Ride name</label><input type="text" id="rideCode" maxlength="24" placeholder="e.g. watagans-42"></div>
+    <div id="friendStatus">off — enter a shared ride name to see friends</div>
+    <div class="hint">Everyone with the same ride name sees each other's position (updates ~20 s via ntfy.sh when online; silently off without signal). It defaults to the bundle name when you load a .dingonav — use one others can't guess.</div>
+  </div>
+
+  <div class="tabSec on" id="tabTracks">
+    <input type="text" id="trackSearch" placeholder="Search tracks…">
+    <div id="trackList"></div>
+    <div class="btnRow">
+      <button class="btn primary" id="loadBtn">Load files…</button>
+      <button class="btn danger" id="clearBtn">Clear all data</button>
+    </div>
+    <div class="hint">Load .gpx tracks and a heatmap .geojson (exported from <b>Dingo</b>). Everything is stored on this device and works fully offline.</div>
+    <div class="hint" id="heatInfo"></div>
+  </div>
+
+  <div class="tabSec" id="tabGeneral">
     <h3>Offline basemap</h3>
     <div id="baseStatus">no basemap loaded</div>
     <div class="btnRow"><button class="btn" id="baseBtn">Load .pmtiles basemap…</button></div>
@@ -332,12 +347,6 @@
       <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button></span></div>
     <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
     <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
-
-    <h3>Group ride (needs signal)</h3>
-    <div class="row"><label>Your name</label><input type="text" id="myName" maxlength="12" placeholder="Grant"></div>
-    <div class="row"><label>Ride code</label><input type="text" id="rideCode" maxlength="24" placeholder="e.g. watagans-42"></div>
-    <div id="friendStatus">off — enter a shared code to see friends</div>
-    <div class="hint">Everyone with the same code sees each other's position (updates ~20 s via ntfy.sh when online; silently off without signal). Use a code others can't guess.</div>
 
     <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
@@ -429,7 +438,7 @@ const S = {
   pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
   trail: [], trailTrack: null, autoOrient: false, autoBlock: false,
-  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', code: '', orient: 'north',
+  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, gloveSide: 'left', vehicle: 'enduro', steep: true, surf: true, trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight' },
 };
@@ -2373,6 +2382,12 @@ async function loadBundleZip(file) {
     await idb.put({ id: 'strava-meta', kind: 'stravameta', count: stravaTiles, zmin, zmax });
     if (S.set.strava === undefined) { S.set.strava = true; saveSet(); } // show by default when first shipped
   }
+  // the bundle name is the natural group-ride name — default it in, never overwrite a chosen one
+  if (!S.set.code && (nT || nH)) {
+    S.set.code = file.name.replace(/\.(dingonav|zip)$/i, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 24);
+    saveSet();
+    const ce = document.getElementById('rideCode'); if (ce) ce.value = S.set.code;
+  }
   return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles };
 }
 async function handleFiles(files) {
@@ -2445,7 +2460,11 @@ shade.onclick = closePanel;
 function refreshTrackList() {
   const el = document.getElementById('trackList');
   el.innerHTML = '';
+  const q = (document.getElementById('trackSearch').value || '').trim().toLowerCase();
+  let shown = 0;
   S.tracks.forEach((t, i) => {
+    if (q && !t.name.toLowerCase().includes(q)) return;
+    shown++;
     const row = document.createElement('div');
     row.className = 'trk' + (i === S.sel ? ' sel' : '');
     row.innerHTML = `<span class="dot" style="background:${i === S.sel ? 'var(--accent)' : '#5a6a78'}"></span>
@@ -2461,7 +2480,9 @@ function refreshTrackList() {
     el.appendChild(row);
   });
   if (!S.tracks.length) el.innerHTML = '<div class="hint">No tracks yet.</div>';
+  else if (!shown) el.innerHTML = '<div class="hint">No tracks match "' + escHtml(q) + '".</div>';
 }
+document.getElementById('trackSearch').oninput = () => refreshTrackList();
 function selectTrack(i) {
   if (S.cueEdit) setCueEdit(false);
   S.sel = i;
@@ -2595,7 +2616,7 @@ for (const b of document.querySelectorAll('#setTabs button'))
 function applyShowAdv() {
   document.getElementById('advTabBtn').style.display = S.set.showAdv ? '' : 'none';
   if (!S.set.showAdv && document.getElementById('tabAdv').classList.contains('on'))
-    document.querySelector('#setTabs button[data-t="General"]').click();
+    document.querySelector('#setTabs button[data-t="Tracks"]').click();
 }
 bindSet('setShowAdv', 'showAdv', applyShowAdv);
 applyShowAdv();
@@ -2728,9 +2749,10 @@ const gloveRightEl = document.getElementById('setGloveRight');
 gloveRightEl.checked = S.set.gloveSide === 'right';
 gloveRightEl.onchange = () => { S.set.gloveSide = gloveRightEl.checked ? 'right' : 'left'; saveSet(); applyGloveSide(); };
 applyGloveSide();
-const nameEl = document.getElementById('myName'), codeEl = document.getElementById('rideCode');
-nameEl.value = S.set.name; codeEl.value = S.set.code;
+const nameEl = document.getElementById('myName'), codeEl = document.getElementById('rideCode'), emailEl = document.getElementById('myEmail');
+nameEl.value = S.set.name; codeEl.value = S.set.code; emailEl.value = S.set.email || '';
 nameEl.onchange = () => { S.set.name = nameEl.value.trim(); saveSet(); };
+emailEl.onchange = () => { S.set.email = emailEl.value.trim(); saveSet(); };
 codeEl.onchange = () => { S.set.code = codeEl.value.trim(); saveSet(); if (S.nav) startFriends(); };
 
 /* ---------------- boot ---------------- */
