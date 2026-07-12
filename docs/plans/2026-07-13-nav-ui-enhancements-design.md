@@ -36,6 +36,7 @@ Two independent channels: **colour = steepness, pattern = road surface.** Settin
 - Quick toggles beside the selected track in the ☰ panel for mid-ride flipping.
 - **No outside lines**: the dark `sel-casing` layer is deleted. Non-steepness modes get a same-colour translucent halo (~30 % opacity, wider, dash pattern matched to each segment). Steepness mode draws the bare gradient with no outline. Dash/dot gaps are fully transparent — no brown underlay.
 - Combined mode implementation: intersect grade bands (already stepped) × surface runs into features carrying colour + surface; the three surface layers paint `line-color: ['get','c']`.
+- **Direction arrows**: the existing `sel-chevrons` layer (`›` along the line, flipping with riding direction) stays on top of every colour/pattern mode. Give the glyphs a contrasting halo so they stay legible over grade-coloured dashes; visuals configurable in advanced (§10).
 
 ## 4. Heatmap / basemap colours (advanced)
 
@@ -71,7 +72,7 @@ Every row: slider/stepper with current value, live effect, per-row reset. Persis
 - **Compass & camera** — heading damping EMA; heading dead-band (°); camera ease durations (900 ms follow / 500 ms orient).
 - **Alerts & cues** — per-vehicle far/near alert distances (`VEH` table); turn-approach framing multiplier (`farM × 1.5`, floor 250 m); off-track leave/return (`OFF_M 60` / `ON_M 40`); beep volume.
 - **Zoom & countdown** — default min/med/max per vehicle; countdown activation distance; metres↔seconds.
-- **Rendering & misc** — routing button opacity; trail dot spacing/retention; route halo opacity & width; heatmap/basemap colours (§4); GPS accuracy floor.
+- **Rendering & misc** — routing button opacity; trail dot spacing/retention; route halo opacity & width; direction-arrow size, spacing, colour & halo (on/off included); heatmap/basemap colours (§4); GPS accuracy floor.
 
 ## Phase 2 (separate design): POIs & track grading
 
