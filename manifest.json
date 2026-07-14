@@ -4,7 +4,7 @@
   "description": "Offline GPX track follower with turn beeps, heatmap and offline basemap",
   "start_url": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0e1216",
   "theme_color": "#0e1216",
   "icons": [

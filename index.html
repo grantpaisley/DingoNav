@@ -271,10 +271,12 @@
     #vargModeBig{bottom:186px; font-size:20px}
     #vargFlash{font-size:20px}
     #vargInd .blink{font-size:44px} #vargInd .beam{font-size:26px}
-    /* short viewports: keep the enlarged controls from overflowing the landscape column */
-    #sideCtl{gap:6px}
-    #sideCtl .ctl{width:64px; height:64px; border-radius:16px; font-size:30px}
-    #sideCtl .ctl.preset{height:38px; font-size:13px}
+    /* short viewports (landscape / split-screen): the 7-button column is taller than
+       the viewport and clips the zoom keys off the top. Reflow into two glove-sized
+       columns anchored bottom-right — half the height, every control still reachable. */
+    #sideCtl{display:grid; grid-template-columns:repeat(2,auto); gap:7px; align-content:end; justify-content:end}
+    #sideCtl .ctl{width:62px; height:56px; border-radius:16px; font-size:28px}
+    #sideCtl .ctl.preset{height:56px; font-size:14px} /* uniform cells so the grid tiles cleanly */
     #north{width:56px; height:56px; font-size:20px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
