@@ -112,6 +112,18 @@
   #toast{position:fixed; bottom:110px; left:50%; transform:translateX(-50%); z-index:30;
     background:var(--panel2); border:1px solid #2a3540; color:var(--fg); font-size:15px; padding:10px 18px;
     border-radius:12px; display:none; max-width:88vw; text-align:center}
+  /* one-off explainer dialog (e.g. favourite-zoom tip) */
+  #dlgShade{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:40; display:none}
+  #dlgShade.on{display:block}
+  #dlg{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(88vw,360px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
+    padding:20px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #dlg.on{display:block}
+  #dlg h4{font-size:18px; margin-bottom:10px}
+  #dlgMsg{font-size:15px; color:var(--fg); line-height:1.55}
+  #dlgMsg b{color:var(--accent)}
+  #dlgOk{margin-top:18px; width:100%; padding:13px; border:none; border-radius:12px;
+    background:var(--accent); color:#00252b; font-size:16px; font-weight:800; cursor:pointer}
 
   /* ---------- side controls (two groups: nav-left, zoom-right; edges configurable) ---------- */
   .ctlgroup{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:10;
@@ -342,6 +354,8 @@
 <div id="orientLabel">north up</div>
 <div id="banner">OFF TRACK</div>
 <div id="toast"></div>
+<div id="dlgShade"></div>
+<div id="dlg"><h4 id="dlgTitle"></h4><div id="dlgMsg"></div><button id="dlgOk">Got it</button></div>
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div id="leftCtl" class="ctlgroup">
@@ -351,10 +365,10 @@
   <div class="ctl" id="soundCtl" title="sound / mute">🔊</div>
 </div>
 <div id="rightCtl" class="ctlgroup">
+  <div class="ctl preset" data-p="min" title="favourite zoom — tap to jump, hold to set">min</div>
   <div class="ctl" id="zoomOut">−</div>
   <div class="ctl" id="zoomIn">+</div>
-  <div class="ctl preset" data-p="min" title="min zoom — tap to jump, hold to set">min</div>
-  <div class="ctl preset" data-p="max" title="max zoom — tap to jump, hold to set">max</div>
+  <div class="ctl preset" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
 </div>
 <button id="startFab" title="Start navigation">START</button>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
@@ -1724,13 +1738,35 @@ function refreshPresets() {
     b.classList.toggle('set', !!p[k]);
   }
 }
+/* one-off dialog helper + the first-use explainer for the favourite-zoom presets */
+function showDialog(title, html) {
+  document.getElementById('dlgTitle').textContent = title;
+  document.getElementById('dlgMsg').innerHTML = html;
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('dlg').classList.add('on');
+}
+function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); }
+document.getElementById('dlgOk').onclick = closeDialog;
+document.getElementById('dlgShade').onclick = closeDialog;
+// first tap/hold of min or max explains favourite zoom; the gesture that triggered it is consumed
+function zoomTipGate() {
+  if (S.set.seenZoomTip) return false;
+  S.set.seenZoomTip = true; saveSet();
+  showDialog('Favourite zoom',
+    'The <b>min</b> and <b>max</b> buttons are your two favourite zoom levels.<br><br>' +
+    '• <b>Tap</b> one to jump to that zoom.<br>' +
+    '• <b>Press &amp; hold</b> to save the current zoom as that favourite.');
+  return true;
+}
 function presetTap(k) {
+  if (zoomTipGate()) return;
   if (!mapReady) return;
   const z = zoomForSpan(presetSpan(k), centerLat());
   map.easeTo({ zoom: z, duration: 350 });
   if (S.nav && S.set.autoZoom) setTimeout(() => setHold(z), 400);
 }
 function presetSet(k) {
+  if (zoomTipGate()) return;
   if (!mapReady) return;
   const z = map.getZoom();
   const zp = S.set.zoomPresets[S.set.vehicle] = S.set.zoomPresets[S.set.vehicle] || {};
