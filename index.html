@@ -113,25 +113,32 @@
     background:var(--panel2); border:1px solid #2a3540; color:var(--fg); font-size:15px; padding:10px 18px;
     border-radius:12px; display:none; max-width:88vw; text-align:center}
 
-  /* ---------- side controls ---------- */
-  #sideCtl{position:fixed; right:10px; bottom:120px; z-index:10;
-    display:grid; grid-template-columns:repeat(2,auto); gap:8px; justify-content:end; align-content:end}
+  /* ---------- side controls (two groups: nav-left, zoom-right; edges configurable) ---------- */
+  .ctlgroup{position:fixed; top:50%; transform:translateY(-50%); z-index:10;
+    display:flex; flex-direction:column; gap:8px}
+  #leftCtl{left:10px} #rightCtl{right:10px}
+  /* edges = top/bottom: the two groups become horizontal rows on the top & bottom edges.
+     ID selectors (needed to beat #leftCtl/#rightCtl's own left/right) */
+  body.edges-tb #leftCtl, body.edges-tb #rightCtl{top:auto; bottom:auto; left:50%; right:auto;
+    transform:translateX(-50%); flex-direction:row}
+  body.edges-tb #leftCtl{top:calc(env(safe-area-inset-top) + 10px)}
+  body.edges-tb #rightCtl{bottom:96px}
+  body.edges-tb #startFab{left:50%; right:auto; transform:translateX(-50%); bottom:200px}
   .ctl{width:54px; height:54px; border-radius:14px; background:rgba(22,28,34,.92); border:1px solid #2a3540;
     color:var(--fg); font-size:26px; display:flex; align-items:center; justify-content:center; cursor:pointer}
   .ctl:active{background:var(--panel2)}
   .ctl.active{border-color:var(--accent); color:var(--accent)}
-  /* floating controls: big for gloved hands, two columns so the consolidated
-     cluster (sound, orientation, zoom, presets, fit, follow) fits any orientation */
-  #sideCtl .ctl{width:88px; height:88px; border-radius:24px; font-size:40px}
-  #sideCtl .ctl.preset{font-size:18px; font-weight:800; color:var(--dim)}
-  #sideCtl .ctl.preset.set{color:var(--fg)}
+  /* floating controls: big for gloved hands */
+  .ctlgroup .ctl{width:88px; height:88px; border-radius:24px; font-size:40px}
+  .ctlgroup .ctl.preset{font-size:18px; font-weight:800; color:var(--dim)}
+  .ctlgroup .ctl.preset.set{color:var(--fg)}
   #soundCtl.off{border-color:var(--bad); color:var(--bad)}
   /* orientation, sound and the compass now live in the cluster — retire the
      standalone rose, top-right mute and the rose's mode label */
   #north{display:none !important} #muteBtn{display:none !important} #orientLabel{display:none !important}
   /* riding screen: every floating button ghosts to --navOp (advanced knob) until touched */
-  body.navving #sideCtl .ctl{opacity:var(--navOp,.4); background:rgba(22,28,34,.5)}
-  body.navving #sideCtl .ctl:active{opacity:1}
+  body.navving .ctlgroup .ctl{opacity:var(--navOp,.4); background:rgba(22,28,34,.5)}
+  body.navving .ctlgroup .ctl:active{opacity:1}
   body.navving #north, body.navving #gloveBtn{opacity:var(--navOp,.4)}
   body.navving #north:active, body.navving #gloveBtn:active{opacity:1}
   body.navving #cueEditBtn, body.navving #revBtn{display:none !important} /* planning-only */
@@ -190,7 +197,8 @@
   #bottom{position:fixed; left:0; right:0; bottom:0; z-index:15;
     background:rgba(14,18,22,.96); border-top:1px solid #232d38;
     padding:10px 12px calc(env(safe-area-inset-bottom) + 10px); display:flex; gap:10px; align-items:center}
-  #menuBtn{width:56px; height:56px; font-size:26px; flex:none}
+  #menuBtn{width:38px; height:38px; font-size:24px; flex:none; background:transparent; border:none; color:var(--dim)}
+  #menuBtn:active{background:rgba(22,28,34,.5)}
   #trackInfo{flex:1; min-width:0; line-height:1.25}
   #trackName{font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   #trackSub{font-size:13px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -198,6 +206,12 @@
     background:var(--ok); color:#04240f; cursor:pointer}
   #navBtn.stop{background:var(--bad); color:#fff}
   #navBtn:disabled{background:#2a3540; color:#5a6a78}
+  /* floating START — bottom-right on open, hidden while navigating */
+  #startFab{position:fixed; right:14px; bottom:150px; z-index:17; height:72px; padding:0 32px;
+    border:none; border-radius:20px; background:var(--ok); color:#04240f; font-size:24px; font-weight:800;
+    box-shadow:0 4px 18px rgba(0,0,0,.5); cursor:pointer; display:none; letter-spacing:.02em}
+  #startFab.on{display:block}
+  body.navving #startFab{display:none !important}
 
   /* ---------- panel ---------- */
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
@@ -277,9 +291,12 @@
     #vargInd .blink{font-size:44px} #vargInd .beam{font-size:26px}
     /* short viewports (landscape / split-screen): tighten the two-column cluster so
        all rows (sound/orient, zoom, presets, fit, follow) clear the viewport height */
-    #sideCtl{gap:7px}
-    #sideCtl .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
-    #sideCtl .ctl.preset{font-size:13px}
+    .ctlgroup{gap:7px}
+    .ctlgroup .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
+    .ctlgroup .ctl.preset{font-size:13px}
+    /* short viewport: the side columns reach the corners, so centre START along the
+       bottom (above the bar) instead of the bottom-right where it'd hit the zoom column */
+    #startFab{left:50%; right:auto; transform:translateX(-50%); bottom:82px; height:60px; font-size:21px}
     #north{width:56px; height:56px; font-size:20px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
@@ -324,16 +341,19 @@
 <div id="toast"></div>
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
-<div id="sideCtl">
-  <div class="ctl" id="soundCtl" title="sound / mute">🔊</div>
+<div id="leftCtl" class="ctlgroup">
   <div class="ctl" id="orientCtl" title="north-up / course-up / compass">N</div>
+  <div class="ctl" id="followBtn" title="centre on location">◎</div>
+  <div class="ctl" id="fitBtn" title="fit track">⛶</div>
+  <div class="ctl" id="soundCtl" title="sound / mute">🔊</div>
+</div>
+<div id="rightCtl" class="ctlgroup">
   <div class="ctl" id="zoomOut">−</div>
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl preset" data-p="min" title="min zoom — tap to jump, hold to set">min</div>
   <div class="ctl preset" data-p="max" title="max zoom — tap to jump, hold to set">max</div>
-  <div class="ctl" id="fitBtn" title="fit track">⛶</div>
-  <div class="ctl" id="followBtn" title="centre on location">◎</div>
 </div>
+<button id="startFab" title="Start navigation">START</button>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
 <div id="lockPill" title="centre lock — long-press map to unlock">🔒 locked</div>
 
@@ -418,6 +438,8 @@
       <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button><button data-s="satellite">Sat</button></span></div>
     <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
     <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
+    <div class="row"><label>Control buttons on</label><span class="seg" id="edgesSeg">
+      <button data-e="sides">Left &amp; right</button><button data-e="tb">Top &amp; bottom</button></span></div>
 
     <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
@@ -532,7 +554,7 @@ const S = {
   friends: new Map(), demo: null,
   trail: [], trailTrack: null, autoOrient: false, autoBlock: false,
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
-    profile: false, gloveSide: 'left', vehicle: 'enduro', steep: true, surf: true, trail: true,
+    profile: false, gloveSide: 'left', ctlEdges: 'sides', vehicle: 'enduro', steep: true, surf: true, trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
     varg: false, vargSrc: 'vp', vpUrl: '' },
 };
@@ -2024,6 +2046,7 @@ function startNav() {
     movingS: 0, avgSpd: null, lastFixT: 0 };
   S.nav = true; setFollow(true);
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
+  updateStartFab();
   document.getElementById('hud').classList.add('on');
   document.getElementById('hudSpeed').classList.add('on');
   prog.classList.add('on'); prog.classList.remove('offtrack', 'countdown');
@@ -2042,6 +2065,7 @@ function stopNav() {
   S.nav = false;
   S.autoOrient = false; S.autoBlock = false; applyOrient(); // hand orientation back to the rider's mode
   document.body.classList.remove('navving');
+  updateStartFab();
   document.getElementById('hud').classList.remove('on');
   document.getElementById('hudSpeed').classList.remove('on');
   document.getElementById('banner').classList.remove('on');
@@ -2056,6 +2080,15 @@ function stopNav() {
   releaseWake(); stopDemo();
 }
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
+// floating START (bottom-right on the map) — starts nav; picks a track first if none is selected
+const startFab = document.getElementById('startFab');
+startFab.onclick = () => {
+  if (S.nav) return;
+  if (S.sel < 0) { toast('Pick a track to follow, or ☰ → General to free-ride'); openPanel(); return; }
+  startNav();
+};
+function updateStartFab() { startFab.classList.toggle('on', !S.nav); }
+updateStartFab();
 
 function onFix(lat, lon, acc, speed, heading) {
   if (!REF) return;
@@ -2181,20 +2214,14 @@ const progDone = document.getElementById('progDone'), progTogo = document.getEle
 function placeProgress() {
   const b = document.getElementById('bottom').offsetHeight;
   prog.style.bottom = b + 'px';
-  // keep side controls, rose and glove button clear of the strip while navigating; CSS default otherwise
+  // the side control groups are edge/centre-anchored in CSS; only the glove button
+  // (bottom-left) needs to lift clear of the strip while navigating
   const gb = document.getElementById('gloveBtn');
   const above = S.nav ? b + prog.offsetHeight + 14 : 0;
   // lift maplibre's own bottom controls (scale, attribution) clear of the bar + strip
   for (const c of document.querySelectorAll('.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right'))
     c.style.bottom = S.nav ? (b + prog.offsetHeight + 4) + 'px' : '';
-  document.getElementById('sideCtl').style.bottom = above ? above + 'px' : '';
   gb.style.bottom = above ? above + 'px' : '';
-  // rose shares the left edge with the glove button — stack it on top when they'd collide
-  const northAbove = above && S.set.gloveSide === 'left' ? above + gb.offsetHeight + 12 : above;
-  document.getElementById('north').style.bottom = northAbove ? northAbove + 'px' : '';
-  // mode label sits just under the rose (riding only)
-  const ol = document.getElementById('orientLabel');
-  ol.style.left = '0px'; ol.style.bottom = ((northAbove || 120) - 15) + 'px';
 }
 window.addEventListener('resize', () => {
   placeProgress(); drawProgress(true);
@@ -3344,6 +3371,16 @@ const gloveRightEl = document.getElementById('setGloveRight');
 gloveRightEl.checked = S.set.gloveSide === 'right';
 gloveRightEl.onchange = () => { S.set.gloveSide = gloveRightEl.checked ? 'right' : 'left'; saveSet(); applyGloveSide(); };
 applyGloveSide();
+// control-button edges: left/right columns (default) or top/bottom rows
+function applyEdges() {
+  const tb = S.set.ctlEdges === 'tb';
+  document.body.classList.toggle('edges-tb', tb);
+  for (const b of document.querySelectorAll('#edgesSeg button')) b.classList.toggle('active', b.dataset.e === (tb ? 'tb' : 'sides'));
+  placeProgress();
+}
+for (const b of document.querySelectorAll('#edgesSeg button'))
+  b.onclick = () => { S.set.ctlEdges = b.dataset.e; saveSet(); applyEdges(); };
+applyEdges();
 const nameEl = document.getElementById('myName'), codeEl = document.getElementById('rideCode'), emailEl = document.getElementById('myEmail');
 nameEl.value = S.set.name; codeEl.value = S.set.code; emailEl.value = S.set.email || '';
 nameEl.onchange = () => { S.set.name = nameEl.value.trim(); saveSet(); };
