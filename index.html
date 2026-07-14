@@ -50,6 +50,37 @@
   body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px)}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 116px)}
   body.navving #lockPill{top:calc(env(safe-area-inset-top) + 152px)}
+  /* Stark Varg battery/mode pill — top-right, under the mute button while riding.
+     Doubles as the BLE handoff switch: the bike allows ONE connection, so
+     tap = release it to the Stark app (tuning), tap again = take it back. */
+  #vargPill{position:fixed; top:calc(env(safe-area-inset-top) + 12px); right:10px; z-index:12;
+    background:rgba(14,18,22,.85); border:1px solid #2a3540; border-radius:12px; padding:6px 11px;
+    font-size:17px; font-weight:700; display:none; align-items:center; gap:8px;
+    font-variant-numeric:tabular-nums; cursor:pointer}
+  #vargPill.on{display:flex}
+  #vargPill .vm{font-size:13px; font-weight:800; color:var(--accent)}
+  #vargPill.low{border-color:var(--bad); color:var(--bad)}
+  #vargPill.wait{color:var(--dim)} #vargPill.wait .vm{color:var(--dim)}
+  #vargPill.rel{border-style:dashed; color:var(--dim); font-size:13px; font-weight:600}
+  body.navving #vargPill{top:calc(env(safe-area-inset-top) + 168px)}
+  /* Varg reverse/crawl takeover — whole screen tinted, the word itself knocked out
+     to full transparency (SVG mask), pulsing. Above panel/glove: nothing should
+     out-shout "you are in reverse". */
+  #vargOver{position:fixed; inset:0; z-index:26; display:none; pointer-events:none}
+  #vargOver.on{display:block; animation:vgPulse 1.1s ease-in-out infinite}
+  #vargOver text{font:900 16vw system-ui,sans-serif; letter-spacing:.02em}
+  @keyframes vgPulse{0%,100%{opacity:1}50%{opacity:.55}}
+  /* big translucent mode digit — same look as the kph readout, above the compass rose */
+  #vargModeBig{position:fixed; left:12px; bottom:224px; z-index:10; background:rgba(14,18,22,.85);
+    border-radius:12px; padding:6px 12px; font-size:26px; font-weight:800; display:none;
+    font-variant-numeric:tabular-nums}
+  #vargModeBig.on{display:block} #vargModeBig small{font-size:12px; color:var(--dim); font-weight:500}
+  /* mode-change flash: the new mode + its curve settings, ~2s then gone */
+  #vargFlash{position:fixed; top:24%; left:50%; transform:translateX(-50%); z-index:27; display:none;
+    background:rgba(14,18,22,.92); border:1px solid #2a3540; border-radius:16px; padding:14px 26px;
+    font-size:26px; font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums}
+  #vargFlash small{color:var(--dim); font-weight:600; font-size:15px}
+  #vargFlash.on{display:block}
   /* mute: one tap on the riding screen, ghosted like the other ride controls */
   #muteBtn{position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:10px; z-index:12;
     width:96px; height:96px; border-radius:28px; background:rgba(22,28,34,.5); border:1px solid #2a3540;
@@ -223,6 +254,9 @@
     body.navving #holdPill{top:calc(env(safe-area-inset-top) + 84px)}
     body.navving #lockPill{top:calc(env(safe-area-inset-top) + 118px)}
     #muteBtn{width:40px; height:40px; font-size:19px; top:calc(env(safe-area-inset-top) + 44px)}
+    body.navving #vargPill{top:calc(env(safe-area-inset-top) + 92px)}
+    #vargModeBig{bottom:186px; font-size:20px}
+    #vargFlash{font-size:20px}
     /* short viewports: keep the enlarged controls from overflowing the landscape column */
     #sideCtl{gap:6px}
     #sideCtl .ctl{width:64px; height:64px; border-radius:16px; font-size:30px}
@@ -254,6 +288,13 @@
 </div></div>
 <div id="hudSpeed">0 <small>km/h</small></div>
 <div id="muteBtn" title="mute / unmute">🔊</div>
+<div id="vargPill" title="Stark Varg — tap to release / reclaim the bike"><span id="vargSoc">🔋 —%</span><span class="vm" id="vargMode"></span></div>
+<div id="vargModeBig"><span id="vargModeNum">—</span> <small>mode</small></div>
+<div id="vargFlash"></div>
+<div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
+  <rect width="100%" height="100%" fill="#fff"/>
+  <text id="vargOverTxt" x="50%" y="50%" text-anchor="middle" dominant-baseline="central" fill="#000">REVERSE</text>
+</mask></defs><rect id="vargOverBg" width="100%" height="100%" fill="#ff4545" fill-opacity=".45" mask="url(#vgMask)"/></svg></div>
 <div id="orientLabel">north up</div>
 <div id="banner">OFF TRACK</div>
 <div id="toast"></div>
@@ -311,6 +352,7 @@
     <button data-t="Tracks" class="active">Tracks</button>
     <button data-t="General">General</button>
     <button data-t="Nav">Nav</button>
+    <button data-t="Stark">Stark</button>
     <button data-t="Keys">Keys</button>
     <button data-t="Adv" id="advTabBtn" style="display:none">Adv</button>
   </div>
@@ -354,6 +396,7 @@
 
     <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
+
     <div class="row"><label>Show advanced tab</label><span class="sw"><input type="checkbox" id="setShowAdv"><span></span></span></div>
   </div>
 
@@ -372,6 +415,26 @@
     <div class="row"><label>Backtrack trail</label><span class="sw"><input type="checkbox" id="setTrail"><span></span></span></div>
     <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
     <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
+  </div>
+
+  <div class="tabSec" id="tabStark">
+    <div class="row"><label>Bike telemetry</label><span class="sw"><input type="checkbox" id="setVarg"><span></span></span></div>
+    <div class="row"><label>Source</label><span class="seg" id="vargSrcSeg">
+      <button data-src="vp">VargPilot</button><button data-src="ble">Direct BLE</button></span></div>
+    <div class="hint" id="vargStatus"></div>
+
+    <h3>VargPilot server</h3>
+    <div class="row"><label>Server URL</label><input type="text" id="vpUrl" maxlength="80" placeholder="http://127.0.0.1:8080"></div>
+    <div class="btnRow" id="vpRow" style="display:none"><button class="btn" id="vpBtn">Connect</button><button class="btn" id="vpProbeBtn">Probe API → console</button></div>
+    <div class="hint">VargPilot holds the bike's Bluetooth and re-serves telemetry from its built-in webserver.
+      Running VP on this phone → <b>http://127.0.0.1:8080</b>; on another device use the URL VP displays (same Wi-Fi).</div>
+
+    <h3>Direct BLE (no VargPilot)</h3>
+    <div class="btnRow" id="vargRow" style="display:none"><button class="btn" id="vargBtn">Connect bike…</button><button class="btn" id="vargForgetBtn">Forget bike</button></div>
+    <div class="hint">The app talks to the VCU itself — it then owns the bike's single BLE slot; tap the 🔋 pill to hand it to the Stark app and back.</div>
+
+    <h3>Alerts</h3>
+    <div class="btnRow" id="vargRow2" style="display:none"><button class="btn" id="vargPrevRev">Preview reverse alert</button><button class="btn" id="vargPrevCrawl">Preview crawl alert</button></div>
   </div>
 
   <div class="tabSec" id="tabKeys">
@@ -445,7 +508,8 @@ const S = {
   trail: [], trailTrack: null, autoOrient: false, autoBlock: false,
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, gloveSide: 'left', vehicle: 'enduro', steep: true, surf: true, trail: true,
-    compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true },
+    compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
+    varg: false, vargSrc: 'vp', vpUrl: '' },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
@@ -2674,6 +2738,360 @@ function applyShowAdv() {
 }
 bindSet('setShowAdv', 'showAdv', applyShowAdv);
 applyShowAdv();
+
+/* ---------------- Stark Varg telemetry (Web Bluetooth) ----------------
+   The bike's VCU speaks BLE directly: bond once with the per-VIN PIN (Android
+   owns that dialog), then SUBSCRIBE to notifications — plain reads return
+   nothing on this VCU. Only ONE central can hold the bike at a time and the
+   stock Stark app fights aggressively for it, so the HUD pill doubles as a
+   handoff switch: tap to release the bike (go tune in the Stark app), tap
+   again to take it back. Battery layout (via the EDR forum): three u16s —
+   state of charge, state of health, DC bus voltage. Endianness and scale are
+   unconfirmed until the first real connection, so the decoder guesses
+   defensively and logs raw bytes to the console to pin the true layout. */
+const VARG_SERVICE = '00006000-5374-6172-4b20-467574757265'; // '…' = ascii "Star K Future"
+const VARG_CHARS = {
+  battery: '00006004-5374-6172-4b20-467574757265', // u16 soc, u16 soh, u16 vbus
+  mode: null, // TODO(varg): ride mode 1–5 + crawl/reverse — characteristic unknown, asked on EDR forum
+  temps: null, // TODO(varg): motor + inverter temps — wire into the alert system (thermal cutoff warning)
+};
+const varg = {
+  dev: null, batt: null, state: 'off', // off | connecting | on | released | retry
+  soc: null, soh: null, vbus: null,
+  mode: null, special: null, // mode 1–5; special: null | 'rev' | 'crawl'
+  hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
+  seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, pickAll: false, sndT: null, flashT: null,
+};
+const vargPill = document.getElementById('vargPill');
+const vargStatus = document.getElementById('vargStatus');
+
+function vargBattery(dv) {
+  if (dv.byteLength < 6) return; // not the layout we expect — raw log below will show what it is
+  varg.seen = Date.now();
+  if (varg.logN < 5) { // first few frames raw, for pinning endianness/scale on the real bike
+    varg.logN++;
+    console.log('[varg] battery raw:', [...new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)]
+      .map(b => b.toString(16).padStart(2, '0')).join(' '));
+  }
+  // pick the endianness whose SOC lands in 0–100 (or 0–1000 ⇒ tenths of %)
+  let soc = null, le = true;
+  for (const e of [true, false]) {
+    const v = dv.getUint16(0, e);
+    if (v <= 100) { soc = v; le = e; break; }
+    if (v <= 1000) { soc = v / 10; le = e; break; }
+  }
+  if (soc == null) { soc = dv.getUint16(0, true); } // out of range both ways — surface it, don't hide it
+  varg.soc = Math.round(soc);
+  varg.soh = dv.getUint16(2, le);
+  varg.vbus = dv.getUint16(4, le); // scale TBD (V / dV / mV) — shown raw in the long-press detail
+  vargUI();
+}
+
+function vargModeTxt() { // ready for when the mode characteristic lands
+  return varg.special === 'rev' ? 'REV' : varg.special === 'crawl' ? 'CRAWL'
+    : varg.mode == null ? '' : 'M' + varg.mode;
+}
+
+/* reverse/crawl takeover. The bike only engages these after its own ~1.4 s
+   button hold and gives the rider no feedback — so the VCU state notification
+   is the ground truth: the instant it reports reverse/crawl we tint the whole
+   screen (word knocked out to transparent) and run a repeating beeper; the
+   instant it leaves, everything stops. The overlay can never show unless the
+   bike itself says so. Sounds follow the master mute like every other beep. */
+function vargSpecial(sp) { // sp: null | 'rev' | 'crawl'
+  if (sp === varg.special) return;
+  varg.special = sp;
+  clearInterval(varg.sndT); varg.sndT = null;
+  document.getElementById('vargOver').classList.toggle('on', !!sp);
+  if (sp) {
+    document.getElementById('vargOverTxt').textContent = sp === 'rev' ? 'REVERSE' : 'CRAWL';
+    document.getElementById('vargOverBg').setAttribute('fill', sp === 'rev' ? '#ff4545' : '#ff9d1f');
+    const snd = sp === 'rev' // truck backup beeper vs low two-tone — unmistakably different
+      ? () => { if (S.set.sound) { tone(950, .22, 0); vib([90]); } }
+      : () => { if (S.set.sound) { tone(500, .18, 0); tone(380, .2, .22); vib([50]); } };
+    snd(); varg.sndT = setInterval(snd, sp === 'rev' ? 900 : 1300);
+  }
+  vargUI();
+}
+
+function vargFlashCard() { // new mode + its curve settings, ~2 s, on every mode change
+  const f = document.getElementById('vargFlash'), bits = [];
+  if (varg.hp != null) bits.push(varg.hp + '<small> hp</small>');
+  if (varg.regen != null) bits.push('<small>regen </small>' + varg.regen + '<small>%</small>');
+  if (varg.tc != null) bits.push('<small>TC </small>' + varg.tc + '<small>%</small>');
+  f.innerHTML = 'M' + varg.mode + (bits.length ? ' <small>·</small> ' + bits.join(' <small>·</small> ') : '');
+  f.classList.add('on');
+  clearTimeout(varg.flashT); varg.flashT = setTimeout(() => f.classList.remove('on'), 2200);
+}
+
+function vargApplyState(st) { // single entry point for the future mode/config decoder
+  for (const k of ['hp', 'regen', 'tc']) if (st[k] != null) varg[k] = st[k];
+  if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; vargFlashCard(); }
+  if ('special' in st) vargSpecial(st.special);
+  vargUI();
+}
+
+async function vargConnect(dev) {
+  varg.dev = dev; varg.state = 'connecting'; vargUI();
+  dev.removeEventListener('gattserverdisconnected', vargDropped); // no dupes across retries
+  dev.addEventListener('gattserverdisconnected', vargDropped);
+  const server = await dev.gatt.connect(); // resolves whenever the bike powers on in range
+  const svc = await server.getPrimaryService(VARG_SERVICE);
+  varg.batt = await svc.getCharacteristic(VARG_CHARS.battery);
+  varg.batt.addEventListener('characteristicvaluechanged', e => vargBattery(e.target.value));
+  await varg.batt.startNotifications(); // triggers the OS PIN dialog on first ever connect
+  // TODO(varg): subscribe mode/config + temps here once VARG_CHARS has them; their
+  // decoders should call vargApplyState({mode, special, hp, regen, tc}) — all UI hangs off it
+  varg.state = 'on'; varg.retryN = 0; varg.hogged = false; vargUI();
+}
+
+function vargDropped() {
+  varg.soc = null; // stale % is worse than none
+  vargSpecial(null); // no connection = no idea if we're still in reverse — never show a guess
+  if (varg.state === 'released' || !S.set.varg || S.set.vargSrc !== 'ble') { vargUI(); return; }
+  varg.state = 'retry'; vargUI(); vargRetry();
+}
+
+function vargRetry() { // BLE flaps on a dirt bike — recover quietly, back off to 15 s
+  clearTimeout(varg.retryT);
+  if (!varg.dev) { varg.state = 'off'; vargUI(); return; } // nothing to retry against
+  const wait = Math.min(15000, 1000 * 2 ** varg.retryN++);
+  varg.retryT = setTimeout(() => {
+    vargConnect(varg.dev).catch(() => {
+      if (varg.retryN >= 4 && !varg.hogged) { // repeated failure smells like the stock app stole the connection
+        varg.hogged = true;
+        toast('Can’t reach the bike — the Stark app may be holding it. Force-close it, then tap the 🔋 pill.');
+      }
+      vargRetry();
+    });
+  }, wait);
+}
+
+function vargRelease() { // hand the bike to the Stark app for tuning
+  clearTimeout(varg.retryT);
+  varg.state = 'released'; varg.soc = null;
+  if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect();
+  toast('Bike released — open the Stark app. Tap the pill to take it back.');
+  vargUI();
+}
+
+function vargResume() { // take it back (bond persists — no PIN, no picker)
+  varg.retryN = 0; varg.hogged = false;
+  vargConnect(varg.dev).catch(vargDropped);
+}
+
+async function vargPick() { // first-time pairing: needs the chooser (user gesture)
+  if (!navigator.bluetooth) { toast('No Web Bluetooth in this browser — use Chrome on Android.'); return; }
+  try {
+    const dev = await navigator.bluetooth.requestDevice(varg.pickAll
+      ? { acceptAllDevices: true, optionalServices: [VARG_SERVICE] }
+      // the VCU may not advertise its custom service — OR in name prefixes as a net
+      : { filters: [{ services: [VARG_SERVICE] }, { namePrefix: 'Stark' }, { namePrefix: 'VARG' }],
+          optionalServices: [VARG_SERVICE] });
+    varg.pickAll = false; varg.retryN = 0;
+    await vargConnect(dev);
+  } catch (e) {
+    if (e.name === 'NotFoundError') { // bike not in the list (or cancelled) — next tap shows everything
+      varg.pickAll = true;
+      document.getElementById('vargBtn').textContent = 'Connect bike (show all devices)…';
+    } else { toast('Bike connect failed: ' + e.message); }
+    vargUI();
+  }
+}
+
+async function vargBoot() { // reclaim a previously-permitted bike with zero taps
+  if (!S.set.varg || !navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+  try {
+    const devs = await navigator.bluetooth.getDevices();
+    if (devs.length && varg.state === 'off') { varg.retryN = 2; vargConnect(devs[0]).catch(vargDropped); }
+  } catch (e) { /* permissions backend unavailable — Connect button still works */ }
+}
+
+/* ---------------- VargPilot webserver source ----------------
+   Preferred source. VargPilot holds the bike's BLE connection (it replaces the
+   stock app anyway) and re-serves fully-decoded telemetry from its built-in
+   BikeStore webserver. Protocol (confirmed against a live VP 0.1.125 instance,
+   2026-07): one WebSocket at <base>/ws; server greets with {op:'hello'} then
+   {op:'catalog', paths:[{path,writable}…]}; client sends {op:'sub', paths:[…]}
+   and receives {op:'prop', path, value, t} per update. Server pings every 15 s
+   (browser auto-pongs); paths are dot-hierarchical (Battery.SOC.soc_pct). */
+const vp = { ws: null, retryT: null, cfg: { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} }, rpm: 0, walk: 0 };
+const VP_P = { // the paths DingoNav displays, verified in the live catalog
+  soc: 'Battery.SOC.soc_pct', soh: 'Battery.SOC.soh_pct', vbus: 'Battery.SOC.dc_bus_v',
+  mode: 'Live.MAPS.riding_map',
+  walk: 'Bike.STATUS_BITS.misc_bits.walking_mode', // 0 = off; engaged enum TBC (crawl vs reverse)
+  rpm: 'Live.SPEED.motor_rpm', // sign disambiguates reverse from crawl until the enum is confirmed
+};
+const vpMapPaths = m => [ // per-mode config: "torque" is the power (hp) slider on the EX
+  ['Vcu.BIKE_CONFIG.MAP.' + m + '.torque', 'hp', m],
+  ['Vcu.BIKE_CONFIG.MAP.' + m + '.regen', 'regen', m],
+  ['derived.tc.' + m + '.power_tc', 'tc', m],
+];
+function vpUrlBase() {
+  let u = (S.set.vpUrl || '').trim();
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) u = 'http://' + u;
+  return u.replace(/\/+$/, '');
+}
+function vpClose() {
+  clearTimeout(vp.retryT);
+  if (vp.ws) { vp.ws.onclose = null; vp.ws.close(); vp.ws = null; }
+}
+function vpConnect() {
+  vpClose();
+  if (!vpUrlBase()) { varg.state = 'off'; vargUI(); return; }
+  varg.state = 'connecting'; vargUI();
+  const ws = new WebSocket(vpUrlBase().replace(/^http/i, 'ws') + '/ws');
+  vp.ws = ws;
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+    if (m.op === 'catalog') { // server's hello → catalog; subscribing marks us live
+      const want = [...Object.values(VP_P)];
+      for (let i = 1; i <= 5; i++) for (const [p] of vpMapPaths(i)) want.push(p);
+      const have = new Set((m.paths || []).map(p => p.path));
+      const missing = want.filter(p => !have.has(p));
+      if (missing.length) console.warn('[vp] catalog is missing:', missing, '— VP version drift? full catalog:', m.paths);
+      ws.send(JSON.stringify({ op: 'sub', paths: want.filter(p => have.has(p)) }));
+      varg.state = 'on'; varg.seen = Date.now(); vargUI();
+    } else if (m.op === 'prop') vpProp(m.path, m.value);
+  };
+  ws.onclose = () => {
+    varg.soc = null; vargSpecial(null); // no feed = no idea if we're still in reverse
+    varg.state = 'retry'; vargUI();
+    vp.retryT = setTimeout(vpConnect, 3000);
+  };
+}
+function vpProp(path, v) {
+  varg.seen = Date.now();
+  if (path === VP_P.soc) { varg.soc = Math.round(+v); vargUI(); return; }
+  if (path === VP_P.soh) { varg.soh = +v; return; }
+  if (path === VP_P.vbus) { varg.vbus = +v; return; }
+  if (path === VP_P.rpm) { vp.rpm = +v; return; }
+  if (path === VP_P.walk) {
+    vp.walk = +v;
+    // walking_mode 0 = off. Non-zero = the button-hold special engaged; until the
+    // enum is confirmed on a real bike, negative motor rpm says which way we're going.
+    if (vp.walk) console.log('[vp] walking_mode =', vp.walk, 'rpm =', vp.rpm, '— confirm crawl/reverse enum, tell the dev');
+    vargApplyState({ special: !vp.walk ? null : vp.rpm < 0 ? 'rev' : 'crawl' });
+    return;
+  }
+  if (path === VP_P.mode) { vpApplyMode(+v); return; }
+  for (let m = 1; m <= 5; m++) for (const [p, field] of vpMapPaths(m))
+    if (path === p) { vp.cfg[m][field] = Math.round(+v); if (m === varg.mode) vpApplyMode(m); return; }
+}
+function vpApplyMode(m) {
+  if (m >= 1 && m <= 5) vargApplyState({ mode: m, hp: vp.cfg[m].hp, regen: vp.cfg[m].regen, tc: vp.cfg[m].tc });
+}
+async function vpProbe() { // one-shot recon, results to console — raw material for the spec doc
+  const base = vpUrlBase();
+  if (!base) { toast('Set the VargPilot server URL first'); return; }
+  toast('Probing ' + base + ' — see console');
+  for (const p of ['/', '/api', '/api/channels', '/channels', '/api/telemetry', '/status']) {
+    try {
+      const r = await fetch(base + p);
+      console.log('[vp] GET', p, '→', r.status, (await r.text()).slice(0, 800));
+    } catch (e) { console.log('[vp] GET', p, '→', e.message, '(CORS-blocked ≠ down — check the Network tab)'); }
+  }
+}
+
+function vargUI() {
+  const on = S.set.varg, vpSrc = S.set.vargSrc === 'vp';
+  document.getElementById('vpRow').style.display = on && vpSrc ? '' : 'none';
+  document.getElementById('vargRow').style.display = on && !vpSrc ? '' : 'none';
+  document.getElementById('vargRow2').style.display = on ? '' : 'none';
+  const mb = document.getElementById('vargModeBig');
+  mb.classList.toggle('on', on && varg.state === 'on' && varg.mode != null);
+  document.getElementById('vargModeNum').textContent = varg.mode == null ? '—' : varg.mode;
+  vargPill.classList.toggle('on', on && varg.state !== 'off');
+  vargPill.classList.toggle('rel', varg.state === 'released');
+  vargPill.classList.toggle('wait', varg.state === 'connecting' || varg.state === 'retry');
+  vargPill.classList.toggle('low', varg.soc != null && varg.soc <= 15);
+  document.getElementById('vargSoc').textContent =
+    varg.state === 'released' ? 'bike free' : '🔋 ' + (varg.soc == null ? '—%' : varg.soc + '%');
+  document.getElementById('vargMode').textContent = varg.state === 'on' ? vargModeTxt() : '';
+  vargStatus.textContent = !on ? 'Off — telemetry pill hidden.'
+    : vpSrc ? {
+        off: 'Set the VargPilot server URL below, then Connect.',
+        connecting: 'Connecting to VargPilot at ' + (vpUrlBase() || '—') + '…',
+        on: 'VargPilot connected — telemetry streaming.',
+        released: '',
+        retry: 'VargPilot unreachable — retrying every 5 s. Is the VP webserver on, and on this Wi-Fi?' }[varg.state]
+    : !navigator.bluetooth
+    ? 'This browser has no Web Bluetooth — use Chrome on Android (the Arkenstone works).'
+    : { off: 'Not connected — power the bike on, then Connect. First time asks for the PIN on the bike.',
+        connecting: 'Looking for the bike… (connects when it powers on in range)',
+        on: 'Connected — battery streaming. Tap the 🔋 pill to release the bike to the Stark app.',
+        released: 'Released — the Stark app can connect. Tap the pill to take the bike back.',
+        retry: 'Connection dropped — retrying…' }[varg.state];
+}
+
+function vargDetailToast() { // the engineering detail without cluttering the pill
+  toast(vargModeTxt() + (varg.hp != null ? ' · ' + varg.hp + ' hp' : '')
+    + (varg.regen != null ? ' · regen ' + varg.regen + '%' : '')
+    + (varg.tc != null ? ' · TC ' + varg.tc + '%' : '')
+    + ' · SOH ' + (varg.soh ?? '—') + ' · Vbus raw ' + (varg.vbus ?? '—')
+    + (varg.seen ? ' · ' + Math.round((Date.now() - varg.seen) / 1000) + 's ago' : ''));
+}
+vargPill.onclick = () => {
+  if (S.set.vargSrc === 'vp') { // VP owns the bike — nothing to hand off; tap = details / reconnect
+    if (varg.state === 'on') vargDetailToast();
+    else { vpConnect(); toast('Reconnecting to VargPilot…'); }
+    return;
+  }
+  if (varg.state === 'on') vargRelease();
+  else if (varg.state === 'released') vargResume();
+  else if (varg.state === 'retry') { varg.retryN = 0; vargRetry(); toast('Retrying now…'); }
+};
+let vargHold = null;
+vargPill.onpointerdown = () => {
+  vargHold = setTimeout(() => {
+    vargHold = null; // consumed — suppress the click that follows pointerup
+    vargDetailToast();
+  }, 600);
+};
+vargPill.onpointerup = vargPill.onpointerleave = () => { if (vargHold) clearTimeout(vargHold); };
+
+document.getElementById('vargBtn').onclick = vargPick;
+// previews run the REAL engage path (overlay + beeper + pill), then disengage —
+// so what you rehearse in the carpark is exactly what the bike will trigger
+function vargPreview(sp) {
+  audio(); // the button tap doubles as the WebAudio unlock
+  vargApplyState({ special: sp });
+  setTimeout(() => vargApplyState({ special: null }), 3500);
+}
+document.getElementById('vargPrevRev').onclick = () => vargPreview('rev');
+document.getElementById('vargPrevCrawl').onclick = () => vargPreview('crawl');
+document.getElementById('vargForgetBtn').onclick = async () => {
+  clearTimeout(varg.retryT);
+  vargSpecial(null);
+  if (varg.dev) {
+    if (varg.dev.gatt.connected) varg.dev.gatt.disconnect();
+    if (varg.dev.forget) await varg.dev.forget().catch(() => {}); // Chrome 110+: drops the site permission
+  }
+  Object.assign(varg, { dev: null, batt: null, state: 'off', soc: null, soh: null, vbus: null,
+    mode: null, hp: null, regen: null, tc: null });
+  vargUI(); toast('Bike forgotten');
+};
+
+function applyVarg() { // off, or a source flip: quiesce BOTH sources, then start the chosen one
+  vargSpecial(null); vpClose();
+  clearTimeout(varg.retryT);
+  if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect();
+  varg.state = 'off'; varg.soc = null;
+  if (S.set.varg) { if (S.set.vargSrc === 'vp') vpConnect(); else vargBoot(); }
+  vargUI();
+}
+bindSet('setVarg', 'varg', applyVarg);
+bindSeg('vargSrcSeg', 'src', 'vargSrc', applyVarg);
+const vpUrlEl = document.getElementById('vpUrl');
+vpUrlEl.value = S.set.vpUrl || '';
+vpUrlEl.onchange = () => { S.set.vpUrl = vpUrlEl.value.trim(); saveSet(); applyVarg(); };
+document.getElementById('vpBtn').onclick = () => { audio(); vpConnect(); }; // tap doubles as WebAudio unlock
+document.getElementById('vpProbeBtn').onclick = vpProbe;
+setInterval(() => { // a % that quietly stopped updating lies — dim it after 20 s of silence
+  if (varg.state === 'on' && varg.seen && Date.now() - varg.seen > 20000) vargPill.classList.add('wait');
+}, 5000);
+applyVarg();
 
 /* ---------------- advanced tab: live tuning console ----------------
    Sliders over the ADV_D defaults (plus current-vehicle alert distances).
