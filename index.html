@@ -326,6 +326,63 @@
   @media (max-height: 500px) and (min-width: 700px) {
     #gloveGrid{grid-template-columns:repeat(7,1fr); max-width:none} /* landscape: one row */
   }
+
+  /* ---------- editable screen layout (edit mode) ----------
+     A layout-design tool (Settings → General → Edit screen layout), not a riding
+     feature: buttons/readouts wobble, drag to a 5×6 slot grid, dock into the ☰
+     panel via the bottom tray. Everything here is inert unless body.editing —
+     see docs/plans/2026-07-15-editable-layout-design.md. Kept after the media
+     queries so customised sizes/positions win the cascade. */
+  #dockStrip{display:none; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;
+    padding:10px; border:1px dashed #2a3540; border-radius:14px}
+  #dockStrip.has{display:flex}
+  #dockStrip.has::before{content:'Docked controls'; width:100%; font-size:11px;
+    text-transform:uppercase; letter-spacing:.1em; color:var(--dim)}
+  #dockStrip .ctl{width:64px; height:64px; border-radius:16px; font-size:28px; flex:none}
+  #dockStrip #startFab, #dockTray #startFab{position:static; display:block; height:52px;
+    padding:0 20px; font-size:17px; box-shadow:none}
+  @keyframes edWob{0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.4deg)}}
+  body.editing .editEl{animation:edWob .32s ease-in-out infinite; cursor:grab;
+    touch-action:none; transition:left .18s ease, top .18s ease}
+  body.editing .editEl.lift{animation:none; transition:none; cursor:grabbing;
+    z-index:70 !important; box-shadow:0 10px 28px rgba(0,0,0,.65)}
+  /* ghosts: conditional elements materialise while editing so they can be placed */
+  body.editing #hudSpeed{display:block; pointer-events:auto}
+  body.editing #vargPill{display:flex}
+  body.editing #vargModeBig{display:block}
+  body.editing #vargInd{pointer-events:auto}
+  body.editing #vargInd .ind{display:block; opacity:.75}
+  body.editing #startFab{display:block}
+  #editReserve, #dockTray, #slotDots{display:none}
+  body.editing #editReserve{display:flex; position:fixed; top:0; left:0; right:0; height:64px;
+    z-index:50; pointer-events:none; align-items:center; justify-content:center; font-size:11px;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--dim);
+    background:repeating-linear-gradient(45deg, rgba(143,160,176,.08) 0 8px, transparent 8px 16px);
+    border-bottom:1px dashed #2a3540}
+  body.editing #dockTray{display:flex; position:fixed; left:0; right:0; bottom:0; height:64px;
+    z-index:58; align-items:center; gap:10px; padding:0 12px; background:rgba(14,18,22,.92);
+    border-top:1px dashed #2a3540; overflow-x:auto}
+  #dockTray .trayLabel{font-size:12px; color:var(--dim); flex:none}
+  #dockTray .traySpace{flex:1}
+  body.editing #dockTray.hot{border-top-color:var(--accent); background:rgba(0,80,90,.55)}
+  #dockTray .ctl{width:52px; height:52px; border-radius:14px; font-size:24px; flex:none}
+  #dockTray button.edbtn{padding:9px 18px; border-radius:999px; border:1px solid #2a3540;
+    background:var(--panel2); color:var(--fg); font-size:15px; font-weight:800; cursor:pointer; flex:none}
+  #dockTray #editDone{background:var(--accent); color:#00252b; border:none}
+  body.editing #slotDots{display:block; position:fixed; inset:0; z-index:45; pointer-events:none}
+  #slotDots i{position:absolute; width:10px; height:10px; border-radius:50%;
+    background:rgba(143,160,176,.4); transform:translate(-50%,-50%)}
+  #slotDots i.hot{background:var(--accent); box-shadow:0 0 0 8px rgba(0,229,255,.25)}
+  /* readout size steps — scoped to [data-sz] so untouched elements keep the
+     default (and media-query) sizing exactly as before */
+  #hudSpeed[data-sz]{font-size:calc(46px*var(--sz,1))}
+  #hudSpeed[data-sz] small{font-size:calc(17px*var(--sz,1))}
+  #vargPill[data-sz]{font-size:calc(17px*var(--sz,1))}
+  #vargPill[data-sz] .vm{font-size:calc(13px*var(--sz,1))}
+  #vargModeBig[data-sz]{font-size:calc(26px*var(--sz,1))}
+  #vargModeBig[data-sz] small{font-size:calc(12px*var(--sz,1))}
+  #vargInd[data-sz] .blink{font-size:calc(60px*var(--sz,1))}
+  #vargInd[data-sz] .beam{font-size:calc(34px*var(--sz,1))}
 </style>
 </head>
 <body>
@@ -556,7 +613,12 @@ const idb = {
 /* ---------------- geometry helpers (nav math in local metres) ---------------- */
 const R_LAT = 110540, R_LON = 111320;
 let REF = null;
-function setRef(lat, lon) { REF = { lat, lon, kx: R_LON * Math.cos(lat * Math.PI / 180) }; }
+function setRef(lat, lon) {
+  // Guard: a bad call (e.g. an array instead of a number) would poison the
+  // projection for every later track — they'd all collapse to 2 NaN points.
+  if (!isFinite(lat) || !isFinite(lon)) { console.warn('setRef ignored non-finite', lat, lon); return; }
+  REF = { lat, lon, kx: R_LON * Math.cos(lat * Math.PI / 180) };
+}
 function toXY(lat, lon) { return [(lon - REF.lon) * REF.kx, (lat - REF.lat) * R_LAT]; }
 function toLL(x, y) { return [y / R_LAT + REF.lat, x / REF.kx + REF.lon]; }
 function dist(ax, ay, bx, by) { const dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy); }
@@ -594,8 +656,8 @@ const ADV_D = {
   apprMul: 1.5, apprFloor: 250, offM: 60, onM: 40, beepVol: 0.5, cdDist: 300,
   btnOp: 0.4, trailGap: 20, haloOp: 0.3, haloMul: 2.2,
   chevSize: 15, chevGap: 90, chevCol: '#003a44',
-  colRoute: '#00e5ff', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
-  colTrail: '#e06d00', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0,
+  colRoute: '#00e5ff', colOwn: '#8f8f8f', colOther: '#ff2d2d', colPlan: '#3390ff', // own heat mid-grey — orange overpowered the basemap
+  colTrail: '#8a7355', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // trail brown — stock orange shouted over the map
   dirtDash: 2.4, dirtGap: 1.4, singleDash: 0.1, singleGap: 1.7,
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
@@ -728,9 +790,24 @@ function idxAt(trk, distM) {
 
 /* ---------------- heatmap processing (junction grid in XY) ---------------- */
 function processHeatmap(geojson) {
-  const feats = geojson.features || [];
+  // Normalise MultiLineStrings (privacy trimming / geometry ops in the planner
+  // can split a ride) into plain LineStrings — everything downstream (REF
+  // seeding, cue heatGrid, fit) assumes LineString. A MultiLineString first
+  // feature used to seed REF with coordinate ARRAYS → NaN projection → every
+  // GPX track restored after it collapsed to 2 points ("NaN km", blank map).
+  const feats = (geojson.features || []).flatMap(f => {
+    const g = f.geometry;
+    if (g && g.type === 'MultiLineString')
+      return g.coordinates.map(cs => ({ ...f, geometry: { type: 'LineString', coordinates: cs } }));
+    return [f];
+  });
+  geojson = { ...geojson, features: feats };
   if (!feats.length) throw new Error('empty GeoJSON');
-  if (!REF) { const c = feats[0].geometry.coordinates[0]; setRef(c[1], c[0]); }
+  if (!REF) {
+    const first = feats.find(f => f.geometry && f.geometry.type === 'LineString');
+    const c = first && first.geometry.coordinates[0];
+    if (c) setRef(c[1], c[0]);
+  }
   let count = 0;
   for (const f of feats) if (f.geometry) count++;
   return { geojson, count, grid: null };
@@ -1360,20 +1437,22 @@ function addOverlays() {
   map.addSource('posAcc', { type: 'geojson', data: EMPTY });
   map.addSource('pos', { type: 'geojson', data: EMPTY });
 
+  // Heatmap reads as a quiet dashed overlay (mid-grey via colOwn's default) so
+  // the basemap stays legible; the halo glow is kept very faint for grouping.
   map.addLayer({ id: 'heat-halo', type: 'line', source: 'heat',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': clsMatch(), 'line-opacity': 0.10, 'line-blur': 4,
-      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 2, 12, 6, 15, 14, 17, 26] } });
+    paint: { 'line-color': clsMatch(), 'line-opacity': 0.05, 'line-blur': 4,
+      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 2, 12, 5, 15, 10, 17, 18] } });
   map.addLayer({ id: 'heat-core', type: 'line', source: 'heat',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': clsMatch(), 'line-opacity': 0.35,
+    layout: { 'line-join': 'round' },
+    paint: { 'line-color': clsMatch(), 'line-opacity': 0.45, 'line-dasharray': [2, 2.2],
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
   // heatmap under the route corridor — its own layer so the opacity is a knob
   // (0 = dash gaps show pure basemap; raise it to see the recordings beneath the route)
   map.addSource('heatU', { type: 'geojson', data: EMPTY });
   map.addLayer({ id: 'heat-under', type: 'line', source: 'heatU',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': clsMatch(), 'line-opacity': ADV('heatUnderOp'),
+    layout: { 'line-join': 'round' },
+    paint: { 'line-color': clsMatch(), 'line-opacity': ADV('heatUnderOp'), 'line-dasharray': [2, 2.2],
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
   map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
     layout: { 'line-join': 'round' },
