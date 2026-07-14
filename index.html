@@ -2711,7 +2711,9 @@ async function addFile(name, text) {
         try { await addFile(t.name, t.gpx); nT++; }
         catch (e) { errs++; console.warn('bundle track failed', t.name, e); }
       }
-      return { bundle: true, tracks: nT, heatmap: !!obj.heatmap, errs };
+      // v2 meta: the pack's display name + free-text notes (surfaced on load)
+      return { bundle: true, tracks: nT, heatmap: !!obj.heatmap, errs,
+               bundleName: obj.name || '', description: obj.description || '' };
     }
     if (obj.type === 'FeatureCollection' || obj.features) {
       S.heat = processHeatmap(obj);
@@ -2738,10 +2740,14 @@ async function addFile(name, text) {
 async function loadBundleZip(file) {
   const entries = fflate.unzipSync(new Uint8Array(await file.arrayBuffer()));
   let nT = 0, nH = 0, errs = 0, basemap = false, stravaTiles = 0;
+  let bundleName = '', description = '';
 
   if (entries['bundle.json']) {
     const r = await addFile('bundle.json', fflate.strFromU8(entries['bundle.json']));
-    if (r && r.bundle) { nT += r.tracks; if (r.heatmap) nH++; errs += r.errs; }
+    if (r && r.bundle) {
+      nT += r.tracks; if (r.heatmap) nH++; errs += r.errs;
+      bundleName = r.bundleName || ''; description = r.description || '';
+    }
   }
   if (entries['basemap.pmtiles']) {
     const blob = new Blob([entries['basemap.pmtiles']], { type: 'application/octet-stream' });
@@ -2789,7 +2795,8 @@ async function loadBundleZip(file) {
     saveSet();
     const ce = document.getElementById('rideCode'); if (ce) ce.value = S.set.code;
   }
-  return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles, satTiles };
+  return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles, satTiles,
+           bundleName, description };
 }
 async function handleFiles(files) {
   let nT = 0, nH = 0, errs = 0, needReload = false, stravaTiles = 0;
@@ -3948,12 +3955,30 @@ async function boot() {
       }
     } catch (e) {}
   }
-  // Shared link: ?bundle=<url> (Dingo planner's share-by-link). Two shapes:
-  //   - a secret gist holding bundle.json (text: tracks + heatmap), or
-  //   - a Release asset holding the full .dingonav zip (binary: + map tiles).
+  // Shared link, two params:
+  //   ?b=<slug>      — a pack in the Dingo shares repo, resolved at HEAD so
+  //                    refreshing the pack updates links already handed out
+  //   ?bundle=<url>  — legacy full-URL form (gist bundle.json, or a repo file
+  //                    pinned to a commit sha); every old link keeps working
   // Sniff the leading bytes ('PK' = zip) and route accordingly. Then strip the
   // param so reloads don't refetch; the import persists to IDB like any load.
-  const shared = new URLSearchParams(location.search).get('bundle');
+  const params = new URLSearchParams(location.search);
+  const SHARES_REPO = 'grantpaisley/dingo-shares';
+  const slug = params.get('b');
+  let shared = params.get('bundle');
+  if (slug) {
+    // Resolve the repo's current commit through the API (authoritative, CORS *)
+    // and download at that sha — raw@branch is CDN-cached and can 404 or serve
+    // stale for minutes right after a publish. Falls back to raw@HEAD when the
+    // API is unreachable (offline check happens in the fetch below anyway).
+    let ref = 'HEAD';
+    try {
+      const r = await fetch(`https://api.github.com/repos/${SHARES_REPO}/commits/HEAD`,
+        { headers: { Accept: 'application/vnd.github.VERSION.sha' } });
+      if (r.ok) ref = (await r.text()).trim();
+    } catch (e) { console.warn('sha resolve failed, using HEAD', e); }
+    shared = `https://raw.githubusercontent.com/${SHARES_REPO}/${ref}/shares/${encodeURIComponent(slug)}.dingonav`;
+  }
   if (shared) {
     history.replaceState(null, '', location.pathname + location.hash);
     try {
@@ -3962,15 +3987,23 @@ async function boot() {
       const blob = await resp.blob();
       const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
       const isZip = head[0] === 0x50 && head[1] === 0x4B; // 'PK'
+      const nBefore = S.tracks.length;
       const r = isZip
-        ? await loadBundleZip(new File([blob], 'shared.dingonav'))
+        ? await loadBundleZip(new File([blob], (slug || 'shared') + '.dingonav'))
         : await addFile('shared-bundle.json', await blob.text());
       if (r && r.bundle) {
         const extras = [r.basemap && 'map', r.satTiles && 'satellite', r.stravaTiles && 'Strava'].filter(Boolean);
-        toast(`Shared ride loaded — ${r.tracks} track${r.tracks === 1 ? '' : 's'}${r.heatmap ? ' + heatmap' : ''}${extras.length ? ' + ' + extras.join(' + ') : ''}${r.errs ? ' · ' + r.errs + ' failed' : ''}`);
-        if (r.tracks) S.sel = S.tracks.length - 1;
+        const notes = r.description ? ` — “${r.description}”` : '';
+        toast(`${r.bundleName || 'Shared ride'} loaded — ${r.tracks} track${r.tracks === 1 ? '' : 's'}${r.heatmap ? ' + heatmap' : ''}${extras.length ? ' + ' + extras.join(' + ') : ''}${r.errs ? ' · ' + r.errs + ' failed' : ''}${notes}`);
+        // The pack's track order is meaningful: tracks[0] is the default.
+        if (r.tracks) S.sel = Math.min(nBefore, S.tracks.length - 1);
       } else toast('Shared file loaded');
-    } catch (e) { console.warn('shared bundle failed', e); toast('Could not load the shared link — are you online?'); }
+    } catch (e) {
+      console.warn('shared bundle failed', e);
+      toast(String(e).includes('HTTP 404')
+        ? 'This pack was removed (or the link is stale) — anything loaded earlier is still on the device'
+        : 'Could not load the shared link — are you online?');
+    }
   }
   // backtrack trail from the last ride survives an app restart
   try { const tr = await idb.get('trail'); if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; } } catch (e) {}
