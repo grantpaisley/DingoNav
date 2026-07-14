@@ -114,16 +114,18 @@
     border-radius:12px; display:none; max-width:88vw; text-align:center}
 
   /* ---------- side controls (two groups: nav-left, zoom-right; edges configurable) ---------- */
-  .ctlgroup{position:fixed; top:50%; transform:translateY(-50%); z-index:10;
+  .ctlgroup{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:10;
     display:flex; flex-direction:column; gap:8px}
   #leftCtl{left:10px} #rightCtl{right:10px}
-  /* edges = top/bottom: the two groups become horizontal rows on the top & bottom edges.
-     ID selectors (needed to beat #leftCtl/#rightCtl's own left/right) */
-  body.edges-tb #leftCtl, body.edges-tb #rightCtl{top:auto; bottom:auto; left:50%; right:auto;
-    transform:translateX(-50%); flex-direction:row}
+  /* riding: drop the groups below the top turn strip; the left group also clears the speed readout */
+  body.navving .ctlgroup{top:calc(env(safe-area-inset-top) + 62px)}
+  body.navving #leftCtl{top:calc(env(safe-area-inset-top) + 122px)}
+  /* edges = top/bottom: horizontal rows, left-anchored — nav group on the top edge, zoom near the bottom */
+  body.edges-tb #leftCtl, body.edges-tb #rightCtl{top:auto; bottom:auto; left:10px; right:auto;
+    transform:none; flex-direction:row}
   body.edges-tb #leftCtl{top:calc(env(safe-area-inset-top) + 10px)}
-  body.edges-tb #rightCtl{bottom:96px}
-  body.edges-tb #startFab{left:50%; right:auto; transform:translateX(-50%); bottom:200px}
+  body.navving.edges-tb #leftCtl{top:calc(env(safe-area-inset-top) + 62px)}
+  body.edges-tb #rightCtl{bottom:60px}
   .ctl{width:54px; height:54px; border-radius:14px; background:rgba(22,28,34,.92); border:1px solid #2a3540;
     color:var(--fg); font-size:26px; display:flex; align-items:center; justify-content:center; cursor:pointer}
   .ctl:active{background:var(--panel2)}
@@ -159,12 +161,8 @@
   /* only the north-up marker carries the little needle; course/compass show their own glyph */
   #north.course #northInner::before, #north.oriented #northInner::before{display:none}
 
-  /* ---------- glove button + overlay ---------- */
-  #gloveBtn{position:fixed; bottom:120px; z-index:16; width:136px; height:136px; border-radius:36px;
-    background:rgba(22,28,34,.95); border:2px solid #2a3540; color:var(--fg); font-size:56px;
-    display:none; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 12px rgba(0,0,0,.45)}
-  #gloveBtn.on{display:flex}
-  #gloveBtn.left{left:12px} #gloveBtn.right{right:12px}
+  /* ---------- ride-controls (glove) overlay — now opened by the ☰ menu; its ▦ button is retired ---------- */
+  #gloveBtn{display:none !important}
   #gloveOverlay{position:fixed; left:0; right:0; bottom:0; z-index:25; display:none;
     background:rgba(10,13,16,.94); border-top:1px solid #2a3540;
     padding:14px 12px calc(env(safe-area-inset-bottom) + 14px)}
@@ -180,7 +178,7 @@
   .gtile.stop{border-color:var(--bad)} .gtile.stop .gi,.gtile.stop .gl{color:var(--bad)}
 
   /* ---------- progress strip ---------- */
-  #progress{position:fixed; left:0; right:0; z-index:14; display:none;
+  #progress{position:fixed; left:56px; right:0; z-index:14; display:none;
     background:rgba(14,18,22,.92); border-top:1px solid #232d38; padding:4px 10px 0}
   #progress.on{display:block}
   #progress.offtrack{opacity:.4}
@@ -196,9 +194,14 @@
   /* ---------- bottom bar ---------- */
   #bottom{position:fixed; left:0; right:0; bottom:0; z-index:15;
     background:rgba(14,18,22,.96); border-top:1px solid #232d38;
-    padding:10px 12px calc(env(safe-area-inset-bottom) + 10px); display:flex; gap:10px; align-items:center}
-  #menuBtn{width:38px; height:38px; font-size:24px; flex:none; background:transparent; border:none; color:var(--dim)}
-  #menuBtn:active{background:rgba(22,28,34,.5)}
+    padding:10px 12px calc(env(safe-area-inset-bottom) + 10px) 58px; display:flex; gap:10px; align-items:center}
+  body.navving #bottom{display:none} /* riding: bar removed — ☰ opens the ride-controls panel instead */
+  /* ☰ menu: floating, transparent, bottom-left; opens Settings when idle, ride controls while riding.
+     progress strip starts just to its right (see #progress left) */
+  #menuBtn{position:fixed; left:8px; bottom:8px; z-index:18; width:44px; height:44px; font-size:26px;
+    display:flex; align-items:center; justify-content:center; background:transparent; border:none;
+    color:var(--fg); text-shadow:0 1px 6px rgba(0,0,0,.8); cursor:pointer}
+  #menuBtn:active{background:rgba(22,28,34,.5); border-radius:12px}
   #trackInfo{flex:1; min-width:0; line-height:1.25}
   #trackName{font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   #trackSub{font-size:13px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -294,9 +297,9 @@
     .ctlgroup{gap:7px}
     .ctlgroup .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
     .ctlgroup .ctl.preset{font-size:13px}
-    /* short viewport: the side columns reach the corners, so centre START along the
-       bottom (above the bar) instead of the bottom-right where it'd hit the zoom column */
-    #startFab{left:50%; right:auto; transform:translateX(-50%); bottom:82px; height:60px; font-size:21px}
+    /* short viewport: the top-anchored zoom column reaches far down the right edge,
+       so sit START lower in the bottom-right corner, below it */
+    #startFab{bottom:78px; height:56px; font-size:20px}
     #north{width:56px; height:56px; font-size:20px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
@@ -379,8 +382,8 @@
   <div id="progLabels"><span id="progDone">—</span><span id="progTogo">—</span></div>
 </div>
 
+<div id="menuBtn" title="menu">☰</div>
 <div id="bottom">
-  <div class="ctl" id="menuBtn">☰</div>
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
   <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none">✎</div>
 </div>
@@ -2676,7 +2679,9 @@ if ('launchQueue' in window && 'setConsumer' in window.launchQueue) {
 const panel = document.getElementById('panel'), shade = document.getElementById('shade');
 function openPanel() { panel.classList.add('on'); shade.classList.add('on'); }
 function closePanel() { panel.classList.remove('on'); shade.classList.remove('on'); }
-document.getElementById('menuBtn').onclick = openPanel;
+// ☰ opens two different panels: ride controls while navigating, Settings otherwise
+document.getElementById('menuBtn').onclick = () =>
+  S.nav ? (gloveOverlay.classList.contains('on') ? closeGlove() : openGlove()) : openPanel();
 shade.onclick = closePanel;
 
 function refreshTrackList() {
