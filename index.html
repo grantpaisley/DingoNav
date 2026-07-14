@@ -656,8 +656,8 @@ const ADV_D = {
   apprMul: 1.5, apprFloor: 250, offM: 60, onM: 40, beepVol: 0.5, cdDist: 300,
   btnOp: 0.4, trailGap: 20, haloOp: 0.3, haloMul: 2.2,
   chevSize: 15, chevGap: 90, chevCol: '#003a44',
-  colRoute: '#00e5ff', colOwn: '#8f8f8f', colOther: '#ff2d2d', colPlan: '#3390ff', // own heat mid-grey — orange overpowered the basemap
-  colTrail: '#8a7355', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // trail brown — stock orange shouted over the map
+  colRoute: '#00e5ff', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
+  colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
   dirtDash: 2.4, dirtGap: 1.4, singleDash: 0.1, singleGap: 1.7,
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
@@ -1229,7 +1229,7 @@ const MAP_STYLES = {
   contrast: { label: 'Trail', file: 'layers-light.json', sprite: 'light',
     // minor-trail colour + prominence are advanced knobs — the default orange clashes with the heatmap
     ov: () => { const p = ADV('trailProm');
-      return { roads_other: { 'line-color': ADV('colTrail'),
+      return { roads_other: { 'line-color': ADV('colTrail'), 'line-dasharray': [2.5, 1.6], // unridden paths: grey dashed; ridden heat stays solid orange
         'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 13, 1.2 * p, 16, 3.5 * p, 20, 16 * p] },
         earth: { 'fill-color': '#efece4' },
         landuse_park: { 'fill-color': TRAIL_PARK_FILL },
@@ -1437,22 +1437,20 @@ function addOverlays() {
   map.addSource('posAcc', { type: 'geojson', data: EMPTY });
   map.addSource('pos', { type: 'geojson', data: EMPTY });
 
-  // Heatmap reads as a quiet dashed overlay (mid-grey via colOwn's default) so
-  // the basemap stays legible; the halo glow is kept very faint for grouping.
   map.addLayer({ id: 'heat-halo', type: 'line', source: 'heat',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': clsMatch(), 'line-opacity': 0.05, 'line-blur': 4,
-      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 2, 12, 5, 15, 10, 17, 18] } });
+    paint: { 'line-color': clsMatch(), 'line-opacity': 0.10, 'line-blur': 4,
+      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 2, 12, 6, 15, 14, 17, 26] } });
   map.addLayer({ id: 'heat-core', type: 'line', source: 'heat',
-    layout: { 'line-join': 'round' },
-    paint: { 'line-color': clsMatch(), 'line-opacity': 0.45, 'line-dasharray': [2, 2.2],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': clsMatch(), 'line-opacity': 0.35,
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
   // heatmap under the route corridor — its own layer so the opacity is a knob
   // (0 = dash gaps show pure basemap; raise it to see the recordings beneath the route)
   map.addSource('heatU', { type: 'geojson', data: EMPTY });
   map.addLayer({ id: 'heat-under', type: 'line', source: 'heatU',
-    layout: { 'line-join': 'round' },
-    paint: { 'line-color': clsMatch(), 'line-opacity': ADV('heatUnderOp'), 'line-dasharray': [2, 2.2],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': clsMatch(), 'line-opacity': ADV('heatUnderOp'),
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
   map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
     layout: { 'line-join': 'round' },
