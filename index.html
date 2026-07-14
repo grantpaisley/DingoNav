@@ -1138,6 +1138,14 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
    stock light — the whole reason for this feature). */
 const TRACK_W = ['interpolate', ['exponential', 1.6], ['zoom'], 13, 1.2, 16, 3.5, 20, 16];
 const HILL_LIGHT = { 'hillshade-exaggeration': 0.3, 'hillshade-shadow-color': '#5b4933', 'hillshade-highlight-color': '#ffffff' };
+// Trail flavor: stronger, neutral-grey relief — the planner-map (outdoor topo) look.
+const HILL_TRAIL = { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': '#54524a', 'hillshade-highlight-color': '#ffffff' };
+// Muted sage bush palette for Trail (stock Protomaps light is minty): parks and
+// woods read like an outdoor topo map, water goes steel-blue instead of cyan.
+const TRAIL_PARK_FILL = ['case',
+  ['==', ['get', 'kind'], 'wood'], '#b9d3a6',
+  ['in', ['get', 'kind'], ['literal', ['scrub', 'grassland', 'grass', 'cemetery', 'golf_course']]], '#cfe0bc',
+  '#c6dbb4'];
 const MAP_STYLES = {
   daylight: { label: 'Day', file: 'layers-light.json', sprite: 'light',
     ov: () => ({ roads_other: { 'line-color': '#8a7355' } }), hill: HILL_LIGHT }, // tracks/paths readable brown
@@ -1146,7 +1154,13 @@ const MAP_STYLES = {
     ov: () => { const p = ADV('trailProm');
       return { roads_other: { 'line-color': ADV('colTrail'),
         'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 13, 1.2 * p, 16, 3.5 * p, 20, 16 * p] },
-        earth: { 'fill-color': '#eceae4' } }; }, hill: HILL_LIGHT },
+        earth: { 'fill-color': '#efece4' },
+        landuse_park: { 'fill-color': TRAIL_PARK_FILL },
+        landuse_urban_green: { 'fill-color': '#cfe0bc' },
+        water: { 'fill-color': '#a5c8d7' },
+        water_stream: { 'line-color': '#8fb9cc' },
+        water_river: { 'line-color': '#8fb9cc' },
+        buildings: { 'fill-color': '#d8d3ca' } }; }, hill: HILL_TRAIL },
   dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // shading fights the dark flavor
   satellite:{ label: 'Sat', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // raster imagery base, built specially below
 };
