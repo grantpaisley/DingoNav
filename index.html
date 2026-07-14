@@ -1324,6 +1324,16 @@ async function initMap() {
   // satMeta already loaded above (before buildStyle); no need to re-read here.
   mapReady = true; // before addOverlays — its refreshMapData() call needs this
   addOverlays();
+  // Frame the ride immediately, then pump repaints for a moment. A raster-only
+  // satellite base leaves the render loop idle, so an ANIMATED fitBounds stalls
+  // (the default view has no tiles) and MapLibre won't paint late-arriving
+  // tiles without a nudge — the map would sit blank until the user pans. An
+  // instant fit + a brief repaint burst lands the imagery framed and painted.
+  // Harmless in the vector styles (their loop is already active).
+  fitSelected(true);
+  let frames = 0;
+  const pump = () => { if (!map) return; map.triggerRepaint(); if (++frames < 90) requestAnimationFrame(pump); };
+  requestAnimationFrame(pump);
 }
 function clsMatch() { return ['match', ['get', 'class'], 'other', ADV('colOther'), 'plan', ADV('colPlan'), ADV('colOwn')]; }
 function addOverlays() {
@@ -2029,10 +2039,11 @@ northBtn.onclick = () => {
 };
 document.getElementById('orientCtl').onclick = () => northBtn.onclick(); // cluster orientation = cycle mode
 applyOrient();
-function fitSelected() {
+function fitSelected(instant) {
   if (!mapReady) return;
-  if (S.sel >= 0) map.fitBounds(S.tracks[S.sel].llBounds, { padding: 60, duration: 600 });
-  else if (S.tracks.length) map.fitBounds(S.tracks[0].llBounds, { padding: 60, duration: 600 });
+  const dur = instant ? 0 : 600; // instant on first load (idle-loop-safe); animated on user action
+  if (S.sel >= 0) map.fitBounds(S.tracks[S.sel].llBounds, { padding: 60, duration: dur });
+  else if (S.tracks.length) map.fitBounds(S.tracks[0].llBounds, { padding: 60, duration: dur });
   else if (S.heat) {
     let minLo = 180, minLa = 90, maxLo = -180, maxLa = -90;
     for (const f of S.heat.geojson.features) {
@@ -2042,7 +2053,7 @@ function fitSelected() {
         if (c[1] < minLa) minLa = c[1]; if (c[1] > maxLa) maxLa = c[1];
       }
     }
-    if (maxLo > minLo) map.fitBounds([[minLo, minLa], [maxLo, maxLa]], { padding: 40, duration: 600 });
+    if (maxLo > minLo) map.fitBounds([[minLo, minLa], [maxLo, maxLa]], { padding: 40, duration: dur });
   }
 }
 
