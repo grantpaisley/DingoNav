@@ -81,6 +81,19 @@
     font-size:26px; font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums}
   #vargFlash small{color:var(--dim); font-weight:600; font-size:15px}
   #vargFlash.on{display:block}
+  /* indicator telltales — big translucent glyphs across the top, same visual
+     language as the speed/mode readouts. Each hidden until its bit is live, so
+     nothing shows unless a blinker/beam is actually on. */
+  #vargInd{position:fixed; top:calc(env(safe-area-inset-top) + 58px); left:0; right:0; z-index:13;
+    display:flex; justify-content:center; align-items:center; gap:30px; pointer-events:none}
+  #vargInd .ind{display:none; font-weight:900; line-height:1; text-shadow:0 2px 14px rgba(0,0,0,.75)}
+  #vargInd .ind.on{display:block}
+  #vargInd .blink{font-size:60px}
+  #vargInd .blink.on{color:rgba(55,224,95,.82)}                    /* translucent green */
+  #vargInd .blink.warn{color:rgba(255,69,69,.9); animation:vgPulse 1s ease-in-out infinite}
+  #vargInd .beam{font-size:34px; letter-spacing:3px}
+  #vargInd .beam.on{color:rgba(74,168,255,.82)}                    /* translucent blue */
+  body.navving #vargInd{top:calc(env(safe-area-inset-top) + 64px)}
   /* mute: one tap on the riding screen, ghosted like the other ride controls */
   #muteBtn{position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:10px; z-index:12;
     width:96px; height:96px; border-radius:28px; background:rgba(22,28,34,.5); border:1px solid #2a3540;
@@ -257,6 +270,7 @@
     body.navving #vargPill{top:calc(env(safe-area-inset-top) + 92px)}
     #vargModeBig{bottom:186px; font-size:20px}
     #vargFlash{font-size:20px}
+    #vargInd .blink{font-size:44px} #vargInd .beam{font-size:26px}
     /* short viewports: keep the enlarged controls from overflowing the landscape column */
     #sideCtl{gap:6px}
     #sideCtl .ctl{width:64px; height:64px; border-radius:16px; font-size:30px}
@@ -289,6 +303,11 @@
 <div id="hudSpeed">0 <small>km/h</small></div>
 <div id="muteBtn" title="mute / unmute">🔊</div>
 <div id="vargPill" title="Stark Varg — tap to release / reclaim the bike"><span id="vargSoc">🔋 —%</span><span class="vm" id="vargMode"></span></div>
+<div id="vargInd">
+  <span class="ind blink" id="indL" title="left indicator">◀</span>
+  <span class="ind beam" id="indBeam" title="high beam">≣</span>
+  <span class="ind blink" id="indR" title="right indicator">▶</span>
+</div>
 <div id="vargModeBig"><span id="vargModeNum">—</span> <small>mode</small></div>
 <div id="vargFlash"></div>
 <div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
@@ -2760,6 +2779,7 @@ const varg = {
   soc: null, soh: null, vbus: null,
   mode: null, special: null, // mode 1–5; special: null | 'rev' | 'crawl'
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
+  ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, pickAll: false, sndT: null, flashT: null,
 };
 const vargPill = document.getElementById('vargPill');
@@ -2916,12 +2936,20 @@ async function vargBoot() { // reclaim a previously-permitted bike with zero tap
    and receives {op:'prop', path, value, t} per update. Server pings every 15 s
    (browser auto-pongs); paths are dot-hierarchical (Battery.SOC.soc_pct). */
 const vp = { ws: null, retryT: null, cfg: { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} }, rpm: 0, walk: 0 };
-const VP_P = { // the paths DingoNav displays, verified in the live catalog
+const VP_P = { // the paths DingoNav displays, verified live on a '25 EX (2026-07)
   soc: 'Battery.SOC.soc_pct', soh: 'Battery.SOC.soh_pct', vbus: 'Battery.SOC.dc_bus_v',
   mode: 'Live.MAPS.riding_map',
-  walk: 'Bike.STATUS_BITS.misc_bits.walking_mode', // 0 = off; engaged enum TBC (crawl vs reverse)
-  rpm: 'Live.SPEED.motor_rpm', // sign disambiguates reverse from crawl until the enum is confirmed
+  // ground truth for the takeover, confirmed on the bike: a human-readable string —
+  // "NEUTRAL" / "DRIVE" / "CRAWL REV" (reverse) / "CRAWL FWD" (crawl). Cleaner than
+  // walking_mode (8=rev, 12=crawl) which we keep as a fallback below.
+  drive: 'derived.power.drive_state',
+  walk: 'Bike.STATUS_BITS.misc_bits.walking_mode',
+  blinkerL: 'Bike.STATUS_BITS.indicator_bits.blinker_left', // toggles ~3 Hz with the bulb — debounced below
+  blinkerR: 'Bike.STATUS_BITS.indicator_bits.blinker_right',
+  beam: 'Bike.STATUS_BITS.indicator_bits.beam_long', // steady while high beam on
 };
+const BLINK_OFF_MS = 700; // no "true" pulse for this long ⇒ blinker is off (survives the 3 Hz gaps)
+const BLINK_NAG_MS = 30000; // blinker on this long ⇒ "did you forget it?" reminder
 const vpMapPaths = m => [ // per-mode config: "torque" is the power (hp) slider on the EX
   ['Vcu.BIKE_CONFIG.MAP.' + m + '.torque', 'hp', m],
   ['Vcu.BIKE_CONFIG.MAP.' + m + '.regen', 'regen', m],
@@ -2956,7 +2984,7 @@ function vpConnect() {
     } else if (m.op === 'prop') vpProp(m.path, m.value);
   };
   ws.onclose = () => {
-    varg.soc = null; vargSpecial(null); // no feed = no idea if we're still in reverse
+    varg.soc = null; vargSpecial(null); vargIndReset(); // no feed = no live indicator/reverse state
     varg.state = 'retry'; vargUI();
     vp.retryT = setTimeout(vpConnect, 3000);
   };
@@ -2966,19 +2994,56 @@ function vpProp(path, v) {
   if (path === VP_P.soc) { varg.soc = Math.round(+v); vargUI(); return; }
   if (path === VP_P.soh) { varg.soh = +v; return; }
   if (path === VP_P.vbus) { varg.vbus = +v; return; }
-  if (path === VP_P.rpm) { vp.rpm = +v; return; }
-  if (path === VP_P.walk) {
-    vp.walk = +v;
-    // walking_mode 0 = off. Non-zero = the button-hold special engaged; until the
-    // enum is confirmed on a real bike, negative motor rpm says which way we're going.
-    if (vp.walk) console.log('[vp] walking_mode =', vp.walk, 'rpm =', vp.rpm, '— confirm crawl/reverse enum, tell the dev');
-    vargApplyState({ special: !vp.walk ? null : vp.rpm < 0 ? 'rev' : 'crawl' });
+  if (path === VP_P.drive) { // confirmed on the bike: "CRAWL REV" = reverse, "CRAWL FWD" = crawl
+    vp.sawDrive = true;
+    const s = String(v).toUpperCase();
+    vargApplyState({ special: s.includes('REV') ? 'rev' : s.includes('CRAWL') ? 'crawl' : null });
     return;
   }
+  if (path === VP_P.walk) { // fallback only if drive_state never arrives: 8 = reverse, 12 = crawl
+    vp.walk = +v;
+    if (vp.sawDrive) return; // drive_state is authoritative — don't second-guess it
+    vargApplyState({ special: !vp.walk ? null : vp.walk === 8 ? 'rev' : 'crawl' });
+    return;
+  }
+  if (path === VP_P.blinkerL) { if (v) vargBlink('L'); return; } // only the "true" pulses matter
+  if (path === VP_P.blinkerR) { if (v) vargBlink('R'); return; }
+  if (path === VP_P.beam) { varg.ind.beam = !!v; vargIndUI(); return; }
   if (path === VP_P.mode) { vpApplyMode(+v); return; }
   for (let m = 1; m <= 5; m++) for (const [p, field] of vpMapPaths(m))
     if (path === p) { vp.cfg[m][field] = Math.round(+v); if (m === varg.mode) vpApplyMode(m); return; }
 }
+
+/* Blinkers report the bulb flashing on/off ~3 Hz. Collapse that into a steady
+   telltale: each "true" pulse refreshes a timer; a watchdog clears it once the
+   pulses stop, and nags if a blinker's been on unusually long (bikes don't
+   always self-cancel). */
+function vargBlink(side) {
+  const i = varg.ind, now = Date.now();
+  if (side === 'L') { if (!i.L) { i.L = true; i.sinceL = now; i.warnL = false; } i.lastL = now; }
+  else { if (!i.R) { i.R = true; i.sinceR = now; i.warnR = false; } i.lastR = now; }
+  vargIndUI();
+}
+function vargIndReset() {
+  Object.assign(varg.ind, { L: false, R: false, beam: false, warnL: false, warnR: false });
+  vargIndUI();
+}
+function vargIndUI() {
+  const show = S.set.varg && varg.state === 'on', i = varg.ind;
+  document.getElementById('vargInd').classList.toggle('on', show);
+  const l = document.getElementById('indL'), r = document.getElementById('indR'), b = document.getElementById('indBeam');
+  l.classList.toggle('on', show && i.L); l.classList.toggle('warn', i.warnL);
+  r.classList.toggle('on', show && i.R); r.classList.toggle('warn', i.warnR);
+  b.classList.toggle('on', show && i.beam);
+}
+setInterval(() => { // blinker watchdog + self-cancel nag
+  const i = varg.ind, now = Date.now(); let ch = false;
+  if (i.L && now - i.lastL > BLINK_OFF_MS) { i.L = false; i.warnL = false; ch = true; }
+  if (i.R && now - i.lastR > BLINK_OFF_MS) { i.R = false; i.warnR = false; ch = true; }
+  if (i.L && !i.warnL && now - i.sinceL > BLINK_NAG_MS) { i.warnL = true; ch = true; toast('◄ Indicator still on'); vib([80, 80, 80]); }
+  if (i.R && !i.warnR && now - i.sinceR > BLINK_NAG_MS) { i.warnR = true; ch = true; toast('Indicator still on ►'); vib([80, 80, 80]); }
+  if (ch) vargIndUI();
+}, 250);
 function vpApplyMode(m) {
   if (m >= 1 && m <= 5) vargApplyState({ mode: m, hp: vp.cfg[m].hp, regen: vp.cfg[m].regen, tc: vp.cfg[m].tc });
 }
@@ -3074,7 +3139,7 @@ document.getElementById('vargForgetBtn').onclick = async () => {
 };
 
 function applyVarg() { // off, or a source flip: quiesce BOTH sources, then start the chosen one
-  vargSpecial(null); vpClose();
+  vargSpecial(null); vargIndReset(); vpClose();
   clearTimeout(varg.retryT);
   if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect();
   varg.state = 'off'; varg.soc = null;
