@@ -1279,6 +1279,9 @@ async function initMap() {
   } else {
     setHillStatus('no terrain shading (optional)');
   }
+  // Satellite meta must load BEFORE the first buildStyle() — the 'satellite'
+  // style branch needs it, else a reload with Sat pre-selected renders empty.
+  try { satMeta = await idb.get('sat-meta'); } catch (e) {}
   const style = await buildStyle();
   map = new maplibregl.Map({
     container: 'map', style,
@@ -1318,7 +1321,7 @@ async function initMap() {
     map.once('load', () => { clearInterval(t); res(); });
   });
   try { stravaMeta = await idb.get('strava-meta'); } catch (e) {}
-  try { satMeta = await idb.get('sat-meta'); } catch (e) {}
+  // satMeta already loaded above (before buildStyle); no need to re-read here.
   mapReady = true; // before addOverlays — its refreshMapData() call needs this
   addOverlays();
 }
