@@ -231,6 +231,7 @@
   /* ---------- panel ---------- */
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
   #shade.on{display:block}
+  #panel:not(.on){pointer-events:none} /* a sliding-out panel must never eat taps */
   #panel{position:fixed; left:0; right:0; bottom:0; max-height:78vh; overflow-y:auto; z-index:20;
     background:var(--panel); border-radius:20px 20px 0 0; padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
     transform:translateY(105%); transition:transform .22s ease}
@@ -329,18 +330,28 @@
 
   /* ---------- editable screen layout (edit mode) ----------
      A layout-design tool (Settings → General → Edit screen layout), not a riding
-     feature: buttons/readouts wobble, drag to a 5×6 slot grid, dock into the ☰
-     panel via the bottom tray. Everything here is inert unless body.editing —
-     see docs/plans/2026-07-15-editable-layout-design.md. Kept after the media
-     queries so customised sizes/positions win the cascade. */
+     feature: buttons/readouts wobble, drag to a 5×6 slot grid; dragging to the
+     bottom springs the real ☰ panel up as the dock target. Everything here is
+     inert unless body.editing — see docs/plans/2026-07-15-editable-layout-design.md.
+     Kept after the media queries so customised sizes/positions win the cascade. */
   #dockStrip{display:none; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;
     padding:10px; border:1px dashed #2a3540; border-radius:14px}
   #dockStrip.has{display:flex}
   #dockStrip.has::before{content:'Docked controls'; width:100%; font-size:11px;
     text-transform:uppercase; letter-spacing:.1em; color:var(--dim)}
   #dockStrip .ctl{width:64px; height:64px; border-radius:16px; font-size:28px; flex:none}
-  #dockStrip #startFab, #dockTray #startFab{position:static; display:block; height:52px;
+  #dockStrip #startFab{position:static; display:block; height:52px;
     padding:0 20px; font-size:17px; box-shadow:none}
+  /* the panel's big START duplicates the on-screen fab — one home per control */
+  #panelNav #navBtn{display:none}
+  /* map layers live at the top of the panel now, always in reach */
+  #styleRow{margin-bottom:4px}
+  /* edit mode: the panel itself is the dock target — only the strip shows */
+  body.editing #panel > :not(#dockStrip){display:none}
+  body.editing #dockStrip{display:flex; min-height:96px}
+  body.editing #dockStrip::before{content:'☰ panel — drop buttons here, drag them out to un-dock';
+    width:100%; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim)}
+  body.editing #dockStrip.hot{border-color:var(--accent); background:rgba(0,80,90,.35)}
   @keyframes edWob{0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.4deg)}}
   body.editing .editEl{animation:edWob .32s ease-in-out infinite; cursor:grab;
     touch-action:none; transition:left .18s ease, top .18s ease}
@@ -353,23 +364,18 @@
   body.editing #vargInd{pointer-events:auto}
   body.editing #vargInd .ind{display:block; opacity:.75}
   body.editing #startFab{display:block}
-  #editReserve, #dockTray, #slotDots{display:none}
+  #editReserve, #editCtls, #slotDots{display:none}
   body.editing #editReserve{display:flex; position:fixed; top:0; left:0; right:0; height:64px;
     z-index:50; pointer-events:none; align-items:center; justify-content:center; font-size:11px;
     letter-spacing:.1em; text-transform:uppercase; color:var(--dim);
     background:repeating-linear-gradient(45deg, rgba(143,160,176,.08) 0 8px, transparent 8px 16px);
     border-bottom:1px dashed #2a3540}
-  body.editing #dockTray{display:flex; position:fixed; left:0; right:0; bottom:0; height:64px;
-    z-index:58; align-items:center; gap:10px; padding:0 12px; background:rgba(14,18,22,.92);
-    border-top:1px dashed #2a3540; overflow-x:auto}
-  #dockTray .trayLabel{font-size:12px; color:var(--dim); flex:none}
-  #dockTray .traySpace{flex:1}
-  body.editing #dockTray.hot{border-top-color:var(--accent); background:rgba(0,80,90,.55)}
-  #dockTray .ctl{width:52px; height:52px; border-radius:14px; font-size:24px; flex:none}
-  #dockTray button.edbtn{padding:9px 18px; border-radius:999px; border:1px solid #2a3540;
+  /* floating edit controls, bottom-right; above the panel so Done/Export always reachable */
+  body.editing #editCtls{display:flex; position:fixed; right:10px; bottom:10px; z-index:22; gap:10px}
+  .edbtn{padding:9px 18px; border-radius:999px; border:1px solid #2a3540;
     background:var(--panel2); color:var(--fg); font-size:15px; font-weight:800; cursor:pointer; flex:none}
-  #dockTray #editDone{background:var(--accent); color:#00252b; border:none}
-  body.editing #slotDots{display:block; position:fixed; inset:0; z-index:45; pointer-events:none}
+  #editDone{background:var(--accent); color:#00252b; border:none}
+  body.editing #slotDots{display:block; position:fixed; inset:0; z-index:16; pointer-events:none}
   #slotDots i{position:absolute; width:10px; height:10px; border-radius:50%;
     background:rgba(143,160,176,.4); transform:translate(-50%,-50%)}
   #slotDots i.hot{background:var(--accent); box-shadow:0 0 0 8px rgba(0,229,255,.25)}
@@ -467,9 +473,8 @@
 <!-- edit-mode chrome: inert unless body.editing (see editable-layout design doc) -->
 <div id="editReserve">turn strip zone — kept clear</div>
 <div id="slotDots"></div>
-<div id="dockTray">
-  <span class="trayLabel">⬇ drop a button here to dock it in ☰</span>
-  <span class="traySpace"></span>
+<div id="editCtls">
+  <button class="edbtn" id="editExport">⇪ Export</button>
   <button class="edbtn" id="editReset">↺ Reset</button>
   <button class="edbtn" id="editDone">✓ Done</button>
 </div>
@@ -481,6 +486,8 @@
     <button id="navBtn" disabled>START</button>
     <div class="ctl" id="revBtn" title="reverse direction" style="display:none">⇄</div>
   </div>
+  <div class="row" id="styleRow"><label>Map layers</label><span class="seg" id="styleSeg">
+    <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button><button data-s="satellite">Sat</button></span></div>
 
   <div id="setTabs">
     <button data-t="Account">Account</button>
@@ -524,8 +531,6 @@
 
     <div class="row"><label>Strava heatmap overlay</label><span class="sw"><input type="checkbox" id="setStrava"><span></span></span></div>
     <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
-    <div class="row"><label>Map style</label><span class="seg" id="styleSeg">
-      <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button><button data-s="satellite">Sat</button></span></div>
     <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
     <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
     <div class="row"><label>Control buttons on</label><span class="seg" id="edgesSeg">
@@ -3573,8 +3578,13 @@ for (const id in LO_ELS) {
   r.parent = r.el.parentNode; r.next = r.el.nextSibling; // original flow home, for undocking
 }
 S.set.layout = S.set.layout || {};
-const dockTray = document.getElementById('dockTray'), dockStrip = document.getElementById('dockStrip');
-let layoutEditing = false;
+const dockStrip = document.getElementById('dockStrip');
+let layoutEditing = false, loPanelOpen = false;
+function loPanel(open) { // edit-mode panel: the real ☰ panel springs up as the dock target (no shade)
+  if (loPanelOpen === open) return;
+  loPanelOpen = open;
+  panel.classList.toggle('on', open);
+}
 
 function loOrient() { return innerWidth > innerHeight ? 'landscape' : 'portrait'; }
 function loMap() { const o = loOrient(); return S.set.layout[o] = S.set.layout[o] || {}; }
@@ -3594,11 +3604,10 @@ function loApplySizeVal(id, f) {
   else { delete el.dataset.sz; el.style.removeProperty('--sz'); }
 }
 function loApplySize(id, ent) { loApplySizeVal(id, loSizeMult(ent && ent.size)); }
-function loDock(id) { // panel-slot home: the tray while editing, the ☰ panel strip otherwise
-  const reg = LO_ELS[id], host = layoutEditing ? dockTray : dockStrip;
+function loDock(id) { // docked = child of the ☰ panel's strip, editing or not
+  const reg = LO_ELS[id];
   loClearPos(reg.el);
-  if (reg.el.parentNode !== host) // in the tray, keep docked buttons left of the spacer/Reset/Done
-    host.insertBefore(reg.el, host.querySelector('.traySpace'));
+  if (reg.el.parentNode !== dockStrip) dockStrip.appendChild(reg.el);
   dockStrip.classList.toggle('has', !!dockStrip.children.length);
 }
 function loUndock(id) {
@@ -3616,6 +3625,8 @@ function loAnchor(id, slot) { // normal-mode placement: viewport-fraction anchor
   else { st.left = (p.col * 25) + '%'; st.right = 'auto'; st.transform = 'translate(-50%,-50%)'; }
 }
 function applyLayout() {
+  // hidden/zero-size viewport: fraction math is garbage — retry until it's real
+  if (innerWidth < 100 || innerHeight < 100) { setTimeout(applyLayout, 300); return; }
   const m = S.set.layout[loOrient()] || {};
   for (const id in LO_ELS) {
     const ent = m[id];
@@ -3647,6 +3658,7 @@ function loPin(id, r) { // pin at the measured spot as fixed px, nudged clear of
 }
 function enterLayoutEdit() {
   if (layoutEditing || S.nav) return;
+  if (innerWidth < 100 || innerHeight < 100) return; // no editing a zero-size viewport
   closePanel();
   layoutEditing = true;
   document.body.classList.add('editing');
@@ -3667,7 +3679,7 @@ function enterLayoutEdit() {
   document.addEventListener('click', loBlockClick, true);
   document.addEventListener('contextmenu', loBlockClick, true);
   loAddHandles();
-  toast('Drag to move · drag a readout’s corner dot to resize · ✓ Done when finished');
+  toast('Drag to move · corner dot resizes · drag to the bottom (or tap ☰) to dock in the panel');
 }
 function exitLayoutEdit() {
   if (!layoutEditing) return;
@@ -3681,6 +3693,7 @@ function exitLayoutEdit() {
   document.removeEventListener('click', loBlockClick, true);
   document.removeEventListener('contextmenu', loBlockClick, true);
   document.getElementById('slotDots').innerHTML = '';
+  loPanel(false);
   document.body.classList.remove('editing');
   layoutEditing = false;
   applyLayout(); // docked → panel strip; slotted → anchored; untouched → stylesheet defaults
@@ -3700,9 +3713,21 @@ function loBlockClick(e) { // edit mode disarms every editable element's normal 
 function loDown(e, id) {
   if (!layoutEditing || loDrag) return;
   e.preventDefault();
-  const el = LO_ELS[id].el, r = el.getBoundingClientRect();
+  const el = LO_ELS[id].el;
+  const docked = el.parentNode === dockStrip;
+  if (docked) {
+    // reparent BEFORE taking pointer capture — moving an element in the DOM
+    // clears its capture, which strands the drag; also, fixed-position coords
+    // are relative to the panel while inside it (transformed ancestor)
+    const r0 = el.getBoundingClientRect();
+    loUndock(id);
+    const st = el.style;
+    st.position = 'fixed'; st.transform = 'none';
+    st.left = r0.left + 'px'; st.top = r0.top + 'px'; st.right = 'auto'; st.bottom = 'auto';
+  }
+  const r = el.getBoundingClientRect();
   loDrag = { id, el, dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY,
-    moved: false, docked: el.parentNode === dockTray };
+    moved: false, docked };
   try { el.setPointerCapture(e.pointerId); } catch (err) {}
   loDrag.move = ev => loMove(ev); loDrag.up = ev => loUp(ev);
   el.addEventListener('pointermove', loDrag.move);
@@ -3714,11 +3739,9 @@ function loMove(e) {
   if (!loDrag.moved) {
     if (Math.hypot(e.clientX - loDrag.sx, e.clientY - loDrag.sy) < 6) return; // tap-vs-drag threshold
     loDrag.moved = true;
-    if (loDrag.docked) { // lift out of the tray: back to the real parent so group CSS sizes it
-      loUndock(loDrag.id);
-      const st = loDrag.el.style; st.position = 'fixed'; st.transform = 'none';
+    if (loDrag.docked) { // grabbed at strip size, now group-sized: centre it on the pointer
       const r = loDrag.el.getBoundingClientRect();
-      loDrag.dx = r.width / 2; loDrag.dy = r.height / 2; // centre it on the pointer
+      loDrag.dx = r.width / 2; loDrag.dy = r.height / 2;
     }
     loDrag.el.classList.add('lift');
   }
@@ -3729,7 +3752,12 @@ function loMove(e) {
 }
 function loFindTarget(px, py) {
   const reg = LO_ELS[loDrag.id];
-  if (reg.t === 'btn' && !reg.noDock && py > innerHeight - LO_GRID.botRes) return { kind: 'dock' };
+  if (reg.t === 'btn' && !reg.noDock) {
+    // bottom edge springs the panel up; once open, the whole panel area docks
+    // (with hysteresis so it doesn't flap while hovering near its top edge)
+    const zone = loPanelOpen ? innerHeight - 180 : innerHeight - LO_GRID.botRes;
+    if (py > zone) return { kind: 'dock' };
+  }
   const cellH = (innerHeight - LO_GRID.topRes - LO_GRID.botRes) / LO_GRID.rows;
   const row = Math.max(0, Math.min(LO_GRID.rows - 1, Math.floor((py - LO_GRID.topRes) / cellH)));
   const xs = [LO_GRID.edge, innerWidth * .25, innerWidth * .5, innerWidth * .75, innerWidth - LO_GRID.edge];
@@ -3755,7 +3783,9 @@ function loSetTarget(t) {
   if (loTarget && t && loTarget.kind === t.kind && loTarget.slot === t.slot) return;
   // preview is recomputed from committed state per hovered slot — drag away and it reverts
   if (loDispId) { loPlacePx(LO_ELS[loDispId].el, loMap()[loDispId].slot); loDispId = loDispTo = null; }
-  dockTray.classList.toggle('hot', !!(t && t.kind === 'dock'));
+  const dock = !!(t && t.kind === 'dock');
+  loPanel(dock); // springs up on approach, drops away when the drag leaves
+  dockStrip.classList.toggle('hot', dock);
   for (const d of document.querySelectorAll('#slotDots i.hot')) d.classList.remove('hot');
   if (t && t.kind === 'slot') {
     const d = document.querySelector('#slotDots i[data-slot="' + t.slot + '"]');
@@ -3777,18 +3807,20 @@ function loUp() {
   el.removeEventListener('pointercancel', loDrag.up);
   const m = loMap();
   if (!loDrag.moved) {
-    // tap = nothing; readout resize lives on the corner handle now
+    if (loDrag.docked) loDock(id); // tap on a docked item: it was lifted out on pointerdown — put it back
+    else if (id === 'menuBtn') loPanel(!loPanelOpen); // ☰ tap in edit mode: open/close the dock view
   } else if (loTarget && loTarget.kind === 'dock') {
     (m[id] = m[id] || {}).slot = 'panel';
     loDock(id);
     saveSet();
+    setTimeout(() => { if (!loDrag) loPanel(false); }, 1100); // linger so the drop reads, then drop away
   } else if (loTarget && loTarget.kind === 'slot') {
     if (loDispId) { (m[loDispId] = m[loDispId] || {}).slot = loDispTo; loDispId = loDispTo = null; }
     (m[id] = m[id] || {}).slot = loTarget.slot;
     loPlacePx(el, loTarget.slot);
     saveSet();
   }
-  dockTray.classList.remove('hot');
+  dockStrip.classList.remove('hot');
   for (const d of document.querySelectorAll('#slotDots i.hot')) d.classList.remove('hot');
   loTarget = null; loDrag = null;
 }
@@ -3818,7 +3850,7 @@ function loSizeDown(e, id) {
   loSize.move = ev => {
     if (!loSize) return;
     let f = loSize.m0 * (loSize.w0 + ev.clientX - loSize.x0) / loSize.w0;
-    f = Math.max(0.5, Math.min(2.5, f));
+    f = Math.max(0.4, Math.min(6, f)); // way big allowed — it's a design tool
     if (Math.abs(f - 1) < 0.05) f = 1; // snap to default
     loSize.f = f;
     loApplySizeVal(id, f);
@@ -3842,6 +3874,15 @@ function loSizeDown(e, id) {
 }
 document.getElementById('layoutEditBtn').onclick = enterLayoutEdit;
 document.getElementById('editDone').onclick = () => { exitLayoutEdit(); toast('Layout saved'); };
+document.getElementById('editExport').onclick = async () => {
+  const txt = JSON.stringify({ layout: S.set.layout }, null, 1);
+  console.log('[layout export]', txt); // always logged — clipboard is flaky in webviews
+  try {
+    await Promise.race([navigator.clipboard.writeText(txt),
+      new Promise((_, rej) => setTimeout(rej, 800))]); // some webviews hang the promise
+    toast('Layout JSON copied — paste into the main program');
+  } catch (e) { toast('Clipboard blocked — layout JSON logged to the console'); }
+};
 document.getElementById('editReset').onclick = () => {
   delete S.set.layout[loOrient()];
   saveSet();
