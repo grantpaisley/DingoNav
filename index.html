@@ -1430,7 +1430,7 @@ async function initMap() {
     if (innerWidth !== lastVW || innerHeight !== lastVH) {
       lastVW = innerWidth; lastVH = innerHeight;
       placeProgress(); drawProgress(true);
-      if (!layoutEditing) applyLayout(); // custom slots are viewport-fraction based — recompute
+      loViewportChanged(); // custom slots are viewport-fraction based — recompute (rebuilds edit mode too)
     }
   }, 1000);
   map.resize();
@@ -3885,13 +3885,14 @@ document.getElementById('editReset').onclick = () => {
   exitLayoutEdit(); enterLayoutEdit(); // back to defaults, still editing
   toast('Layout reset (' + loOrient() + ')');
 };
+function loViewportChanged() { // from the resize listener AND the 1s watchdog (split-screen drags may never fire resize)
+  if (layoutEditing) { exitLayoutEdit(); enterLayoutEdit(); } // rotate mid-edit → edit that orientation
+  else applyLayout();
+}
 let loResizeT = null;
 addEventListener('resize', () => {
   clearTimeout(loResizeT);
-  loResizeT = setTimeout(() => {
-    if (layoutEditing) { exitLayoutEdit(); enterLayoutEdit(); } // rotate mid-edit → edit that orientation
-    else applyLayout();
-  }, 150);
+  loResizeT = setTimeout(loViewportChanged, 150);
 });
 applyLayout(); // boot: saved layout applies before the first paint settles
 
