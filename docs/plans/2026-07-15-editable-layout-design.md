@@ -1,6 +1,27 @@
 # Editable screen layout (edit mode) — design
 
-**Date:** 2026-07-15 · **Status:** approved, implementing
+**Date:** 2026-07-15 · **Status:** shipped, revised same day (see Revisions)
+
+## Revisions (2026-07-15, after hands-on iteration)
+
+- **Dock target is the ride panel (glove overlay), and its grid IS the dock** — fixed
+  tiles (Auto zoom, Map layers, Profile, Steepness) and docked controls are one
+  collection. The interim settings-panel strip and bottom tray are gone. Dragging a
+  button to the bottom edge springs the ride panel up; ☰ tap while editing opens it
+  to drag items back out.
+- **Ride panel deduped**: North up / Re-center / Sound tiles removed (duplicate the
+  on-screen buttons); a Map layers tile cycles Day/Trail/Dark/Sat.
+- **START/STOP is one relocatable button** (screen slot or docked): green START idle,
+  red STOP riding. STOP is hold-to-confirm — a line runs the button perimeter
+  (~1.15 s, SVG pathLength trick) and only a completed lap ends nav; early release
+  toasts a hint. The click after a completed hold is suppressed so it can't re-start.
+- **Resize is a drag handle** (cyan corner dot, 0.4×–6× continuous, snaps at 1.0),
+  not tap-to-cycle; sizes stored as numeric multipliers (legacy S/M/L still read).
+- **Export button** copies the layout JSON for baking into the main program.
+- **Test viewports**: 1440×720 and 720×720 (split-screen half; keys to the
+  'portrait' map, giving split-screen its own layout).
+- Parked enhancement: **"+" placeholder tiles** in spare dock slots
+  (see future-developments.md).
 
 Picks up the parked "drag-to-rearrange control layout" entry in
 `future-developments.md`. **Purpose note:** this is primarily a *design tool for

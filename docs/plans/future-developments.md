@@ -80,3 +80,13 @@ because a web app can't force device rotation on iOS at all (Apple blocks
 fullscreen — so a true lock is Android-only and unreliable. The CSS-rotate-the-whole-UI
 alternative is a hack that fights the split-screen support added earlier. Revisit only
 if the app is wrapped natively, or if an Android-only best-effort lock is judged worth it.
+
+## "+" placeholder tiles in the ride-panel dock (spare slots)
+
+**Requested 2026-07-15 while building the editable layout, parked as an enhancement.**
+The ride panel's grid is now the dock (fixed tiles + docked controls in one
+collection). Spare grid cells should render a ghosted **+** tile; tapping it opens a
+picker of actions that aren't currently on screen or docked (e.g. fit-track, zoom
+presets, future Varg toggles) and adds the chosen one as a tile. Complements the
+editable-layout feature (`2026-07-15-editable-layout-design.md`): today you can only
+dock what already exists on screen — the + is how *new* controls would be born.

@@ -224,12 +224,19 @@
     background:var(--ok); color:#04240f; cursor:pointer}
   #navBtn.stop{background:var(--bad); color:#fff}
   #navBtn:disabled{background:#2a3540; color:#5a6a78}
-  /* floating START — bottom-right on open, hidden while navigating */
+  /* START/STOP — one button, on screen or docked: green START idle, red STOP riding.
+     STOP is hold-to-confirm: a line runs the button's perimeter until it closes. */
   #startFab{position:fixed; right:14px; bottom:150px; z-index:17; height:72px; padding:0 32px;
     border:none; border-radius:20px; background:var(--ok); color:#04240f; font-size:24px; font-weight:800;
-    box-shadow:0 4px 18px rgba(0,0,0,.5); cursor:pointer; display:none; letter-spacing:.02em}
+    box-shadow:0 4px 18px rgba(0,0,0,.5); cursor:pointer; display:none; letter-spacing:.02em;
+    touch-action:none}
   #startFab.on{display:block}
-  body.navving #startFab{display:none !important}
+  #startFab.stop{background:var(--bad); color:#fff}
+  #startFab .ring{position:absolute; inset:0; width:100%; height:100%; opacity:0; pointer-events:none}
+  #startFab.holding .ring{opacity:1}
+  #startFab .ring rect{fill:none; stroke:rgba(255,255,255,.95); stroke-width:4;
+    stroke-dasharray:1 1; stroke-dashoffset:1; vector-effect:non-scaling-stroke}
+  #startFab.holding .ring rect{stroke-dashoffset:0; transition:stroke-dashoffset 1.15s linear}
 
   /* ---------- panel ---------- */
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
@@ -337,25 +344,18 @@
      bottom springs the real ☰ panel up as the dock target. Everything here is
      inert unless body.editing — see docs/plans/2026-07-15-editable-layout-design.md.
      Kept after the media queries so customised sizes/positions win the cascade. */
-  #dockStrip{display:none; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;
-    padding:10px; border:1px dashed #2a3540; border-radius:14px}
-  #dockStrip.has{display:flex}
-  #dockStrip.has::before{content:'Docked controls'; width:100%; font-size:11px;
-    text-transform:uppercase; letter-spacing:.1em; color:var(--dim)}
-  #dockStrip .ctl{width:64px; height:64px; border-radius:16px; font-size:28px; flex:none}
-  #dockStrip #startFab{position:static; display:block; height:52px;
-    padding:0 20px; font-size:17px; box-shadow:none}
+  /* docked controls ARE the ride-panel grid — dropped buttons become tiles beside
+     Auto zoom / Layers / Profile / Steepness */
+  #gloveGrid .ctl{width:auto; height:96px; border-radius:16px; font-size:34px}
+  #gloveGrid #startFab{position:relative; display:block; right:auto; bottom:auto; height:96px;
+    padding:0; font-size:22px; box-shadow:none; width:auto}
   /* the panel's big START duplicates the on-screen fab — one home per control */
   #panelNav #navBtn{display:none}
   /* map layers live at the top of the panel now, always in reach */
   #styleRow{margin-bottom:4px}
-  /* the dock strip lives in the ride panel (glove overlay), sized to match its grid */
-  #gloveOverlay #dockStrip{max-width:560px; margin:0 auto 12px}
-  @media (max-height:500px) and (min-width:700px){ #gloveOverlay #dockStrip{max-width:none} }
-  body.editing #dockStrip{display:flex; min-height:96px}
-  body.editing #dockStrip::before{content:'docked controls — drop buttons here, drag them out to un-dock';
-    width:100%; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim)}
-  body.editing #dockStrip.hot{border-color:var(--accent); background:rgba(0,80,90,.35)}
+  @media (max-height:500px){ #gloveGrid .ctl, #gloveGrid #startFab{height:72px; font-size:24px} }
+  body.editing #gloveGrid.hot{outline:2px dashed var(--accent); outline-offset:6px;
+    background:rgba(0,80,90,.2); border-radius:8px}
   @keyframes edWob{0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.4deg)}}
   body.editing .editEl{animation:edWob .32s ease-in-out infinite; cursor:grab;
     touch-action:none; transition:left .18s ease, top .18s ease}
@@ -442,7 +442,7 @@
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl preset" id="presetMax" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
 </div>
-<button id="startFab" title="Start navigation">START</button>
+<button id="startFab" title="Start navigation"><span id="sfLabel">START</span><svg class="ring" viewBox="0 0 120 48" preserveAspectRatio="none"><rect x="2" y="2" width="116" height="44" rx="14" pathLength="1"/></svg></button>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
 <div id="lockPill" title="centre lock — long-press map to unlock">🔒 locked</div>
 
@@ -453,14 +453,14 @@
 </div>
 
 <div id="gloveBtn" class="left" title="ride controls">▦</div>
-<!-- ride panel: North up / Re-center / Sound tiles dropped — they duplicate the
-     on-screen buttons, and docked controls (the strip) take their place -->
-<div id="gloveOverlay"><div id="dockStrip"></div><div id="gloveGrid">
+<!-- ride panel: the grid IS the dock — fixed tiles and docked controls side by side.
+     No North up / Re-center / Sound tiles (they duplicate on-screen buttons); no STOP
+     tile (START/STOP is one relocatable button, dockable into this grid). -->
+<div id="gloveOverlay"><div id="gloveGrid">
   <div class="gtile" id="gZoom"><div class="gi">⤢</div><div class="gl">Auto zoom</div></div>
   <div class="gtile" id="gLayers"><div class="gi">🗺</div><div class="gl">Day</div></div>
   <div class="gtile" id="gProfile"><div class="gi">∿</div><div class="gl">Profile</div></div>
   <div class="gtile" id="gSteep"><div class="gi">◭</div><div class="gl">Steepness</div></div>
-  <div class="gtile stop" id="gEnd"><div class="gi">■</div><div class="gl">STOP</div></div>
 </div></div>
 
 <div id="progress">
@@ -2254,8 +2254,36 @@ function stopNav() {
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
 // floating START (bottom-right on the map) — starts nav; picks a track first if none is selected
 const startFab = document.getElementById('startFab');
-startFab.onclick = () => { if (!S.nav) startNav(); }; // starts the selected track, or a free ride if none
-function updateStartFab() { startFab.classList.toggle('on', !S.nav); }
+let stopHoldT = null, stopHoldFired = false;
+startFab.onclick = () => {
+  if (stopHoldFired) { stopHoldFired = false; return; } // release after a completed hold must not re-START
+  if (!S.nav) startNav(); // starts the selected track, or a free ride if none
+};
+// STOP is hold-to-confirm: the perimeter line must complete its lap (1.15s) —
+// a mid-ride brush of a big red button must never end navigation
+function cancelStopHold() {
+  if (stopHoldT) { clearTimeout(stopHoldT); stopHoldT = null; }
+  startFab.classList.remove('holding');
+}
+startFab.addEventListener('pointerdown', e => {
+  if (!S.nav || (typeof layoutEditing !== 'undefined' && layoutEditing)) return;
+  e.preventDefault();
+  try { startFab.setPointerCapture(e.pointerId); } catch (err) {}
+  stopHoldFired = false;
+  startFab.classList.add('holding');
+  stopHoldT = setTimeout(() => { cancelStopHold(); stopHoldFired = true; closeGlove(); stopNav(); }, 1150);
+});
+startFab.addEventListener('pointerup', () => {
+  if (S.nav && stopHoldT) toast('Hold STOP until the line completes');
+  cancelStopHold();
+});
+startFab.addEventListener('pointercancel', cancelStopHold);
+function updateStartFab() { // one button: green START idle, red hold-to-STOP riding
+  startFab.classList.add('on');
+  startFab.classList.toggle('stop', S.nav);
+  document.getElementById('sfLabel').textContent = S.nav ? 'STOP' : 'START';
+  startFab.title = S.nav ? 'hold to stop navigation' : 'Start navigation';
+}
 updateStartFab();
 
 function onFix(lat, lon, acc, speed, heading) {
@@ -2573,7 +2601,6 @@ document.getElementById('gSteep').onclick = gloveTap(() => {
   document.getElementById('setSteep').checked = S.set.steep;
   refreshMapData(); drawProgress(true); // surface features re-bake their steepness colours
 });
-document.getElementById('gEnd').onclick = () => { closeGlove(); stopNav(); };
 function applyGloveSide() {
   gloveBtn.classList.toggle('right', S.set.gloveSide === 'right');
   gloveBtn.classList.toggle('left', S.set.gloveSide !== 'right');
@@ -3573,7 +3600,7 @@ for (const id in LO_ELS) {
   r.parent = r.el.parentNode; r.next = r.el.nextSibling; // original flow home, for undocking
 }
 S.set.layout = S.set.layout || {};
-const dockStrip = document.getElementById('dockStrip');
+const dockHost = document.getElementById('gloveGrid'); // the ride-panel grid IS the dock
 let layoutEditing = false, loPanelOpen = false;
 function loPanel(open) { // the dock target is the ride panel (glove overlay) — nav mode is what we're simulating
   // no early-out: the app's own closeGlove (map tap) can hide the overlay behind our back
@@ -3600,17 +3627,15 @@ function loApplySizeVal(id, f) {
   else { delete el.dataset.sz; el.style.removeProperty('--sz'); }
 }
 function loApplySize(id, ent) { loApplySizeVal(id, loSizeMult(ent && ent.size)); }
-function loDock(id) { // docked = child of the ☰ panel's strip, editing or not
+function loDock(id) { // docked = a tile in the ride-panel grid, editing or not
   const reg = LO_ELS[id];
   loClearPos(reg.el);
-  if (reg.el.parentNode !== dockStrip) dockStrip.appendChild(reg.el);
-  dockStrip.classList.toggle('has', !!dockStrip.children.length);
+  if (reg.el.parentNode !== dockHost) dockHost.appendChild(reg.el);
 }
 function loUndock(id) {
   const reg = LO_ELS[id];
   if (reg.el.parentNode === reg.parent) return;
   reg.parent.insertBefore(reg.el, reg.next && reg.next.parentNode === reg.parent ? reg.next : null);
-  dockStrip.classList.toggle('has', !!dockStrip.children.length);
 }
 function loAnchor(id, slot) { // normal-mode placement: viewport-fraction anchors, no stored pixels
   const st = LO_ELS[id].el.style, p = loSlotXY(slot);
@@ -3710,7 +3735,7 @@ function loDown(e, id) {
   if (!layoutEditing || loDrag) return;
   e.preventDefault();
   const el = LO_ELS[id].el;
-  const docked = el.parentNode === dockStrip;
+  const docked = el.parentNode === dockHost;
   if (docked) {
     // reparent BEFORE taking pointer capture — moving an element in the DOM
     // clears its capture, which strands the drag; also, fixed-position coords
@@ -3781,7 +3806,7 @@ function loSetTarget(t) {
   if (loDispId) { loPlacePx(LO_ELS[loDispId].el, loMap()[loDispId].slot); loDispId = loDispTo = null; }
   const dock = !!(t && t.kind === 'dock');
   loPanel(dock); // springs up on approach, drops away when the drag leaves
-  dockStrip.classList.toggle('hot', dock);
+  dockHost.classList.toggle('hot', dock);
   for (const d of document.querySelectorAll('#slotDots i.hot')) d.classList.remove('hot');
   if (t && t.kind === 'slot') {
     const d = document.querySelector('#slotDots i[data-slot="' + t.slot + '"]');
@@ -3816,7 +3841,7 @@ function loUp() {
     loPlacePx(el, loTarget.slot);
     saveSet();
   }
-  dockStrip.classList.remove('hot');
+  dockHost.classList.remove('hot');
   for (const d of document.querySelectorAll('#slotDots i.hot')) d.classList.remove('hot');
   loTarget = null; loDrag = null;
 }
