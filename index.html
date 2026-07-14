@@ -2029,37 +2029,41 @@ function warnDists(ns) {
     near: Math.min(vehVal('nearMax'), Math.max(vehVal('nearMin'), spd * 5)) };
 }
 function startNav() {
-  const trk = S.tracks[S.sel]; if (!trk) return;
+  const trk = S.tracks[S.sel]; // undefined → free-ride: live position, speed & compass, no cues/off-track/progress
   if (S.cueEdit) setCueEdit(false);
   audio(); // unlock on gesture
   // gesture → prompt for the magnetometer if needed (also for auto-compass flips later)
   if (S.set.orient === 'oriented' || (S.set.compassAuto || 'turns') !== 'off') enableCompass(true);
-  // a new route starts a fresh backtrack trail; re-starting the same one keeps the thread
-  if (S.trailTrack !== trk.id) { S.trail = []; trailLast = null; trailDirty = true; refreshTrail(); }
-  S.trailTrack = trk.id;
+  // a new route (or a free ride) starts a fresh backtrack trail; re-starting the same one keeps the thread
+  const trailKey = trk ? trk.id : '__free__';
+  if (S.trailTrack !== trailKey) { S.trail = []; trailLast = null; trailDirty = true; refreshTrail(); }
+  S.trailTrack = trailKey;
   closePanel(); // START lives in the ☰ panel now
-  if (!trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
+  if (trk && !trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
   // start in the direction the rider picked (reverse toggle); auto-voting can still correct it if
   // they actually ride the other way, but it holds this direction from the first fix
-  const rev = !!trk.reverse;
+  const rev = !!(trk && trk.reverse);
   S.navState = { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0, alertStates: new Map(),
     movingS: 0, avgSpd: null, lastFixT: 0 };
   S.nav = true; setFollow(true);
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
   updateStartFab();
-  document.getElementById('hud').classList.add('on');
   document.getElementById('hudSpeed').classList.add('on');
-  prog.classList.add('on'); prog.classList.remove('offtrack', 'countdown');
-  prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
+  if (trk) { // turn strip + progress strip only make sense with a route
+    document.getElementById('hud').classList.add('on');
+    prog.classList.add('on'); prog.classList.remove('offtrack', 'countdown');
+    prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
+  }
   document.getElementById('gloveBtn').classList.add('on');
   setHold(null);
   placeProgress(); drawProgress(true);
-  const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop');
+  const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop'); nb.disabled = false;
   if (S.set.wake) requestWake();
   if (fsOK && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
   if (!S.demo) startGPS();
   startFriends();
-  toast('Navigation started — following nearest point on track');
+  toast(trk ? 'Navigation started — following nearest point on track'
+            : 'Free ride — showing your position, speed & compass (no track)');
 }
 function stopNav() {
   S.nav = false;
@@ -2075,6 +2079,7 @@ function stopNav() {
   closeGlove();
   placeProgress();
   const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
+  updateBottomBar(); // refresh name/hint (esp. after a free ride)
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   // leave GPS running so the location dot stays on the map after navigation ends
   releaseWake(); stopDemo();
@@ -2082,16 +2087,12 @@ function stopNav() {
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
 // floating START (bottom-right on the map) — starts nav; picks a track first if none is selected
 const startFab = document.getElementById('startFab');
-startFab.onclick = () => {
-  if (S.nav) return;
-  if (S.sel < 0) { toast('Pick a track to follow, or ☰ → General to free-ride'); openPanel(); return; }
-  startNav();
-};
+startFab.onclick = () => { if (!S.nav) startNav(); }; // starts the selected track, or a free ride if none
 function updateStartFab() { startFab.classList.toggle('on', !S.nav); }
 updateStartFab();
 
 function onFix(lat, lon, acc, speed, heading) {
-  if (!REF) return;
+  if (!REF) setRef(lat, lon); // free-ride / no data yet: anchor the local projection at the first fix
   if (ADV('gpsAcc') > 0 && (acc || 0) > ADV('gpsAcc')) return; // junk fix — below the accuracy floor
   const [x, y] = toXY(lat, lon);
   const t = Date.now();
@@ -2714,7 +2715,7 @@ function selectTrack(i) {
 function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
   const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revBtn');
-  if (S.sel < 0) { nm.textContent = 'No track selected'; sub.textContent = S.tracks.length ? 'tap ☰ to pick a track' : 'load a GPX to begin'; nb.disabled = true; eb.style.display = 'none'; rb.style.display = 'none'; return; }
+  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap ☰ to pick a track, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.style.display = 'none'; return; }
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
