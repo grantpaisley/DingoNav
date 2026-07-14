@@ -3588,7 +3588,8 @@ function loApplySize(id, ent) {
 function loDock(id) { // panel-slot home: the tray while editing, the ☰ panel strip otherwise
   const reg = LO_ELS[id], host = layoutEditing ? dockTray : dockStrip;
   loClearPos(reg.el);
-  if (reg.el.parentNode !== host) host.appendChild(reg.el);
+  if (reg.el.parentNode !== host) // in the tray, keep docked buttons left of the spacer/Reset/Done
+    host.insertBefore(reg.el, host.querySelector('.traySpace'));
   dockStrip.classList.toggle('has', !!dockStrip.children.length);
 }
 function loUndock(id) {
