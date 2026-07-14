@@ -381,8 +381,13 @@
   #vargPill[data-sz] .vm{font-size:calc(13px*var(--sz,1))}
   #vargModeBig[data-sz]{font-size:calc(26px*var(--sz,1))}
   #vargModeBig[data-sz] small{font-size:calc(12px*var(--sz,1))}
-  #vargInd[data-sz] .blink{font-size:calc(60px*var(--sz,1))}
-  #vargInd[data-sz] .beam{font-size:calc(34px*var(--sz,1))}
+  #vargInd .blink[data-sz]{font-size:calc(60px*var(--sz,1))}
+  #vargInd .beam[data-sz]{font-size:calc(34px*var(--sz,1))}
+  /* corner resize handle on readouts while editing */
+  .szHandle{display:none}
+  body.editing .szHandle{display:block; position:absolute; right:-12px; bottom:-12px; width:24px; height:24px;
+    border-radius:50%; background:var(--accent); border:3px solid #00252b; cursor:nwse-resize;
+    z-index:71; touch-action:none; box-shadow:0 2px 8px rgba(0,0,0,.5)}
 </style>
 </head>
 <body>
@@ -526,8 +531,9 @@
     <div class="row"><label>Control buttons on</label><span class="seg" id="edgesSeg">
       <button data-e="sides">Left &amp; right</button><button data-e="tb">Top &amp; bottom</button></span></div>
     <div class="btnRow"><button class="btn" id="layoutEditBtn">✥ Edit screen layout</button></div>
-    <div class="hint">Drag buttons and readouts anywhere; tap a readout to cycle its size; drop a
-      button on the bottom tray to dock it in this menu. Saved separately for portrait and landscape.</div>
+    <div class="hint">Drag buttons and readouts anywhere; drag the cyan corner dot on a readout to
+      resize it; drop a button on the bottom tray to dock it in this menu. Saved separately for
+      portrait and landscape.</div>
 
     <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
@@ -3553,12 +3559,13 @@ codeEl.onchange = () => { S.set.code = codeEl.value.trim(); saveSet(); if (S.nav
    the drag machinery binds only while editing.
    See docs/plans/2026-07-15-editable-layout-design.md. */
 const LO_GRID = { cols: 5, rows: 6, topRes: 64, botRes: 64, edge: 10 };
-const LO_SZ = { S: 0.7, M: 1, L: 1.4 };
+const LO_SZ = { S: 0.7, M: 1, L: 1.4 }; // legacy letter sizes — sizes are numeric multipliers now
 const LO_ELS = {
   orientCtl: { t: 'btn' }, followBtn: { t: 'btn' }, fitBtn: { t: 'btn' }, soundCtl: { t: 'btn' },
   presetMin: { t: 'btn' }, zoomOut: { t: 'btn' }, zoomIn: { t: 'btn' }, presetMax: { t: 'btn' },
   startFab: { t: 'btn' }, menuBtn: { t: 'btn', noDock: true }, // docking the way into the menu = softlock
-  hudSpeed: { t: 'ro' }, vargPill: { t: 'ro' }, vargModeBig: { t: 'ro' }, vargInd: { t: 'ro' },
+  hudSpeed: { t: 'ro' }, vargPill: { t: 'ro' }, vargModeBig: { t: 'ro' },
+  indL: { t: 'ro' }, indBeam: { t: 'ro' }, indR: { t: 'ro' }, // telltales place individually
 };
 for (const id in LO_ELS) {
   const r = LO_ELS[id];
@@ -3580,11 +3587,13 @@ function loSlotXY(slot) {
 function loClearPos(el) {
   for (const k of ['position', 'top', 'left', 'right', 'bottom', 'transform', 'width', 'zIndex']) el.style[k] = '';
 }
-function loApplySize(id, ent) {
+function loSizeMult(v) { return typeof v === 'number' ? v : (LO_SZ[v] || 1); } // reads legacy S/M/L too
+function loApplySizeVal(id, f) {
   const el = LO_ELS[id].el;
-  if (ent && ent.size && ent.size !== 'M') { el.dataset.sz = ent.size; el.style.setProperty('--sz', LO_SZ[ent.size]); }
+  if (f && Math.abs(f - 1) > 0.03) { el.dataset.sz = Math.round(f * 100) / 100; el.style.setProperty('--sz', f); }
   else { delete el.dataset.sz; el.style.removeProperty('--sz'); }
 }
+function loApplySize(id, ent) { loApplySizeVal(id, loSizeMult(ent && ent.size)); }
 function loDock(id) { // panel-slot home: the tray while editing, the ☰ panel strip otherwise
   const reg = LO_ELS[id], host = layoutEditing ? dockTray : dockStrip;
   loClearPos(reg.el);
@@ -3602,7 +3611,6 @@ function loAnchor(id, slot) { // normal-mode placement: viewport-fraction anchor
   const st = LO_ELS[id].el.style, p = loSlotXY(slot);
   loUndock(id);
   st.position = 'fixed'; st.top = p.y + 'px'; st.bottom = 'auto';
-  if (id === 'vargInd') st.width = 'max-content'; // its default stretches edge-to-edge
   if (p.col === 0) { st.left = LO_GRID.edge + 'px'; st.right = 'auto'; st.transform = 'translateY(-50%)'; }
   else if (p.col === LO_GRID.cols - 1) { st.right = LO_GRID.edge + 'px'; st.left = 'auto'; st.transform = 'translateY(-50%)'; }
   else { st.left = (p.col * 25) + '%'; st.right = 'auto'; st.transform = 'translate(-50%,-50%)'; }
@@ -3629,20 +3637,10 @@ function loPlacePx(el, slot) { // px placement while editing (the wobble animati
   st.left = left + 'px'; st.top = (p.y - r.height / 2) + 'px';
   st.right = 'auto'; st.bottom = 'auto'; st.transform = 'none';
 }
-function loMeasure(id) { // current visual rect; vargInd = union of its glyphs, not the full-width strip
-  const el = LO_ELS[id].el;
-  if (id === 'vargInd') {
-    const ks = [...el.children].map(k => k.getBoundingClientRect()).filter(k => k.width);
-    if (ks.length) return { left: Math.min(...ks.map(k => k.left)), top: Math.min(...ks.map(k => k.top)),
-      width: Math.max(...ks.map(k => k.right)) - Math.min(...ks.map(k => k.left)),
-      height: Math.max(...ks.map(k => k.bottom)) - Math.min(...ks.map(k => k.top)) };
-  }
-  return el.getBoundingClientRect();
-}
+function loMeasure(id) { return LO_ELS[id].el.getBoundingClientRect(); } // current visual rect
 function loPin(id, r) { // pin at the measured spot as fixed px, nudged clear of the dock tray
   const st = LO_ELS[id].el.style;
   st.position = 'fixed'; st.right = 'auto'; st.bottom = 'auto'; st.transform = 'none';
-  if (id === 'vargInd') st.width = 'max-content';
   let top = r.top;
   if (top + r.height > innerHeight - LO_GRID.botRes) top = innerHeight - LO_GRID.botRes - r.height - 6;
   st.left = r.left + 'px'; st.top = top + 'px';
@@ -3668,10 +3666,12 @@ function enterLayoutEdit() {
   }
   document.addEventListener('click', loBlockClick, true);
   document.addEventListener('contextmenu', loBlockClick, true);
-  toast('Drag to move · tap a readout to resize · ✓ Done when finished');
+  loAddHandles();
+  toast('Drag to move · drag a readout’s corner dot to resize · ✓ Done when finished');
 }
 function exitLayoutEdit() {
   if (!layoutEditing) return;
+  loRemoveHandles();
   for (const id in LO_ELS) {
     const reg = LO_ELS[id], el = reg.el;
     el.classList.remove('editEl', 'lift');
@@ -3777,15 +3777,7 @@ function loUp() {
   el.removeEventListener('pointercancel', loDrag.up);
   const m = loMap();
   if (!loDrag.moved) {
-    if (LO_ELS[id].t === 'ro') { // tap a readout: cycle M → L → S → M
-      const ent = m[id] = m[id] || {};
-      ent.size = { M: 'L', L: 'S', S: 'M' }[ent.size || 'M'];
-      if (ent.size === 'M') delete ent.size;
-      if (!ent.slot && !ent.size) delete m[id];
-      loApplySize(id, m[id]);
-      saveSet();
-      toast('Size: ' + ((m[id] && m[id].size) || 'M'));
-    }
+    // tap = nothing; readout resize lives on the corner handle now
   } else if (loTarget && loTarget.kind === 'dock') {
     (m[id] = m[id] || {}).slot = 'panel';
     loDock(id);
@@ -3799,6 +3791,54 @@ function loUp() {
   dockTray.classList.remove('hot');
   for (const d of document.querySelectorAll('#slotDots i.hot')) d.classList.remove('hot');
   loTarget = null; loDrag = null;
+}
+/* corner-handle resize for readouts: continuous scale, stored as a numeric
+   multiplier (0.5–2.5) in ent.size; a light snap around 1.0 recovers default */
+let loSize = null;
+function loAddHandles() {
+  for (const id in LO_ELS) {
+    const reg = LO_ELS[id];
+    if (reg.t !== 'ro') continue;
+    const h = document.createElement('i');
+    h.className = 'szHandle';
+    h.addEventListener('pointerdown', e => loSizeDown(e, id));
+    reg.el.appendChild(h);
+    reg.handle = h;
+  }
+}
+function loRemoveHandles() {
+  for (const id in LO_ELS) { const reg = LO_ELS[id]; if (reg.handle) { reg.handle.remove(); reg.handle = null; } }
+}
+function loSizeDown(e, id) {
+  if (!layoutEditing || loSize || loDrag) return;
+  e.stopPropagation(); e.preventDefault(); // don't start a move-drag underneath
+  const h = e.currentTarget, el = LO_ELS[id].el, r = el.getBoundingClientRect(), m = loMap();
+  loSize = { id, x0: e.clientX, w0: Math.max(40, r.width), m0: loSizeMult(m[id] && m[id].size), f: null };
+  try { h.setPointerCapture(e.pointerId); } catch (err) {}
+  loSize.move = ev => {
+    if (!loSize) return;
+    let f = loSize.m0 * (loSize.w0 + ev.clientX - loSize.x0) / loSize.w0;
+    f = Math.max(0.5, Math.min(2.5, f));
+    if (Math.abs(f - 1) < 0.05) f = 1; // snap to default
+    loSize.f = f;
+    loApplySizeVal(id, f);
+  };
+  loSize.up = () => {
+    if (!loSize) return;
+    if (loSize.f != null && loSize.f !== loSize.m0) {
+      const ent = m[id] = m[id] || {};
+      if (loSize.f === 1) { delete ent.size; if (!ent.slot) delete m[id]; }
+      else ent.size = Math.round(loSize.f * 100) / 100;
+      saveSet();
+    }
+    h.removeEventListener('pointermove', loSize.move);
+    h.removeEventListener('pointerup', loSize.up);
+    h.removeEventListener('pointercancel', loSize.up);
+    loSize = null;
+  };
+  h.addEventListener('pointermove', loSize.move);
+  h.addEventListener('pointerup', loSize.up);
+  h.addEventListener('pointercancel', loSize.up);
 }
 document.getElementById('layoutEditBtn').onclick = enterLayoutEdit;
 document.getElementById('editDone').onclick = () => { exitLayoutEdit(); toast('Layout saved'); };
