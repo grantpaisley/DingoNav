@@ -409,7 +409,7 @@
     <div class="row"><label>Strava heatmap overlay</label><span class="sw"><input type="checkbox" id="setStrava"><span></span></span></div>
     <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
     <div class="row"><label>Map style</label><span class="seg" id="styleSeg">
-      <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button></span></div>
+      <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button><button data-s="satellite">Sat</button></span></div>
     <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
     <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
 
@@ -558,6 +558,7 @@ let map = null, mapReady = false;
 let basePM = null, basePMKey = 'none'; // PMTiles handle for the cue engine's corridor decode
 let hasHillshade = false; // optional terrarium DEM .pmtiles → hillshade layer
 let stravaMeta = null; // {count, zmin, zmax} of baked Strava tiles in IDB, or null
+let satMeta = null; // {count, zmin, zmax} of baked ESRI satellite tiles in IDB, or null
 // 1×1 transparent PNG bytes for out-of-corridor Strava tiles (generated, so no
 // hand-copied base64 to get wrong).
 const STRAVA_BLANK = (() => {
@@ -1102,12 +1103,25 @@ const MAP_STYLES = {
         'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 13, 1.2 * p, 16, 3.5 * p, 20, 16 * p] },
         earth: { 'fill-color': '#eceae4' } }; }, hill: HILL_LIGHT },
   dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // shading fights the dark flavor
+  satellite:{ label: 'Sat', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // raster imagery base, built specially below
 };
-const STYLE_CYCLE = ['daylight', 'contrast', 'dark'];
+const STYLE_CYCLE = ['daylight', 'contrast', 'dark', 'satellite'];
 let baseUrlRef = '', hasBasemap = false;
 const baseLayerCache = {};
 function curStyle() { return MAP_STYLES[S.set.mapStyle] || MAP_STYLES.daylight; }
 async function buildStyle() {
+  // Satellite: raster ESRI imagery as the base (from the sattile:// IDB store).
+  // Independent of the vector basemap — works even with no .pmtiles loaded.
+  if (S.set.mapStyle === 'satellite' && satMeta && satMeta.count > 0) {
+    const glyphs = (baseUrlRef || new URL('basemap/', location.href).href) + 'fonts/{fontstack}/{range}.pbf';
+    return { version: 8, glyphs,
+      sources: { satellite: { type: 'raster', tiles: ['sattile://{z}/{x}/{y}'], tileSize: 256,
+        minzoom: satMeta.zmin, maxzoom: satMeta.zmax, attribution: '© Esri, Maxar, Earthstar Geographics' } },
+      layers: [
+        { id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } },
+        { id: 'satellite', type: 'raster', source: 'satellite' },
+      ] };
+  }
   if (!hasBasemap) return { version: 8,
     glyphs: new URL('basemap/', location.href).href + 'fonts/{fontstack}/{range}.pbf',
     sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } }] };
@@ -1134,7 +1148,10 @@ async function buildStyle() {
 async function setMapStyle(name) {
   S.set.mapStyle = name; saveSet();
   for (const b of document.querySelectorAll('#styleSeg button')) b.classList.toggle('active', b.dataset.s === name);
-  if (!map || !mapReady || !hasBasemap) return;
+  if (!map || !mapReady) return;
+  const canSat = name === 'satellite' && satMeta && satMeta.count > 0;
+  if (!hasBasemap && !canSat) return; // nothing to render a base from
+  if (name === 'satellite' && !canSat) toast('No satellite tiles — include them in a bundle from Dingo.');
   map.setStyle(await buildStyle());
   await new Promise(res => {
     const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 200);
@@ -1154,6 +1171,15 @@ async function initMap() {
   // basemap shows through with no broken-tile errors.
   maplibregl.addProtocol('stravatile', async (params) => {
     const key = 'stravatile-' + params.url.replace('stravatile://', '').replaceAll('/', '-');
+    try { const rec = await idb.get(key); if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() }; } catch (e) {}
+    return { data: STRAVA_BLANK.buffer };
+  });
+
+  // Satellite (ESRI World Imagery) corridor tiles served from IDB (baked into the
+  // .dingonav bundle). Out-of-corridor tiles resolve to a blank so the request
+  // never errors — the imagery just stops at the corridor edge.
+  maplibregl.addProtocol('sattile', async (params) => {
+    const key = 'sattile-' + params.url.replace('sattile://', '').replaceAll('/', '-');
     try { const rec = await idb.get(key); if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() }; } catch (e) {}
     return { data: STRAVA_BLANK.buffer };
   });
@@ -1247,6 +1273,7 @@ async function initMap() {
     map.once('load', () => { clearInterval(t); res(); });
   });
   try { stravaMeta = await idb.get('strava-meta'); } catch (e) {}
+  try { satMeta = await idb.get('sat-meta'); } catch (e) {}
   mapReady = true; // before addOverlays — its refreshMapData() call needs this
   addOverlays();
 }
@@ -2495,6 +2522,10 @@ async function loadBundleZip(file) {
     await idb.put({ id: 'basemap', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' basemap', kind: 'basemap', blob });
     basemap = true;
   }
+  if (entries['hillshade.pmtiles']) {
+    const blob = new Blob([entries['hillshade.pmtiles']], { type: 'application/octet-stream' });
+    await idb.put({ id: 'hillshade', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' hillshade', kind: 'hillshade', blob });
+  }
   // Strava corridor tiles → IDB, keyed for the stravatile:// protocol. Track the
   // zoom range so the raster source only requests zooms we actually shipped.
   let zmin = 99, zmax = 0;
@@ -2511,13 +2542,28 @@ async function loadBundleZip(file) {
     await idb.put({ id: 'strava-meta', kind: 'stravameta', count: stravaTiles, zmin, zmax });
     if (S.set.strava === undefined) { S.set.strava = true; saveSet(); } // show by default when first shipped
   }
+  // Satellite (ESRI World Imagery) corridor tiles → IDB, keyed for the
+  // sattile:// protocol. Selected via the "Sat" map style.
+  let szmin = 99, szmax = 0, satTiles = 0;
+  for (const path in entries) {
+    const m = path.match(/^satellite\/(\d+)\/(\d+)\/(\d+)\.jpg$/);
+    if (!m) continue;
+    const z = +m[1];
+    szmin = Math.min(szmin, z); szmax = Math.max(szmax, z);
+    await idb.put({ id: `sattile-${m[1]}-${m[2]}-${m[3]}`, kind: 'sattile',
+      blob: new Blob([entries[path]], { type: 'image/jpeg' }) });
+    satTiles++;
+  }
+  if (satTiles) {
+    await idb.put({ id: 'sat-meta', kind: 'satmeta', count: satTiles, zmin: szmin, zmax: szmax });
+  }
   // the bundle name is the natural group-ride name — default it in, never overwrite a chosen one
   if (!S.set.code && (nT || nH)) {
     S.set.code = file.name.replace(/\.(dingonav|zip)$/i, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 24);
     saveSet();
     const ce = document.getElementById('rideCode'); if (ce) ce.value = S.set.code;
   }
-  return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles };
+  return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles, satTiles };
 }
 async function handleFiles(files) {
   let nT = 0, nH = 0, errs = 0, needReload = false, stravaTiles = 0;
@@ -3319,18 +3365,26 @@ async function boot() {
       }
     } catch (e) {}
   }
-  // Shared link: ?bundle=<url> (Dingo planner's share-by-link — a secret
-  // gist holding bundle.json). Fetch + import, then strip the param so
-  // reloads don't refetch; the import persists to IDB like any load.
+  // Shared link: ?bundle=<url> (Dingo planner's share-by-link). Two shapes:
+  //   - a secret gist holding bundle.json (text: tracks + heatmap), or
+  //   - a Release asset holding the full .dingonav zip (binary: + map tiles).
+  // Sniff the leading bytes ('PK' = zip) and route accordingly. Then strip the
+  // param so reloads don't refetch; the import persists to IDB like any load.
   const shared = new URLSearchParams(location.search).get('bundle');
   if (shared) {
     history.replaceState(null, '', location.pathname + location.hash);
     try {
       const resp = await fetch(shared);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const r = await addFile('shared-bundle.json', await resp.text());
+      const blob = await resp.blob();
+      const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+      const isZip = head[0] === 0x50 && head[1] === 0x4B; // 'PK'
+      const r = isZip
+        ? await loadBundleZip(new File([blob], 'shared.dingonav'))
+        : await addFile('shared-bundle.json', await blob.text());
       if (r && r.bundle) {
-        toast(`Shared ride loaded — ${r.tracks} track${r.tracks === 1 ? '' : 's'}${r.heatmap ? ' + heatmap' : ''}${r.errs ? ' · ' + r.errs + ' failed' : ''}`);
+        const extras = [r.basemap && 'map', r.satTiles && 'satellite', r.stravaTiles && 'Strava'].filter(Boolean);
+        toast(`Shared ride loaded — ${r.tracks} track${r.tracks === 1 ? '' : 's'}${r.heatmap ? ' + heatmap' : ''}${extras.length ? ' + ' + extras.join(' + ') : ''}${r.errs ? ' · ' + r.errs + ' failed' : ''}`);
         if (r.tracks) S.sel = S.tracks.length - 1;
       } else toast('Shared file loaded');
     } catch (e) { console.warn('shared bundle failed', e); toast('Could not load the shared link — are you online?'); }
