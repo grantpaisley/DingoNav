@@ -42,12 +42,13 @@
   #hudDist small{font-size:15px; font-weight:600; color:var(--dim)}
   #hudType{font-size:14px; color:var(--fg); text-transform:uppercase; letter-spacing:.06em; position:relative;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:12px; z-index:10;
-    background:rgba(14,18,22,.32); border-radius:14px; padding:4px 14px; font-size:40px; font-weight:800;
-    text-shadow:0 2px 12px rgba(0,0,0,.6); display:none; font-variant-numeric:tabular-nums}
-  #hudSpeed.on{display:block} #hudSpeed small{font-size:16px; color:var(--dim); font-weight:600}
-  /* speed readout + pills drop below the strip while it can appear */
-  body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px)}
+  /* speed readout: centred at the top, no box — just a big glanceable number with a shadow */
+  #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:50%; transform:translateX(-50%); z-index:10;
+    background:none; padding:0 6px; font-size:46px; font-weight:800; white-space:nowrap; pointer-events:none;
+    text-shadow:0 2px 14px rgba(0,0,0,.9), 0 0 5px rgba(0,0,0,.7); display:none; font-variant-numeric:tabular-nums}
+  #hudSpeed.on{display:block} #hudSpeed small{font-size:17px; color:var(--dim); font-weight:600}
+  /* with a route loaded the turn strip owns the very top, so drop the speed below it */
+  body.navving.hasroute #hudSpeed{top:calc(env(safe-area-inset-top) + 58px)}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 116px)}
   body.navving #lockPill{top:calc(env(safe-area-inset-top) + 152px)}
   /* Stark Varg battery/mode pill — top-right, under the mute button while riding.
@@ -129,9 +130,8 @@
   .ctlgroup{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:10;
     display:flex; flex-direction:column; gap:8px}
   #leftCtl{left:10px} #rightCtl{right:10px}
-  /* riding: drop the groups below the top turn strip; the left group also clears the speed readout */
+  /* riding: drop both groups below the top turn strip (speed is centred, out of their way now) */
   body.navving .ctlgroup{top:calc(env(safe-area-inset-top) + 62px)}
-  body.navving #leftCtl{top:calc(env(safe-area-inset-top) + 122px)}
   /* edges = top/bottom: horizontal rows, left-anchored — nav group on the top edge, zoom near the bottom */
   body.edges-tb #leftCtl, body.edges-tb #rightCtl{top:auto; bottom:auto; left:10px; right:auto;
     transform:none; flex-direction:row}
@@ -295,8 +295,8 @@
     #hudArrow{font-size:24px; width:30px}
     #hudDist{font-size:20px} #hudDist small{font-size:11px}
     #hudType{font-size:11px}
-    #hudSpeed{font-size:30px; padding:2px 11px}
-    body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 44px)}
+    #hudSpeed{font-size:34px; padding:0 6px}
+    body.navving.hasroute #hudSpeed{top:calc(env(safe-area-inset-top) + 44px)}
     body.navving #holdPill{top:calc(env(safe-area-inset-top) + 84px)}
     body.navving #lockPill{top:calc(env(safe-area-inset-top) + 118px)}
     #muteBtn{width:40px; height:40px; font-size:19px; top:calc(env(safe-area-inset-top) + 44px)}
@@ -2086,6 +2086,7 @@ function startNav() {
     movingS: 0, avgSpd: null, lastFixT: 0 };
   S.nav = true; setFollow(true);
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
+  document.body.classList.toggle('hasroute', !!trk); // route → turn strip owns the top; free-ride → speed sits at the very top
   updateStartFab();
   document.getElementById('hudSpeed').classList.add('on');
   if (trk) { // turn strip + progress strip only make sense with a route
@@ -2107,7 +2108,7 @@ function startNav() {
 function stopNav() {
   S.nav = false;
   S.autoOrient = false; S.autoBlock = false; applyOrient(); // hand orientation back to the rider's mode
-  document.body.classList.remove('navving');
+  document.body.classList.remove('navving', 'hasroute');
   updateStartFab();
   document.getElementById('hud').classList.remove('on');
   document.getElementById('hudSpeed').classList.remove('on');
