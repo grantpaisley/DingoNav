@@ -187,7 +187,10 @@
   .gtile .gi{font-size:32px; line-height:1}
   .gtile .gl{font-size:13px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.04em}
   .gtile.active .gl{color:var(--accent)}
-  .gtile.stop{border-color:var(--bad)} .gtile.stop .gi,.gtile.stop .gl{color:var(--bad)}
+  /* STOP: same visual weight as the START button — solid red, unmissable */
+  .gtile.stop{background:var(--bad); border-color:var(--bad)}
+  .gtile.stop .gi,.gtile.stop .gl{color:#fff}
+  .gtile.stop:active{background:#d32f2f}
 
   /* ---------- progress strip ---------- */
   #progress{position:fixed; left:56px; right:0; z-index:14; display:none;
@@ -346,10 +349,11 @@
   #panelNav #navBtn{display:none}
   /* map layers live at the top of the panel now, always in reach */
   #styleRow{margin-bottom:4px}
-  /* edit mode: the panel itself is the dock target — only the strip shows */
-  body.editing #panel > :not(#dockStrip){display:none}
+  /* the dock strip lives in the ride panel (glove overlay), sized to match its grid */
+  #gloveOverlay #dockStrip{max-width:560px; margin:0 auto 12px}
+  @media (max-height:500px) and (min-width:700px){ #gloveOverlay #dockStrip{max-width:none} }
   body.editing #dockStrip{display:flex; min-height:96px}
-  body.editing #dockStrip::before{content:'☰ panel — drop buttons here, drag them out to un-dock';
+  body.editing #dockStrip::before{content:'docked controls — drop buttons here, drag them out to un-dock';
     width:100%; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim)}
   body.editing #dockStrip.hot{border-color:var(--accent); background:rgba(0,80,90,.35)}
   @keyframes edWob{0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.4deg)}}
@@ -370,8 +374,8 @@
     letter-spacing:.1em; text-transform:uppercase; color:var(--dim);
     background:repeating-linear-gradient(45deg, rgba(143,160,176,.08) 0 8px, transparent 8px 16px);
     border-bottom:1px dashed #2a3540}
-  /* floating edit controls, bottom-right; above the panel so Done/Export always reachable */
-  body.editing #editCtls{display:flex; position:fixed; right:10px; bottom:10px; z-index:22; gap:10px}
+  /* floating edit controls, bottom-right; above the ride panel (z25) so Done/Export always reachable */
+  body.editing #editCtls{display:flex; position:fixed; right:10px; bottom:10px; z-index:27; gap:10px}
   .edbtn{padding:9px 18px; border-radius:999px; border:1px solid #2a3540;
     background:var(--panel2); color:var(--fg); font-size:15px; font-weight:800; cursor:pointer; flex:none}
   #editDone{background:var(--accent); color:#00252b; border:none}
@@ -449,14 +453,14 @@
 </div>
 
 <div id="gloveBtn" class="left" title="ride controls">▦</div>
-<div id="gloveOverlay"><div id="gloveGrid">
-  <div class="gtile" id="gOrient"><div class="gi">N</div><div class="gl">North up</div></div>
-  <div class="gtile" id="gCenter"><div class="gi">◎</div><div class="gl">Re-center</div></div>
+<!-- ride panel: North up / Re-center / Sound tiles dropped — they duplicate the
+     on-screen buttons, and docked controls (the strip) take their place -->
+<div id="gloveOverlay"><div id="dockStrip"></div><div id="gloveGrid">
   <div class="gtile" id="gZoom"><div class="gi">⤢</div><div class="gl">Auto zoom</div></div>
-  <div class="gtile" id="gSound"><div class="gi">♪</div><div class="gl">Sound</div></div>
+  <div class="gtile" id="gLayers"><div class="gi">🗺</div><div class="gl">Day</div></div>
   <div class="gtile" id="gProfile"><div class="gi">∿</div><div class="gl">Profile</div></div>
   <div class="gtile" id="gSteep"><div class="gi">◭</div><div class="gl">Steepness</div></div>
-  <div class="gtile stop" id="gEnd"><div class="gi">■</div><div class="gl">End nav</div></div>
+  <div class="gtile stop" id="gEnd"><div class="gi">■</div><div class="gl">STOP</div></div>
 </div></div>
 
 <div id="progress">
@@ -481,7 +485,6 @@
 
 <div id="shade"></div>
 <div id="panel">
-  <div id="dockStrip"></div>
   <div id="panelNav">
     <button id="navBtn" disabled>START</button>
     <div class="ctl" id="revBtn" title="reverse direction" style="display:none">⇄</div>
@@ -2549,27 +2552,19 @@ function refreshGlove() {
   const trk = S.tracks[S.sel];
   const g = id => document.getElementById(id);
   g('gSteep').classList.toggle('active', !!(S.set.steep && trk && trk.hasEle));
-  const o = effOrient();
-  g('gOrient').classList.toggle('active', o !== 'north');
-  g('gOrient').querySelector('.gi').textContent = ORIENT_GLYPH[o] || 'N';
-  g('gOrient').querySelector('.gl').textContent = o === 'course' ? 'Course up' : o === 'oriented' ? 'Compass' : 'North up';
-  g('gCenter').classList.toggle('active', S.follow);
   g('gZoom').classList.toggle('active', S.set.autoZoom);
-  g('gSound').classList.toggle('active', S.set.sound);
-  g('gSound').querySelector('.gl').textContent = S.set.sound ? 'Sound' : 'Muted';
+  g('gLayers').querySelector('.gl').textContent = curStyle().label || S.set.mapStyle;
   g('gProfile').classList.toggle('active', !!(S.set.profile && trk && trk.hasEle));
 }
 function gloveTap(fn) { return () => { fn(); refreshGlove(); gloveArm(); }; } // act, reflect, re-arm dismiss
-document.getElementById('gOrient').onclick = gloveTap(() => northBtn.onclick());
-document.getElementById('gCenter').onclick = gloveTap(() => {
-  setFollow(true);
-  if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); }
-});
 document.getElementById('gZoom').onclick = gloveTap(() => {
   S.set.autoZoom = !S.set.autoZoom; saveSet();
   document.getElementById('setAutoZoom').checked = S.set.autoZoom;
 });
-document.getElementById('gSound').onclick = gloveTap(() => setSound(!S.set.sound));
+document.getElementById('gLayers').onclick = gloveTap(() => {
+  const i = STYLE_CYCLE.indexOf(S.set.mapStyle);
+  setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]);
+});
 document.getElementById('gProfile').onclick = gloveTap(() => prog.onclick());
 document.getElementById('gSteep').onclick = gloveTap(() => {
   const trk = S.tracks[S.sel];
@@ -3580,10 +3575,11 @@ for (const id in LO_ELS) {
 S.set.layout = S.set.layout || {};
 const dockStrip = document.getElementById('dockStrip');
 let layoutEditing = false, loPanelOpen = false;
-function loPanel(open) { // edit-mode panel: the real ☰ panel springs up as the dock target (no shade)
-  if (loPanelOpen === open) return;
+function loPanel(open) { // the dock target is the ride panel (glove overlay) — nav mode is what we're simulating
+  // no early-out: the app's own closeGlove (map tap) can hide the overlay behind our back
   loPanelOpen = open;
-  panel.classList.toggle('on', open);
+  if (open) refreshGlove(); // labels current before it shows
+  gloveOverlay.classList.toggle('on', open);
 }
 
 function loOrient() { return innerWidth > innerHeight ? 'landscape' : 'portrait'; }
@@ -3753,9 +3749,9 @@ function loMove(e) {
 function loFindTarget(px, py) {
   const reg = LO_ELS[loDrag.id];
   if (reg.t === 'btn' && !reg.noDock) {
-    // bottom edge springs the panel up; once open, the whole panel area docks
-    // (with hysteresis so it doesn't flap while hovering near its top edge)
-    const zone = loPanelOpen ? innerHeight - 180 : innerHeight - LO_GRID.botRes;
+    // bottom edge springs the ride panel up; once open, anywhere over it docks
+    // (small margin above its top edge so it doesn't flap)
+    const zone = loPanelOpen ? gloveOverlay.getBoundingClientRect().top - 24 : innerHeight - LO_GRID.botRes;
     if (py > zone) return { kind: 'dock' };
   }
   const cellH = (innerHeight - LO_GRID.topRes - LO_GRID.botRes) / LO_GRID.rows;
