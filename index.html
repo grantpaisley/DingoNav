@@ -422,10 +422,10 @@
   <div class="ctl" id="soundCtl" title="sound / mute">🔊</div>
 </div>
 <div id="rightCtl" class="ctlgroup">
-  <div class="ctl preset" data-p="min" title="favourite zoom — tap to jump, hold to set">min</div>
+  <div class="ctl preset" id="presetMin" data-p="min" title="favourite zoom — tap to jump, hold to set">min</div>
   <div class="ctl" id="zoomOut">−</div>
   <div class="ctl" id="zoomIn">+</div>
-  <div class="ctl preset" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
+  <div class="ctl preset" id="presetMax" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
 </div>
 <button id="startFab" title="Start navigation">START</button>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
@@ -459,8 +459,19 @@
   <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none">✎</div>
 </div>
 
+<!-- edit-mode chrome: inert unless body.editing (see editable-layout design doc) -->
+<div id="editReserve">turn strip zone — kept clear</div>
+<div id="slotDots"></div>
+<div id="dockTray">
+  <span class="trayLabel">⬇ drop a button here to dock it in ☰</span>
+  <span class="traySpace"></span>
+  <button class="edbtn" id="editReset">↺ Reset</button>
+  <button class="edbtn" id="editDone">✓ Done</button>
+</div>
+
 <div id="shade"></div>
 <div id="panel">
+  <div id="dockStrip"></div>
   <div id="panelNav">
     <button id="navBtn" disabled>START</button>
     <div class="ctl" id="revBtn" title="reverse direction" style="display:none">⇄</div>
@@ -514,6 +525,9 @@
     <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
     <div class="row"><label>Control buttons on</label><span class="seg" id="edgesSeg">
       <button data-e="sides">Left &amp; right</button><button data-e="tb">Top &amp; bottom</button></span></div>
+    <div class="btnRow"><button class="btn" id="layoutEditBtn">✥ Edit screen layout</button></div>
+    <div class="hint">Drag buttons and readouts anywhere; tap a readout to cycle its size; drop a
+      button on the bottom tray to dock it in this menu. Saved separately for portrait and landscape.</div>
 
     <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
@@ -1402,6 +1416,7 @@ async function initMap() {
     if (innerWidth !== lastVW || innerHeight !== lastVH) {
       lastVW = innerWidth; lastVH = innerHeight;
       placeProgress(); drawProgress(true);
+      if (!layoutEditing) applyLayout(); // custom slots are viewport-fraction based — recompute
     }
   }, 1000);
   map.resize();
@@ -3527,6 +3542,280 @@ nameEl.value = S.set.name; codeEl.value = S.set.code; emailEl.value = S.set.emai
 nameEl.onchange = () => { S.set.name = nameEl.value.trim(); saveSet(); };
 emailEl.onchange = () => { S.set.email = emailEl.value.trim(); saveSet(); };
 codeEl.onchange = () => { S.set.code = codeEl.value.trim(); saveSet(); if (S.nav) startFriends(); };
+
+/* ---------------- editable screen layout (edit mode) ----------------
+   Design tool (Settings → General → Edit screen layout): the floating chrome
+   wobbles, drags to a 5×6 slot grid, readouts tap-cycle S/M/L, buttons dock
+   into the ☰ panel via the bottom tray. Layouts persist per orientation in
+   S.set.layout; an element with a saved slot is inline-fixed and thereby opts
+   out of the adaptive body.navving offsets. Nothing here runs per-fix or
+   per-frame — applyLayout() fires on boot/viewport-change/edit-exit only, and
+   the drag machinery binds only while editing.
+   See docs/plans/2026-07-15-editable-layout-design.md. */
+const LO_GRID = { cols: 5, rows: 6, topRes: 64, botRes: 64, edge: 10 };
+const LO_SZ = { S: 0.7, M: 1, L: 1.4 };
+const LO_ELS = {
+  orientCtl: { t: 'btn' }, followBtn: { t: 'btn' }, fitBtn: { t: 'btn' }, soundCtl: { t: 'btn' },
+  presetMin: { t: 'btn' }, zoomOut: { t: 'btn' }, zoomIn: { t: 'btn' }, presetMax: { t: 'btn' },
+  startFab: { t: 'btn' }, menuBtn: { t: 'btn', noDock: true }, // docking the way into the menu = softlock
+  hudSpeed: { t: 'ro' }, vargPill: { t: 'ro' }, vargModeBig: { t: 'ro' }, vargInd: { t: 'ro' },
+};
+for (const id in LO_ELS) {
+  const r = LO_ELS[id];
+  r.el = document.getElementById(id);
+  r.parent = r.el.parentNode; r.next = r.el.nextSibling; // original flow home, for undocking
+}
+S.set.layout = S.set.layout || {};
+const dockTray = document.getElementById('dockTray'), dockStrip = document.getElementById('dockStrip');
+let layoutEditing = false;
+
+function loOrient() { return innerWidth > innerHeight ? 'landscape' : 'portrait'; }
+function loMap() { const o = loOrient(); return S.set.layout[o] = S.set.layout[o] || {}; }
+function loSlotXY(slot) {
+  const [c, r] = slot.split('-').map(Number);
+  const cellH = (innerHeight - LO_GRID.topRes - LO_GRID.botRes) / LO_GRID.rows;
+  const xs = [LO_GRID.edge, innerWidth * .25, innerWidth * .5, innerWidth * .75, innerWidth - LO_GRID.edge];
+  return { col: c, row: r, x: xs[c], y: LO_GRID.topRes + cellH * (r + .5) };
+}
+function loClearPos(el) {
+  for (const k of ['position', 'top', 'left', 'right', 'bottom', 'transform', 'width', 'zIndex']) el.style[k] = '';
+}
+function loApplySize(id, ent) {
+  const el = LO_ELS[id].el;
+  if (ent && ent.size && ent.size !== 'M') { el.dataset.sz = ent.size; el.style.setProperty('--sz', LO_SZ[ent.size]); }
+  else { delete el.dataset.sz; el.style.removeProperty('--sz'); }
+}
+function loDock(id) { // panel-slot home: the tray while editing, the ☰ panel strip otherwise
+  const reg = LO_ELS[id], host = layoutEditing ? dockTray : dockStrip;
+  loClearPos(reg.el);
+  if (reg.el.parentNode !== host) host.appendChild(reg.el);
+  dockStrip.classList.toggle('has', !!dockStrip.children.length);
+}
+function loUndock(id) {
+  const reg = LO_ELS[id];
+  if (reg.el.parentNode === reg.parent) return;
+  reg.parent.insertBefore(reg.el, reg.next && reg.next.parentNode === reg.parent ? reg.next : null);
+  dockStrip.classList.toggle('has', !!dockStrip.children.length);
+}
+function loAnchor(id, slot) { // normal-mode placement: viewport-fraction anchors, no stored pixels
+  const st = LO_ELS[id].el.style, p = loSlotXY(slot);
+  loUndock(id);
+  st.position = 'fixed'; st.top = p.y + 'px'; st.bottom = 'auto';
+  if (id === 'vargInd') st.width = 'max-content'; // its default stretches edge-to-edge
+  if (p.col === 0) { st.left = LO_GRID.edge + 'px'; st.right = 'auto'; st.transform = 'translateY(-50%)'; }
+  else if (p.col === LO_GRID.cols - 1) { st.right = LO_GRID.edge + 'px'; st.left = 'auto'; st.transform = 'translateY(-50%)'; }
+  else { st.left = (p.col * 25) + '%'; st.right = 'auto'; st.transform = 'translate(-50%,-50%)'; }
+}
+function applyLayout() {
+  const m = S.set.layout[loOrient()] || {};
+  for (const id in LO_ELS) {
+    const ent = m[id];
+    loApplySize(id, ent);
+    if (!ent || !ent.slot) { loUndock(id); loClearPos(LO_ELS[id].el); }
+    else if (ent.slot === 'panel') loDock(id);
+    else loAnchor(id, ent.slot);
+  }
+}
+
+/* --- edit mode: materialise, wobble, drag/snap/displace, dock --- */
+let loDrag = null, loTarget = null, loDispId = null, loDispTo = null;
+
+function loPlacePx(el, slot) { // px placement while editing (the wobble animation owns transform)
+  const p = loSlotXY(slot), r = el.getBoundingClientRect(), st = el.style;
+  const left = p.col === 0 ? LO_GRID.edge
+    : p.col === LO_GRID.cols - 1 ? innerWidth - LO_GRID.edge - r.width
+    : p.x - r.width / 2;
+  st.left = left + 'px'; st.top = (p.y - r.height / 2) + 'px';
+  st.right = 'auto'; st.bottom = 'auto'; st.transform = 'none';
+}
+function loMeasure(id) { // current visual rect; vargInd = union of its glyphs, not the full-width strip
+  const el = LO_ELS[id].el;
+  if (id === 'vargInd') {
+    const ks = [...el.children].map(k => k.getBoundingClientRect()).filter(k => k.width);
+    if (ks.length) return { left: Math.min(...ks.map(k => k.left)), top: Math.min(...ks.map(k => k.top)),
+      width: Math.max(...ks.map(k => k.right)) - Math.min(...ks.map(k => k.left)),
+      height: Math.max(...ks.map(k => k.bottom)) - Math.min(...ks.map(k => k.top)) };
+  }
+  return el.getBoundingClientRect();
+}
+function loPin(id, r) { // pin at the measured spot as fixed px, nudged clear of the dock tray
+  const st = LO_ELS[id].el.style;
+  st.position = 'fixed'; st.right = 'auto'; st.bottom = 'auto'; st.transform = 'none';
+  if (id === 'vargInd') st.width = 'max-content';
+  let top = r.top;
+  if (top + r.height > innerHeight - LO_GRID.botRes) top = innerHeight - LO_GRID.botRes - r.height - 6;
+  st.left = r.left + 'px'; st.top = top + 'px';
+}
+function enterLayoutEdit() {
+  if (layoutEditing || S.nav) return;
+  closePanel();
+  layoutEditing = true;
+  document.body.classList.add('editing');
+  buildSlotDots();
+  // read pass THEN write pass: pinning one flex child reflows its siblings
+  const m = loMap(), rects = {};
+  for (const id in LO_ELS) if ((m[id] || {}).slot !== 'panel') rects[id] = loMeasure(id);
+  let i = 0;
+  for (const id in LO_ELS) {
+    const reg = LO_ELS[id], el = reg.el;
+    if ((m[id] || {}).slot === 'panel') loDock(id); // panel strip → tray
+    else loPin(id, rects[id]);
+    el.classList.add('editEl');
+    el.style.animationDelay = (-(i++ % 6) * 53) + 'ms'; // desynchronise the wobble
+    reg.down = e => loDown(e, id);
+    el.addEventListener('pointerdown', reg.down);
+  }
+  document.addEventListener('click', loBlockClick, true);
+  document.addEventListener('contextmenu', loBlockClick, true);
+  toast('Drag to move · tap a readout to resize · ✓ Done when finished');
+}
+function exitLayoutEdit() {
+  if (!layoutEditing) return;
+  for (const id in LO_ELS) {
+    const reg = LO_ELS[id], el = reg.el;
+    el.classList.remove('editEl', 'lift');
+    el.style.animationDelay = '';
+    el.removeEventListener('pointerdown', reg.down);
+  }
+  document.removeEventListener('click', loBlockClick, true);
+  document.removeEventListener('contextmenu', loBlockClick, true);
+  document.getElementById('slotDots').innerHTML = '';
+  document.body.classList.remove('editing');
+  layoutEditing = false;
+  applyLayout(); // docked → panel strip; slotted → anchored; untouched → stylesheet defaults
+  saveSet();
+}
+function buildSlotDots() {
+  const box = document.getElementById('slotDots'); box.innerHTML = '';
+  for (let r = 0; r < LO_GRID.rows; r++) for (let c = 0; c < LO_GRID.cols; c++) {
+    const p = loSlotXY(c + '-' + r), d = document.createElement('i');
+    d.style.left = p.x + 'px'; d.style.top = p.y + 'px'; d.dataset.slot = c + '-' + r;
+    box.appendChild(d);
+  }
+}
+function loBlockClick(e) { // edit mode disarms every editable element's normal action
+  if (e.target.closest && e.target.closest('.editEl')) { e.stopPropagation(); e.preventDefault(); }
+}
+function loDown(e, id) {
+  if (!layoutEditing || loDrag) return;
+  e.preventDefault();
+  const el = LO_ELS[id].el, r = el.getBoundingClientRect();
+  loDrag = { id, el, dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY,
+    moved: false, docked: el.parentNode === dockTray };
+  try { el.setPointerCapture(e.pointerId); } catch (err) {}
+  loDrag.move = ev => loMove(ev); loDrag.up = ev => loUp(ev);
+  el.addEventListener('pointermove', loDrag.move);
+  el.addEventListener('pointerup', loDrag.up);
+  el.addEventListener('pointercancel', loDrag.up);
+}
+function loMove(e) {
+  if (!loDrag) return;
+  if (!loDrag.moved) {
+    if (Math.hypot(e.clientX - loDrag.sx, e.clientY - loDrag.sy) < 6) return; // tap-vs-drag threshold
+    loDrag.moved = true;
+    if (loDrag.docked) { // lift out of the tray: back to the real parent so group CSS sizes it
+      loUndock(loDrag.id);
+      const st = loDrag.el.style; st.position = 'fixed'; st.transform = 'none';
+      const r = loDrag.el.getBoundingClientRect();
+      loDrag.dx = r.width / 2; loDrag.dy = r.height / 2; // centre it on the pointer
+    }
+    loDrag.el.classList.add('lift');
+  }
+  const st = loDrag.el.style;
+  st.left = (e.clientX - loDrag.dx) + 'px'; st.top = (e.clientY - loDrag.dy) + 'px';
+  st.right = 'auto'; st.bottom = 'auto'; st.transform = 'none';
+  loSetTarget(loFindTarget(e.clientX, e.clientY));
+}
+function loFindTarget(px, py) {
+  const reg = LO_ELS[loDrag.id];
+  if (reg.t === 'btn' && !reg.noDock && py > innerHeight - LO_GRID.botRes) return { kind: 'dock' };
+  const cellH = (innerHeight - LO_GRID.topRes - LO_GRID.botRes) / LO_GRID.rows;
+  const row = Math.max(0, Math.min(LO_GRID.rows - 1, Math.floor((py - LO_GRID.topRes) / cellH)));
+  const xs = [LO_GRID.edge, innerWidth * .25, innerWidth * .5, innerWidth * .75, innerWidth - LO_GRID.edge];
+  let col = 0, best = Infinity;
+  xs.forEach((x, i) => { const d = Math.abs(px - x); if (d < best) { best = d; col = i; } });
+  return { kind: 'slot', slot: col + '-' + row };
+}
+function loOccupied() { // committed slot map, the dragged element's old slot excluded (it frees up)
+  const m = loMap(), occ = {};
+  for (const id in m) if (id !== loDrag.id && m[id].slot && m[id].slot !== 'panel') occ[m[id].slot] = id;
+  return occ;
+}
+function loFindFree(slot, occ) { // displacement order: down the column, then right, then left, then anywhere
+  const [c, r] = slot.split('-').map(Number);
+  for (let rr = r + 1; rr < LO_GRID.rows; rr++) if (!occ[c + '-' + rr]) return c + '-' + rr;
+  for (let cc = c + 1; cc < LO_GRID.cols; cc++) if (!occ[cc + '-' + r]) return cc + '-' + r;
+  for (let cc = c - 1; cc >= 0; cc--) if (!occ[cc + '-' + r]) return cc + '-' + r;
+  for (let rr = 0; rr < LO_GRID.rows; rr++) for (let cc = 0; cc < LO_GRID.cols; cc++)
+    if (!occ[cc + '-' + rr]) return cc + '-' + rr;
+  return null;
+}
+function loSetTarget(t) {
+  if (loTarget && t && loTarget.kind === t.kind && loTarget.slot === t.slot) return;
+  // preview is recomputed from committed state per hovered slot — drag away and it reverts
+  if (loDispId) { loPlacePx(LO_ELS[loDispId].el, loMap()[loDispId].slot); loDispId = loDispTo = null; }
+  dockTray.classList.toggle('hot', !!(t && t.kind === 'dock'));
+  for (const d of document.querySelectorAll('#slotDots i.hot')) d.classList.remove('hot');
+  if (t && t.kind === 'slot') {
+    const d = document.querySelector('#slotDots i[data-slot="' + t.slot + '"]');
+    if (d) d.classList.add('hot');
+    const occ = loOccupied(), oid = occ[t.slot];
+    if (oid) { // launcher-style: push the occupant out live
+      const free = loFindFree(t.slot, occ);
+      if (free) { loPlacePx(LO_ELS[oid].el, free); loDispId = oid; loDispTo = free; }
+    }
+  }
+  loTarget = t;
+}
+function loUp() {
+  if (!loDrag) return;
+  const { id, el } = loDrag;
+  el.classList.remove('lift');
+  el.removeEventListener('pointermove', loDrag.move);
+  el.removeEventListener('pointerup', loDrag.up);
+  el.removeEventListener('pointercancel', loDrag.up);
+  const m = loMap();
+  if (!loDrag.moved) {
+    if (LO_ELS[id].t === 'ro') { // tap a readout: cycle M → L → S → M
+      const ent = m[id] = m[id] || {};
+      ent.size = { M: 'L', L: 'S', S: 'M' }[ent.size || 'M'];
+      if (ent.size === 'M') delete ent.size;
+      if (!ent.slot && !ent.size) delete m[id];
+      loApplySize(id, m[id]);
+      saveSet();
+      toast('Size: ' + ((m[id] && m[id].size) || 'M'));
+    }
+  } else if (loTarget && loTarget.kind === 'dock') {
+    (m[id] = m[id] || {}).slot = 'panel';
+    loDock(id);
+    saveSet();
+  } else if (loTarget && loTarget.kind === 'slot') {
+    if (loDispId) { (m[loDispId] = m[loDispId] || {}).slot = loDispTo; loDispId = loDispTo = null; }
+    (m[id] = m[id] || {}).slot = loTarget.slot;
+    loPlacePx(el, loTarget.slot);
+    saveSet();
+  }
+  dockTray.classList.remove('hot');
+  for (const d of document.querySelectorAll('#slotDots i.hot')) d.classList.remove('hot');
+  loTarget = null; loDrag = null;
+}
+document.getElementById('layoutEditBtn').onclick = enterLayoutEdit;
+document.getElementById('editDone').onclick = () => { exitLayoutEdit(); toast('Layout saved'); };
+document.getElementById('editReset').onclick = () => {
+  delete S.set.layout[loOrient()];
+  saveSet();
+  exitLayoutEdit(); enterLayoutEdit(); // back to defaults, still editing
+  toast('Layout reset (' + loOrient() + ')');
+};
+let loResizeT = null;
+addEventListener('resize', () => {
+  clearTimeout(loResizeT);
+  loResizeT = setTimeout(() => {
+    if (layoutEditing) { exitLayoutEdit(); enterLayoutEdit(); } // rotate mid-edit → edit that orientation
+    else applyLayout();
+  }, 150);
+});
+applyLayout(); // boot: saved layout applies before the first paint settles
 
 /* ---------------- boot ---------------- */
 async function boot() {
