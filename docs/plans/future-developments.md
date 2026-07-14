@@ -35,6 +35,15 @@ contained any 3D work — its HEAD was the already-merged hillshade commit. Dele
 
 ## Drag-to-rearrange control layout (editable button placement)
 
+**Update (2026-07-15): picked up and implemented.** Design brainstormed and built —
+see `2026-07-15-editable-layout-design.md`. Scope grew beyond this sketch: wobble
+edit mode, 5×6 slot grid with launcher-style displacement, readout S/M/L sizing,
+separate portrait/landscape layouts, dock tray → ☰ panel strip. Note the reframe:
+it shipped as a **design tool for Grant** (reachable via Settings → General), not
+a rider-facing feature — the glove-ergonomics caveats below apply to *using* the
+resulting layout, not to edit mode itself. Original parked entry kept below for
+the reasoning.
+
 **Decision (2026-07-14): parked as a possible enhancement, not scheduled.** Phase 1
 of the control-layout rework shipped (split left/right groups, floating START, slim
 hamburger, free-ride, and a **Left-right / Top-bottom** edges option in Settings →
