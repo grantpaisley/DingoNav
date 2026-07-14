@@ -114,17 +114,21 @@
     border-radius:12px; display:none; max-width:88vw; text-align:center}
 
   /* ---------- side controls ---------- */
-  #sideCtl{position:fixed; right:10px; bottom:120px; display:flex; flex-direction:column; gap:10px; z-index:10}
+  #sideCtl{position:fixed; right:10px; bottom:120px; z-index:10;
+    display:grid; grid-template-columns:repeat(2,auto); gap:8px; justify-content:end; align-content:end}
   .ctl{width:54px; height:54px; border-radius:14px; background:rgba(22,28,34,.92); border:1px solid #2a3540;
     color:var(--fg); font-size:26px; display:flex; align-items:center; justify-content:center; cursor:pointer}
   .ctl:active{background:var(--panel2)}
   .ctl.active{border-color:var(--accent); color:var(--accent)}
-  /* riding-screen floating controls are twice the size for gloved hands */
-  #sideCtl{gap:8px}
-  #sideCtl .ctl{width:108px; height:108px; border-radius:28px; font-size:48px}
-  /* zoom presets are squeezed between ± and ▢/◎ — shorter so the stack fits a phone */
-  #sideCtl .ctl.preset{height:60px; font-size:19px; font-weight:800; color:var(--dim)}
+  /* floating controls: big for gloved hands, two columns so the consolidated
+     cluster (sound, orientation, zoom, presets, fit, follow) fits any orientation */
+  #sideCtl .ctl{width:88px; height:88px; border-radius:24px; font-size:40px}
+  #sideCtl .ctl.preset{font-size:18px; font-weight:800; color:var(--dim)}
   #sideCtl .ctl.preset.set{color:var(--fg)}
+  #soundCtl.off{border-color:var(--bad); color:var(--bad)}
+  /* orientation, sound and the compass now live in the cluster — retire the
+     standalone rose, top-right mute and the rose's mode label */
+  #north{display:none !important} #muteBtn{display:none !important} #orientLabel{display:none !important}
   /* riding screen: every floating button ghosts to --navOp (advanced knob) until touched */
   body.navving #sideCtl .ctl{opacity:var(--navOp,.4); background:rgba(22,28,34,.5)}
   body.navving #sideCtl .ctl:active{opacity:1}
@@ -271,12 +275,11 @@
     #vargModeBig{bottom:186px; font-size:20px}
     #vargFlash{font-size:20px}
     #vargInd .blink{font-size:44px} #vargInd .beam{font-size:26px}
-    /* short viewports (landscape / split-screen): the 7-button column is taller than
-       the viewport and clips the zoom keys off the top. Reflow into two glove-sized
-       columns anchored bottom-right — half the height, every control still reachable. */
-    #sideCtl{display:grid; grid-template-columns:repeat(2,auto); gap:7px; align-content:end; justify-content:end}
-    #sideCtl .ctl{width:62px; height:56px; border-radius:16px; font-size:28px}
-    #sideCtl .ctl.preset{height:56px; font-size:14px} /* uniform cells so the grid tiles cleanly */
+    /* short viewports (landscape / split-screen): tighten the two-column cluster so
+       all rows (sound/orient, zoom, presets, fit, follow) clear the viewport height */
+    #sideCtl{gap:7px}
+    #sideCtl .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
+    #sideCtl .ctl.preset{font-size:13px}
     #north{width:56px; height:56px; font-size:20px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
@@ -322,8 +325,10 @@
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div id="sideCtl">
-  <div class="ctl" id="zoomIn">+</div>
+  <div class="ctl" id="soundCtl" title="sound / mute">🔊</div>
+  <div class="ctl" id="orientCtl" title="north-up / course-up / compass">N</div>
   <div class="ctl" id="zoomOut">−</div>
+  <div class="ctl" id="zoomIn">+</div>
   <div class="ctl preset" data-p="min" title="min zoom — tap to jump, hold to set">min</div>
   <div class="ctl preset" data-p="med" title="mid zoom — tap to jump, hold to set">med</div>
   <div class="ctl preset" data-p="max" title="max zoom — tap to jump, hold to set">max</div>
@@ -1776,8 +1781,11 @@ function setSound(on) {
   document.getElementById('setSound').checked = on;
   muteBtn.textContent = on ? '🔊' : '🔇';
   muteBtn.classList.toggle('muted', !on);
+  const sc = document.getElementById('soundCtl');
+  if (sc) { sc.textContent = on ? '🔊' : '🔇'; sc.classList.toggle('off', !on); }
 }
 muteBtn.onclick = () => { setSound(!S.set.sound); toast(S.set.sound ? 'Sound on' : 'Muted'); };
+document.getElementById('soundCtl').onclick = () => muteBtn.onclick(); // cluster sound = mute toggle
 
 /* fullscreen: auto while navigating, manual toggle in the menu (iOS Safari lacks the API) */
 const fsBtn = document.getElementById('fsBtn'), fsOK = !!(document.documentElement.requestFullscreen && document.fullscreenEnabled);
@@ -1937,6 +1945,8 @@ function applyOrient() {
   northBtn.classList.toggle('course', o === 'course');
   northBtn.classList.toggle('oriented', o === 'oriented');
   northInner.textContent = ORIENT_GLYPH[o] || 'N';
+  const oc = document.getElementById('orientCtl'); // cluster orientation button mirrors the mode
+  if (oc) { oc.textContent = ORIENT_GLYPH[o] || 'N'; oc.classList.toggle('active', o !== 'north'); }
   document.getElementById('orientLabel').textContent = (ORIENT_LABEL[o] || 'north up') + (S.autoOrient ? ' · auto' : '');
   if (o === 'oriented') enableCompass(false); else disableCompass();
   if (!mapReady) return;
@@ -1954,6 +1964,7 @@ northBtn.onclick = () => {
     : S.set.orient === 'oriented' ? 'Compass — map turns with your heading'
     : 'North up');
 };
+document.getElementById('orientCtl').onclick = () => northBtn.onclick(); // cluster orientation = cycle mode
 applyOrient();
 function fitSelected() {
   if (!mapReady) return;
