@@ -43,9 +43,9 @@
   #hudType{font-size:14px; color:var(--fg); text-transform:uppercase; letter-spacing:.06em; position:relative;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:12px; z-index:10;
-    background:rgba(14,18,22,.85); border-radius:12px; padding:6px 12px; font-size:22px; font-weight:700;
-    display:none; font-variant-numeric:tabular-nums}
-  #hudSpeed.on{display:block} #hudSpeed small{font-size:12px; color:var(--dim); font-weight:500}
+    background:rgba(14,18,22,.32); border-radius:14px; padding:4px 14px; font-size:40px; font-weight:800;
+    text-shadow:0 2px 12px rgba(0,0,0,.6); display:none; font-variant-numeric:tabular-nums}
+  #hudSpeed.on{display:block} #hudSpeed small{font-size:16px; color:var(--dim); font-weight:600}
   /* speed readout + pills drop below the strip while it can appear */
   body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px)}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 116px)}
@@ -266,7 +266,7 @@
     #hudArrow{font-size:24px; width:30px}
     #hudDist{font-size:20px} #hudDist small{font-size:11px}
     #hudType{font-size:11px}
-    #hudSpeed{font-size:16px; padding:4px 9px}
+    #hudSpeed{font-size:30px; padding:2px 11px}
     body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 44px)}
     body.navving #holdPill{top:calc(env(safe-area-inset-top) + 84px)}
     body.navving #lockPill{top:calc(env(safe-area-inset-top) + 118px)}
@@ -330,7 +330,6 @@
   <div class="ctl" id="zoomOut">−</div>
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl preset" data-p="min" title="min zoom — tap to jump, hold to set">min</div>
-  <div class="ctl preset" data-p="med" title="mid zoom — tap to jump, hold to set">med</div>
   <div class="ctl preset" data-p="max" title="max zoom — tap to jump, hold to set">max</div>
   <div class="ctl" id="fitBtn" title="fit track">⛶</div>
   <div class="ctl" id="followBtn" title="centre on location">◎</div>
