@@ -318,6 +318,12 @@
   .trk .nm{flex:1; min-width:0; font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .trk .len{font-size:13px; color:var(--dim); flex:none}
   .trk .del{flex:none; color:var(--dim); font-size:20px; padding:4px 8px}
+  .packHdr{display:flex; align-items:center; gap:8px; padding:12px 10px 4px; border-top:1px solid #232d38; margin-top:6px}
+  .packHdr:first-child{border-top:none; margin-top:0}
+  .packHdr .nm{flex:1; min-width:0; font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+    color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .packHdr .rev{font-size:12px; color:var(--accent); font-weight:700; flex:none}
+  .packHdr .act{flex:none; color:var(--dim); font-size:17px; padding:4px 8px; cursor:pointer}
   .btnRow{display:flex; gap:10px; margin-top:10px; flex-wrap:wrap}
   .btn{flex:1; min-width:130px; padding:13px; border-radius:12px; border:1px solid #2a3540; background:var(--panel2);
     color:var(--fg); font-size:15px; font-weight:600; cursor:pointer; text-align:center}
@@ -750,6 +756,7 @@ function angDiff(a, b) { let d = b - a; while (d > 180) d -= 360; while (d < -18
 /* ---------------- state ---------------- */
 const S = {
   tracks: [], heat: null, sel: -1,
+  packs: new Map(), heatPack: '', // bundle packs (slug → record); pack whose heatmap is active
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
@@ -1256,7 +1263,9 @@ async function analyzeRoute(trk) {
 }
 async function analyzeRouteInner(trk) {
   {
-    const key = 'cue6-' + trk.id + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
+    // geomHash is in the key because a pack refresh can change a track's
+    // geometry while its id (ride-<uuid>) stays stable across revisions
+    const key = 'cue7-' + trk.id + '-' + (trk.geomHash || '0') + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
     let cues = null, cls = null;
     try { const rec = await idb.get(key); if (rec) { cues = rec.cues; cls = rec.cls || null; } } catch (e) {}
     if (!cues) {
@@ -3199,57 +3208,162 @@ function applyHill() {
 setInterval(refreshFriends, 30000); // age out stale friends
 
 /* ---------------- files: load / persist ---------------- */
-async function addFile(name, text) {
+/* ?b=<slug> → download URL in the Dingo shares repo. Resolve the repo's
+   current commit through the API (authoritative, CORS *) and download at that
+   sha — raw@branch is CDN-cached and can 404 or serve stale for minutes right
+   after a publish. Falls back to raw@HEAD when the API is unreachable (the
+   offline check happens in the caller's fetch anyway). Shared by the ?b= boot
+   path and pack refresh, so both always land on the latest publish. */
+const SHARES_REPO = 'grantpaisley/dingo-shares';
+async function resolveShareUrl(slug) {
+  let ref = 'HEAD';
+  try {
+    const r = await fetch(`https://api.github.com/repos/${SHARES_REPO}/commits/HEAD`,
+      { headers: { Accept: 'application/vnd.github.VERSION.sha' } });
+    if (r.ok) ref = (await r.text()).trim();
+  } catch (e) { console.warn('sha resolve failed, using HEAD', e); }
+  return `https://raw.githubusercontent.com/${SHARES_REPO}/${ref}/shares/${encodeURIComponent(slug)}.dingonav`;
+}
+
+/* ctx (optional): { slug, sourceUrl, pack, rideId } — slug/sourceUrl identify
+   where a shared bundle came from (?b= pack slug, or a full ?bundle= URL) so
+   the pack can refresh itself later; pack/rideId thread membership + stable
+   identity down to individual tracks. rideId (from Dingo) is stable across
+   plan revisions, so the rider's cue edits (cueov-<id>) survive a refresh. */
+function textHash(text) {
+  let h = 0; for (let i = 0; i < text.length; i += 97) h = (h * 31 + text.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+async function addFile(name, text, ctx) {
   if (text.slice(0, 100).trimStart().startsWith('{')) {
     const obj = JSON.parse(text);
     if (Array.isArray(obj.tracks)) {
       // DingoNav bundle (planner's "DingoNav bundle" export / bundle.json shape):
-      // heatmap + tracks in one file, one pick on the phone
+      // heatmap + tracks in one file, one pick on the phone. bundleId (gist
+      // shares) or the ?b= slug keys a PACK: importing or refreshing the same
+      // bundle REPLACES the pack's tracks + heatmap instead of accumulating
+      // duplicates; bundles with neither load loose, exactly as before.
+      const slug = obj.bundleId || (ctx && ctx.slug) || '';
+      if (slug) await removePackData(slug);
       let nT = 0, errs = 0;
-      if (obj.heatmap) await addFile(obj.heatmapName || 'heatmap.geojson', JSON.stringify(obj.heatmap));
+      if (obj.heatmap) await addFile(obj.heatmapName || 'heatmap.geojson', JSON.stringify(obj.heatmap), slug ? { pack: slug } : undefined);
       for (const t of obj.tracks) {
-        try { await addFile(t.name, t.gpx); nT++; }
+        try { await addFile(t.name, t.gpx, slug ? { pack: slug, rideId: t.rideId } : undefined); nT++; }
         catch (e) { errs++; console.warn('bundle track failed', t.name, e); }
       }
       // pack-carried turn edits: replay other riders' contributions on this download
       // (idempotent — the seen-id set skips anything this device already has)
       if (Array.isArray(obj.turnEdits)) for (const e of obj.turnEdits) applyRemoteEdit(e, true);
       // v2 meta: the pack's display name + free-text notes (surfaced on load)
+      const bundleName = obj.bundleName || obj.name || '';
+      if (slug) {
+        const prev = S.packs.get(slug);
+        const pack = { id: 'pack-' + slug, kind: 'pack', slug, name: bundleName || slug,
+          revision: obj.revision || 0, description: obj.description || '',
+          srcSlug: (ctx && ctx.slug) || (prev && prev.srcSlug) || null,
+          sourceUrl: (ctx && !ctx.slug && ctx.sourceUrl) || (prev && prev.sourceUrl) || null,
+          loadedAt: Date.now() };
+        await idb.put(pack); S.packs.set(slug, pack);
+      }
       return { bundle: true, tracks: nT, heatmap: !!obj.heatmap, errs,
-               bundleName: obj.name || '', description: obj.description || '' };
+               bundleName, description: obj.description || '',
+               pack: slug || null, revision: obj.revision || 0 };
     }
     if (obj.type === 'FeatureCollection' || obj.features) {
-      S.heat = processHeatmap(obj);
+      const pack = (ctx && ctx.pack) || '';
+      S.heat = processHeatmap(obj); S.heatPack = pack;
       for (const t of S.tracks) t.alerts = null; // cues depend on heatmap
-      await idb.put({ id: 'heatmap', name, kind: 'heatmap', text });
+      await idb.put({ id: pack ? 'heatmap-' + pack : 'heatmap', name, kind: 'heatmap', pack, text });
       document.getElementById('heatInfo').textContent = 'Heatmap: ' + name + ' — ' + S.heat.count + ' tracks';
       return 'heatmap';
     }
     throw new Error('unrecognised JSON — expected heatmap GeoJSON or a DingoNav bundle');
   }
   const { name: trkName, pts } = parseGPX(text, name.replace(/\.gpx$/i, '').replace(/_/g, ' '));
-  let h = 0; for (let i = 0; i < text.length; i += 97) h = (h * 31 + text.charCodeAt(i)) >>> 0;
-  const id = 'gpx-' + h.toString(36) + '-' + pts.length; // deterministic — reloading same file overwrites
+  const h = textHash(text);
+  // rideId (from a Dingo bundle) is stable across plan revisions; otherwise
+  // the content hash is deterministic — reloading the same file overwrites.
+  const id = ctx && ctx.rideId ? 'ride-' + ctx.rideId : 'gpx-' + h + '-' + pts.length;
   const existing = S.tracks.findIndex(t => t.id === id);
   if (existing >= 0) S.tracks.splice(existing, 1);
-  S.tracks.push(processTrack(id, trkName, pts));
-  await idb.put({ id, name: trkName, kind: 'gpx', text });
+  const trk = processTrack(id, trkName, pts);
+  trk.geomHash = h; trk.pack = (ctx && ctx.pack) || '';
+  S.tracks.push(trk);
+  await idb.put({ id, name: trkName, kind: 'gpx', pack: trk.pack, text });
   return 'gpx';
+}
+/* Remove a pack's tracks + heatmap from memory and IDB. Cue-edit overlays are
+   KEPT deliberately: they're tiny, keyed by stable ride id, and re-apply if
+   the pack comes back (which is exactly what a refresh does). */
+async function removePackData(slug) {
+  const selId = S.sel >= 0 && S.tracks[S.sel] ? S.tracks[S.sel].id : null;
+  for (const t of S.tracks) {
+    if ((t.pack || '') !== slug) continue;
+    try { await idb.del(t.id); } catch (e) {}
+  }
+  S.tracks = S.tracks.filter(t => (t.pack || '') !== slug);
+  S.sel = selId ? S.tracks.findIndex(t => t.id === selId) : -1;
+  if (selId && S.sel < 0) stopNav();
+  try { await idb.del('heatmap-' + slug); } catch (e) {}
+  if (S.heatPack === slug) {
+    S.heat = null;
+    for (const t of S.tracks) t.alerts = null; // cues depend on heatmap
+    document.getElementById('heatInfo').textContent = 'Heatmap: none';
+  }
+}
+/* Forget a pack entirely (the header ✕): its data plus the pack record. */
+async function removePack(slug) {
+  await removePackData(slug);
+  try { await idb.del('pack-' + slug); } catch (e) {}
+  S.packs.delete(slug);
+  refreshTrackList(); refreshEmpty(); updateBottomBar(); refreshMapData();
+}
+/* Re-fetch a pack from where it came from and replace its contents in place.
+   ?b= packs re-resolve the shares repo at HEAD (fresh sha each time), so a
+   re-publish from Dingo lands here; legacy ?bundle= URLs re-fetch directly
+   (raw gist URLs always serve the latest revision). Cue edits are keyed by
+   stable ride id, so they re-apply to the refreshed tracks. */
+async function refreshPack(slug) {
+  const pack = S.packs.get(slug);
+  if (!pack || (!pack.srcSlug && !pack.sourceUrl)) return;
+  toast('Refreshing ' + pack.name + '…');
+  try {
+    const url = pack.srcSlug ? await resolveShareUrl(pack.srcSlug) : pack.sourceUrl;
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const blob = await resp.blob();
+    const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+    const isZip = head[0] === 0x50 && head[1] === 0x4B; // 'PK'
+    const ctx = pack.srcSlug ? { slug: pack.srcSlug } : { sourceUrl: pack.sourceUrl };
+    const r = isZip
+      ? await loadBundleZip(new File([blob], (pack.srcSlug || slug) + '.dingonav'), ctx)
+      : await addFile('shared-bundle.json', await blob.text(), ctx);
+    // a rename in Dingo changes the bundleId — drop the stale pack it replaces
+    if (r && r.pack && r.pack !== slug) await removePack(slug);
+    const now = (r && r.pack && S.packs.get(r.pack)) || pack;
+    toast(`${now.name} refreshed${now.revision ? ' — v' + now.revision : ''} · ${r.tracks} track${r.tracks === 1 ? '' : 's'}${r.heatmap ? ' + heatmap' : ''}`);
+    if (r && (r.basemap || r.stravaTiles || r.satTiles)) setTimeout(() => location.reload(), 1100);
+  } catch (e) {
+    console.warn('pack refresh failed', e);
+    toast('Refresh failed — are you online?');
+  }
+  refreshTrackList(); refreshEmpty(); updateBottomBar(); refreshMapData();
 }
 /* A .dingonav zip (planner's "DingoNav bundle" export): bundle.json (tracks +
  * heatmap) plus optional basemap.pmtiles and strava/{z}/{x}/{y}.png tiles — the
  * whole ride in one file. Unzipped with fflate (vendored, offline). Basemap and
  * Strava tiles land in IDB and take effect on the reload handleFiles triggers. */
-async function loadBundleZip(file) {
+async function loadBundleZip(file, ctx) {
   const entries = fflate.unzipSync(new Uint8Array(await file.arrayBuffer()));
   let nT = 0, nH = 0, errs = 0, basemap = false, stravaTiles = 0;
-  let bundleName = '', description = '';
+  let bundleName = '', description = '', pack = null, revision = 0;
 
   if (entries['bundle.json']) {
-    const r = await addFile('bundle.json', fflate.strFromU8(entries['bundle.json']));
+    const r = await addFile('bundle.json', fflate.strFromU8(entries['bundle.json']), ctx);
     if (r && r.bundle) {
       nT += r.tracks; if (r.heatmap) nH++; errs += r.errs;
       bundleName = r.bundleName || ''; description = r.description || '';
+      pack = r.pack; revision = r.revision || 0;
     }
   }
   if (entries['basemap.pmtiles']) {
@@ -3299,7 +3413,7 @@ async function loadBundleZip(file) {
     const ce = document.getElementById('rideCode'); if (ce) ce.value = S.set.code;
   }
   return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles, satTiles,
-           bundleName, description };
+           bundleName, description, pack, revision };
 }
 async function handleFiles(files) {
   let nT = 0, nH = 0, errs = 0, needReload = false, stravaTiles = 0;
@@ -3377,38 +3491,90 @@ document.getElementById('menuBtn').onclick = () =>
   gloveOverlay.classList.contains('on') ? closeGlove() : openGlove();
 shade.onclick = closePanel;
 
+function trackRow(i) {
+  const t = S.tracks[i];
+  const row = document.createElement('div');
+  row.className = 'trk' + (i === S.sel ? ' sel' : '');
+  row.innerHTML = `<span class="dot" style="background:${i === S.sel ? 'var(--accent)' : '#5a6a78'}"></span>
+    <span class="nm">${t.name}</span><span class="len">${(t.lengthM / 1000).toFixed(1)} km</span><span class="del"><svg class="ic"><use href="#i-x"/></svg></span>`;
+  row.querySelector('.del').onclick = async ev => {
+    ev.stopPropagation();
+    await idb.del(t.id);
+    S.tracks.splice(i, 1);
+    if (S.sel === i) { S.sel = -1; stopNav(); } else if (S.sel > i) S.sel--;
+    refreshTrackList(); refreshEmpty(); updateBottomBar(); refreshMapData();
+  };
+  row.onclick = () => { selectTrack(i); closePanel(); fitSelected(); };
+  return row;
+}
+function packHeader(key, pack, packName, count) {
+  const h = document.createElement('div');
+  h.className = 'packHdr';
+  h.innerHTML = `<span class="nm">${escHtml(packName)}</span>` +
+    (pack && pack.revision ? `<span class="rev">v${pack.revision}</span>` : '') +
+    (pack && (pack.srcSlug || pack.sourceUrl) ? '<span class="act ref" title="Refresh this pack from its shared link"><svg class="ic"><use href="#i-rotate-ccw"/></svg></span>' : '') +
+    (pack ? '<span class="act rm" title="Remove this pack from the device"><svg class="ic"><use href="#i-x"/></svg></span>' : '');
+  if (pack && (pack.srcSlug || pack.sourceUrl))
+    h.querySelector('.ref').onclick = ev => { ev.stopPropagation(); refreshPack(pack.slug); };
+  if (pack)
+    h.querySelector('.rm').onclick = async ev => {
+      ev.stopPropagation();
+      if (!confirm(`Remove pack "${packName}" (${count} track${count === 1 ? '' : 's'}) from this device?`)) return;
+      await removePack(pack.slug);
+    };
+  return h;
+}
 function refreshTrackList() {
   const el = document.getElementById('trackList');
   el.innerHTML = '';
   const q = (document.getElementById('trackSearch').value || '').trim().toLowerCase();
   let shown = 0;
+  // group tracks by pack: bundle packs first (insertion order), loose files last
+  const groups = new Map();
   S.tracks.forEach((t, i) => {
-    if (q && !t.name.toLowerCase().includes(q)) return;
-    shown++;
-    const row = document.createElement('div');
-    row.className = 'trk' + (i === S.sel ? ' sel' : '');
-    row.innerHTML = `<span class="dot" style="background:${i === S.sel ? 'var(--accent)' : '#5a6a78'}"></span>
-      <span class="nm">${t.name}</span><span class="len">${(t.lengthM / 1000).toFixed(1)} km</span><span class="del"><svg class="ic"><use href="#i-x"/></svg></span>`;
-    row.querySelector('.del').onclick = async ev => {
-      ev.stopPropagation();
-      await idb.del(t.id);
-      S.tracks.splice(i, 1);
-      if (S.sel === i) { S.sel = -1; stopNav(); } else if (S.sel > i) S.sel--;
-      refreshTrackList(); refreshEmpty(); updateBottomBar(); refreshMapData();
-    };
-    row.onclick = () => { selectTrack(i); closePanel(); fitSelected(); };
-    el.appendChild(row);
+    const key = t.pack || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(i);
   });
+  const keys = [...groups.keys()].sort((a, b) => (a === '') - (b === ''));
+  const anyPack = keys.some(k => k !== '');
+  for (const key of keys) {
+    const pack = S.packs.get(key) || null;
+    const packName = pack ? pack.name : 'Loaded files';
+    const idxs = groups.get(key).filter(i =>
+      !q || S.tracks[i].name.toLowerCase().includes(q) || packName.toLowerCase().includes(q));
+    if (!idxs.length) continue;
+    // headers only once packs exist — a flat list of loose files stays flat
+    if (anyPack) el.appendChild(packHeader(key, pack, packName, groups.get(key).length));
+    for (const i of idxs) { shown++; el.appendChild(trackRow(i)); }
+  }
   if (!S.tracks.length) el.innerHTML = '<div class="hint">No tracks yet.</div>';
   else if (!shown) el.innerHTML = '<div class="hint">No tracks match "' + escHtml(q) + '".</div>';
 }
 document.getElementById('trackSearch').oninput = () => refreshTrackList();
+/* Each pack carries its own surrounding heatmap; selecting a track makes its
+   pack's heatmap the active one (cues + display follow the heatmap). */
+async function swapHeatToPack(pack) {
+  S.heatPack = pack; // set even on a miss so every select doesn't re-hit IDB
+  let rec = null;
+  try { rec = await idb.get(pack ? 'heatmap-' + pack : 'heatmap'); } catch (e) {}
+  if (!rec) return; // no heatmap in this pack — keep the loaded one over none
+  try {
+    S.heat = processHeatmap(JSON.parse(rec.text));
+    for (const t of S.tracks) t.alerts = null; // cues depend on heatmap
+    document.getElementById('heatInfo').textContent = 'Heatmap: ' + rec.name + ' — ' + S.heat.count + ' tracks';
+  } catch (e) { console.warn('heatmap swap failed', e); }
+}
 function selectTrack(i) {
   if (S.cueEdit) setCueEdit(false);
   S.sel = i;
   const trk = S.tracks[i];
-  if (trk && !trk.alerts) analyzeRoute(trk).then(() => { updateBottomBar(); refreshMapData(); if (S.nav) toast(trk.alerts.length + ' cues ready'); });
-  refreshTrackList(); updateBottomBar(); refreshMapData();
+  const done = () => {
+    if (trk && !trk.alerts) analyzeRoute(trk).then(() => { updateBottomBar(); refreshMapData(); if (S.nav) toast(trk.alerts.length + ' cues ready'); });
+    refreshTrackList(); updateBottomBar(); refreshMapData();
+  };
+  if (trk && (trk.pack || '') !== S.heatPack) swapHeatToPack(trk.pack || '').then(done);
+  else done();
 }
 function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
@@ -4446,16 +4612,26 @@ applyLayout(); // boot: saved layout applies before the first paint settles
 /* ---------------- boot ---------------- */
 async function boot() {
   await idb.open();
-  const recs = (await idb.all()).filter(r => r.kind === 'gpx' || r.kind === 'heatmap' || !r.kind);
+  const recs = (await idb.all()).filter(r => r.kind === 'gpx' || r.kind === 'heatmap' || r.kind === 'pack' || !r.kind);
   recs.sort((a, b) => (a.kind === 'heatmap' ? -1 : 1) - (b.kind === 'heatmap' ? -1 : 1));
+  let heatLoaded = false;
   for (const r of recs) {
     try {
-      if (r.kind === 'heatmap') {
+      if (r.kind === 'pack') {
+        S.packs.set(r.slug, r);
+      } else if (r.kind === 'heatmap') {
+        // one heatmap active at a time; the others swap in when a track from
+        // their pack is selected (swapHeatToPack)
+        if (heatLoaded) continue;
+        heatLoaded = true;
         S.heat = processHeatmap(JSON.parse(r.text));
+        S.heatPack = r.pack || '';
         document.getElementById('heatInfo').textContent = 'Heatmap: ' + r.name + ' — ' + S.heat.count + ' tracks';
       } else {
         const { name, pts } = parseGPX(r.text, r.name);
-        S.tracks.push(processTrack(r.id, name, pts));
+        const trk = processTrack(r.id, name, pts);
+        trk.geomHash = textHash(r.text); trk.pack = r.pack || '';
+        S.tracks.push(trk);
       }
     } catch (e) { console.warn('restore failed', r.name, e); }
   }
@@ -4478,22 +4654,9 @@ async function boot() {
   // Sniff the leading bytes ('PK' = zip) and route accordingly. Then strip the
   // param so reloads don't refetch; the import persists to IDB like any load.
   const params = new URLSearchParams(location.search);
-  const SHARES_REPO = 'grantpaisley/dingo-shares';
   const slug = params.get('b');
   let shared = params.get('bundle');
-  if (slug) {
-    // Resolve the repo's current commit through the API (authoritative, CORS *)
-    // and download at that sha — raw@branch is CDN-cached and can 404 or serve
-    // stale for minutes right after a publish. Falls back to raw@HEAD when the
-    // API is unreachable (offline check happens in the fetch below anyway).
-    let ref = 'HEAD';
-    try {
-      const r = await fetch(`https://api.github.com/repos/${SHARES_REPO}/commits/HEAD`,
-        { headers: { Accept: 'application/vnd.github.VERSION.sha' } });
-      if (r.ok) ref = (await r.text()).trim();
-    } catch (e) { console.warn('sha resolve failed, using HEAD', e); }
-    shared = `https://raw.githubusercontent.com/${SHARES_REPO}/${ref}/shares/${encodeURIComponent(slug)}.dingonav`;
-  }
+  if (slug) shared = await resolveShareUrl(slug);
   if (shared) {
     history.replaceState(null, '', location.pathname + location.hash);
     try {
@@ -4503,9 +4666,12 @@ async function boot() {
       const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
       const isZip = head[0] === 0x50 && head[1] === 0x4B; // 'PK'
       const nBefore = S.tracks.length;
+      // remember where this came from (pack slug, or the full legacy URL) so
+      // the pack header's ⟳ can re-fetch the latest revision later
+      const ctx = slug ? { slug } : { sourceUrl: shared };
       const r = isZip
-        ? await loadBundleZip(new File([blob], (slug || 'shared') + '.dingonav'))
-        : await addFile('shared-bundle.json', await blob.text());
+        ? await loadBundleZip(new File([blob], (slug || 'shared') + '.dingonav'), ctx)
+        : await addFile('shared-bundle.json', await blob.text(), ctx);
       if (r && r.bundle) {
         const extras = [r.basemap && 'map', r.satTiles && 'satellite', r.stravaTiles && 'Strava'].filter(Boolean);
         const notes = r.description ? ` — “${r.description}”` : '';
