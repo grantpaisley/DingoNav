@@ -111,8 +111,10 @@
   body.navving #vargInd{top:calc(env(safe-area-inset-top) + 64px)}
   /* giant turn arrows: up to ~¼ screen, anchored on the side of the turn — readable in
      peripheral vision. Solid = turn coming up; flashing = your indicator is on. One vocabulary. */
-  .bigArrow{position:fixed; top:50%; transform:translateY(-50%); z-index:9; display:none;
-    font-size:min(70vw,70vh); line-height:1; color:rgba(255,176,32,.55);
+  /* sized and centred to the free band between the big numbers (top) and the bottom
+     bar / MARK TURN chrome — the arrow never overlaps a readout */
+  .bigArrow{position:fixed; top:60%; transform:translateY(-50%); z-index:9; display:none;
+    font-size:min(70vw,44vh); line-height:1; color:rgba(255,176,32,.55);
     filter:drop-shadow(0 4px 20px rgba(0,0,0,.5)); pointer-events:none}
   .bigArrow svg.ic{display:block; fill:currentColor; stroke-width:1.2; vertical-align:0}
   #bigArrowL{left:2vw} #bigArrowR{right:2vw}
