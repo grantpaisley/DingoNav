@@ -42,12 +42,15 @@
   #hudDist small{font-size:15px; font-weight:600; color:var(--dim)}
   #hudType{font-size:14px; color:var(--fg); text-transform:uppercase; letter-spacing:.06em; position:relative;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  /* speed readout: centred at the top, no box — just a big glanceable number with a shadow */
-  #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:50%; transform:translateX(-50%); z-index:10;
+  /* main number: one edge readout (speed or battery, by ride profile), never centred —
+     top-centre is the direction of travel. The turn countdown borrows this slot (amber). */
+  #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:12px; z-index:10;
     background:none; padding:0 6px; font-size:46px; font-weight:800; white-space:nowrap; pointer-events:none;
     text-shadow:0 2px 14px rgba(0,0,0,.9), 0 0 5px rgba(0,0,0,.7); display:none; font-variant-numeric:tabular-nums}
   #hudSpeed.on{display:block} #hudSpeed small{font-size:17px; color:var(--dim); font-weight:600}
-  /* with a route loaded the turn strip owns the very top, so drop the speed below it */
+  #hudSpeed.cd{color:var(--warn)} #hudSpeed.cd small{color:var(--warn)}
+  #hudSpeed.low{color:var(--bad)}
+  /* with a route loaded the turn strip owns the very top, so drop the readouts below it */
   body.navving.hasroute #hudSpeed{top:calc(env(safe-area-inset-top) + 58px)}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 116px)}
   body.navving #lockPill{top:calc(env(safe-area-inset-top) + 152px)}
@@ -63,7 +66,8 @@
   #vargPill.low{border-color:var(--bad); color:var(--bad)}
   #vargPill.wait{color:var(--dim)} #vargPill.wait .vm{color:var(--dim)}
   #vargPill.rel{border-style:dashed; color:var(--dim); font-size:13px; font-weight:600}
-  body.navving #vargPill{top:calc(env(safe-area-inset-top) + 168px)}
+  /* riding: battery lives in the main number slot; the handoff pill is a stopped activity */
+  body.navving #vargPill{display:none !important}
   /* Varg reverse/crawl takeover — whole screen tinted, the word itself knocked out
      to full transparency (SVG mask), pulsing. Above panel/glove: nothing should
      out-shout "you are in reverse". */
@@ -71,11 +75,15 @@
   #vargOver.on{display:block; animation:vgPulse 1.1s ease-in-out infinite}
   #vargOver text{font:900 16vw system-ui,sans-serif; letter-spacing:.02em}
   @keyframes vgPulse{0%,100%{opacity:1}50%{opacity:.55}}
-  /* big translucent mode digit — same look as the kph readout, above the compass rose */
-  #vargModeBig{position:fixed; left:12px; bottom:224px; z-index:10; background:rgba(14,18,22,.85);
-    border-radius:12px; padding:6px 12px; font-size:26px; font-weight:800; display:none;
-    font-variant-numeric:tabular-nums}
-  #vargModeBig.on{display:block} #vargModeBig small{font-size:12px; color:var(--dim); font-weight:500}
+  /* mode digit: the opposite edge to the main number — the centre stays clear.
+     Squarish screens fade it 4s after a change (JS adds .fade); wide keeps it resident. */
+  #vargModeBig{position:fixed; right:12px; top:calc(env(safe-area-inset-top) + 12px); z-index:10; background:none;
+    padding:0 6px; font-size:46px; font-weight:800; display:none; pointer-events:none;
+    text-shadow:0 2px 14px rgba(0,0,0,.9), 0 0 5px rgba(0,0,0,.7);
+    font-variant-numeric:tabular-nums; transition:opacity .6s}
+  #vargModeBig.on{display:block} #vargModeBig small{font-size:15px; color:var(--dim); font-weight:600}
+  #vargModeBig.fade{opacity:0}
+  body.navving.hasroute #vargModeBig{top:calc(env(safe-area-inset-top) + 58px)}
   /* mode-change flash: the new mode + its curve settings, ~2s then gone */
   #vargFlash{position:fixed; top:24%; left:50%; transform:translateX(-50%); z-index:27; display:none;
     background:rgba(14,18,22,.92); border:1px solid #2a3540; border-radius:16px; padding:14px 26px;
@@ -89,12 +97,18 @@
     display:flex; justify-content:center; align-items:center; gap:30px; pointer-events:none}
   #vargInd .ind{display:none; font-weight:900; line-height:1; text-shadow:0 2px 14px rgba(0,0,0,.75)}
   #vargInd .ind.on{display:block}
-  #vargInd .blink{font-size:60px}
-  #vargInd .blink.on{color:rgba(55,224,95,.82)}                    /* translucent green */
-  #vargInd .blink.warn{color:rgba(255,69,69,.9); animation:vgPulse 1s ease-in-out infinite}
+  #vargInd .blink{display:none !important} /* blinkers now show as the giant side arrows */
   #vargInd .beam{font-size:34px; letter-spacing:3px}
   #vargInd .beam.on{color:rgba(74,168,255,.82)}                    /* translucent blue */
   body.navving #vargInd{top:calc(env(safe-area-inset-top) + 64px)}
+  /* giant turn arrows: up to ~¼ screen, anchored on the side of the turn — readable in
+     peripheral vision. Solid = turn coming up; flashing = your indicator is on. One vocabulary. */
+  .bigArrow{position:fixed; top:50%; transform:translateY(-50%); z-index:9; display:none;
+    font-size:min(24vw,24vh); line-height:1; font-weight:900; color:rgba(255,176,32,.9);
+    text-shadow:0 4px 30px rgba(0,0,0,.8); pointer-events:none}
+  #bigArrowL{left:2vw} #bigArrowR{right:2vw}
+  .bigArrow.on{display:block}
+  .bigArrow.blink{display:block; animation:vgPulse .8s ease-in-out infinite}
   /* mute: one tap on the riding screen, ghosted like the other ride controls */
   #muteBtn{position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:10px; z-index:12;
     width:96px; height:96px; border-radius:28px; background:rgba(22,28,34,.5); border:1px solid #2a3540;
@@ -150,9 +164,18 @@
   /* orientation, sound and the compass now live in the cluster — retire the
      standalone rose, top-right mute and the rose's mode label */
   #north{display:none !important} #muteBtn{display:none !important} #orientLabel{display:none !important}
-  /* riding screen: every floating button ghosts to --navOp (advanced knob) until touched */
-  body.navving .ctlgroup .ctl{opacity:var(--navOp,.4); background:rgba(22,28,34,.5)}
-  body.navving .ctlgroup .ctl:active{opacity:1}
+  /* riding: exactly three interactive elements — the map, the dot, ☰. The control
+     clusters are stopped-screen chrome; zoom presets and the rest live in the ☰ grid. */
+  body.navving .ctlgroup{display:none}
+  /* the dot: tap = centre on me · tap again = whole route · hold = lock-to-centre */
+  #dotBtn{position:fixed; right:14px; bottom:96px; z-index:17; width:96px; height:96px; border-radius:50%;
+    background:rgba(22,28,34,.55); border:1px solid #2a3540; display:none; align-items:center;
+    justify-content:center; font-size:44px; color:var(--fg); cursor:pointer; opacity:var(--navOp,.4);
+    touch-action:none}
+  body.navving #dotBtn{display:flex}
+  #dotBtn:active{opacity:1}
+  #dotBtn.locked{border-color:var(--accent); color:var(--accent);
+    box-shadow:0 0 0 4px rgba(0,229,255,.25); opacity:.9}
   body.navving #north, body.navving #gloveBtn{opacity:var(--navOp,.4)}
   body.navving #north:active, body.navving #gloveBtn:active{opacity:1}
   body.navving #cueEditBtn, body.navving #revBtn{display:none !important} /* planning-only */
@@ -173,25 +196,26 @@
   /* only the north-up marker carries the little needle; course/compass show their own glyph */
   #north.course #northInner::before, #north.oriented #northInner::before{display:none}
 
-  /* ---------- ride-controls (glove) overlay — now opened by the ☰ menu; its ▦ button is retired ---------- */
+  /* ---------- ☰ menu: the whole screen becomes a grid of fat tiles — no panel-over-map
+     compromise. One tap in, one tap out (or on empty space), auto-closes after ~8 s. ---------- */
   #gloveBtn{display:none !important}
-  #gloveOverlay{position:fixed; left:0; right:0; bottom:0; z-index:25; display:none;
-    background:rgba(10,13,16,.94); border-top:1px solid #2a3540;
-    padding:14px 12px calc(env(safe-area-inset-bottom) + 14px)}
-  #gloveOverlay.on{display:block}
-  #gloveGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; max-width:560px; margin:0 auto}
-  .gtile{height:96px; border-radius:16px; background:var(--panel2); border:2px solid #2a3540;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer}
+  #gloveOverlay{position:fixed; inset:0; z-index:25; display:none;
+    background:rgba(10,13,16,.96);
+    padding:calc(env(safe-area-inset-top) + 14px) 12px calc(env(safe-area-inset-bottom) + 14px);
+    align-items:center; justify-content:center}
+  #gloveOverlay.on{display:flex}
+  #gloveGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; width:min(94vw,720px); margin:0 auto}
+  .gtile{height:min(26vh,180px); border-radius:18px; background:var(--panel2); border:2px solid #2a3540;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer}
   .gtile:active{background:#26313d}
   .gtile.active{border-color:var(--accent)}
-  .gtile .gi{font-size:32px; line-height:1}
-  .gtile .gl{font-size:13px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.04em}
+  .gtile .gi{font-size:42px; line-height:1}
+  .gtile .gl{font-size:15px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.04em}
   .gtile.active .gl{color:var(--accent)}
-  /* STOP: same visual weight as the START button — solid red, unmissable */
-  .gtile.stop{background:var(--bad); border-color:var(--bad)}
-  .gtile.stop .gi,.gtile.stop .gl{color:#fff}
-  .gtile.stop:active{background:#d32f2f}
-
+  /* tiles declare where they belong: ride grid, idle grid, or both */
+  .gtile[data-m]{display:none}
+  body:not(.navving) .gtile[data-m="idle"], body:not(.navving) .gtile[data-m="both"]{display:flex}
+  body.navving .gtile[data-m="ride"], body.navving .gtile[data-m="both"]{display:flex}
   /* ---------- progress strip ---------- */
   #progress{position:fixed; left:56px; right:0; z-index:14; display:none;
     background:rgba(14,18,22,.92); border-top:1px solid #232d38; padding:4px 10px 0}
@@ -213,10 +237,14 @@
   body.navving #bottom{display:none} /* riding: bar removed — ☰ opens the ride-controls panel instead */
   /* ☰ menu: floating, transparent, bottom-left; opens Settings when idle, ride controls while riding.
      progress strip starts just to its right (see #progress left) */
-  #menuBtn{position:fixed; left:8px; bottom:8px; z-index:18; width:44px; height:44px; font-size:26px;
+  #menuBtn{position:fixed; left:8px; bottom:8px; z-index:26; width:44px; height:44px; font-size:26px;
     display:flex; align-items:center; justify-content:center; background:transparent; border:none;
     color:var(--fg); text-shadow:0 1px 6px rgba(0,0,0,.8); cursor:pointer}
   #menuBtn:active{background:rgba(22,28,34,.5); border-radius:12px}
+  /* riding: ☰ is one of the three interactive elements — glove-sized */
+  body.navving #menuBtn{width:88px; height:88px; font-size:44px; opacity:var(--navOp,.4)}
+  body.navving #menuBtn:active{opacity:1}
+  body.navving #progress{left:104px} /* clear of the bigger ☰ */
   #trackInfo{flex:1; min-width:0; line-height:1.25}
   #trackName{font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   #trackSub{font-size:13px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -224,19 +252,25 @@
     background:var(--ok); color:#04240f; cursor:pointer}
   #navBtn.stop{background:var(--bad); color:#fff}
   #navBtn:disabled{background:#2a3540; color:#5a6a78}
-  /* START/STOP — one button, on screen or docked: green START idle, red STOP riding.
-     STOP is hold-to-confirm: a line runs the button's perimeter until it closes. */
-  #startFab{position:fixed; right:14px; bottom:150px; z-index:17; height:72px; padding:0 32px;
-    border:none; border-radius:20px; background:var(--ok); color:#04240f; font-size:24px; font-weight:800;
-    box-shadow:0 4px 18px rgba(0,0,0,.5); cursor:pointer; display:none; letter-spacing:.02em;
-    touch-action:none}
-  #startFab.on{display:block}
-  #startFab.stop{background:var(--bad); color:#fff}
-  #startFab .ring{position:absolute; inset:0; width:100%; height:100%; opacity:0; pointer-events:none}
-  #startFab.holding .ring{opacity:1}
-  #startFab .ring rect{fill:none; stroke:rgba(255,255,255,.95); stroke-width:4;
-    stroke-dasharray:1 1; stroke-dashoffset:1; vector-effect:non-scaling-stroke}
-  #startFab.holding .ring rect{stroke-dashoffset:0; transition:stroke-dashoffset 1.15s linear}
+  /* START/STOP is one plain-tap tile in the ☰ grid — the menu is already a deliberate
+     two-tap path, so a mid-ride brush can't stop navigation. Green start, red stop. */
+  .gtile.stop{background:var(--bad); border-color:var(--bad)}
+  .gtile.stop .gi,.gtile.stop .gl{color:#fff}
+  .gtile.stop:active{background:#d32f2f}
+  .gtile.go{background:var(--ok); border-color:var(--ok)}
+  .gtile.go .gi,.gtile.go .gl{color:#04240f}
+  /* TURN MODE: one tap on the map while riding — zoomed, compass-up; MARK TURN drops a point */
+  #markTurn{position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 30px); z-index:18; display:none; padding:0 44px;
+    height:92px; border:none; border-radius:24px; background:var(--warn); color:#231a00;
+    font-size:26px; font-weight:900; letter-spacing:.03em; box-shadow:0 6px 24px rgba(0,0,0,.55);
+    cursor:pointer}
+  body.turnmode #markTurn{display:block}
+  #turnHint{position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 134px); z-index:18; display:none; font-size:13px;
+    color:var(--fg); background:rgba(14,18,22,.75); padding:6px 14px; border-radius:999px;
+    pointer-events:none; white-space:nowrap}
+  body.turnmode #turnHint{display:block}
 
   /* ---------- panel ---------- */
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
@@ -320,22 +354,16 @@
     .ctlgroup{gap:7px}
     .ctlgroup .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
     .ctlgroup .ctl.preset{font-size:13px}
-    /* short viewport: the top-anchored zoom column reaches far down the right edge,
-       so sit START lower in the bottom-right corner, below it */
-    #startFab{bottom:78px; height:56px; font-size:20px}
+    #dotBtn{width:64px; height:64px; font-size:30px; bottom:70px}
+    #markTurn{height:64px; font-size:20px; padding:0 30px}
     #north{width:56px; height:56px; font-size:20px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
     #progress.expanded #progCanvas{height:44px}
-    body.navving #bottom{display:none} /* riding: reclaim the bar — STOP lives in the glove overlay */
-    .gtile{height:72px; gap:3px}
+    body.navving #bottom{display:none} /* riding: reclaim the bar — STOP lives in the ☰ grid */
+    .gtile{height:min(24vh,110px); gap:3px}
     .gtile .gi{font-size:24px}
     .gtile .gl{font-size:11px}
-    #gloveOverlay{padding-top:10px}
-    #gloveGrid{grid-template-columns:repeat(4,1fr)} /* short screens: 4+3 */
-  }
-  @media (max-height: 500px) and (min-width: 700px) {
-    #gloveGrid{grid-template-columns:repeat(7,1fr); max-width:none} /* landscape: one row */
   }
 
   /* ---------- editable screen layout (edit mode) ----------
@@ -344,16 +372,13 @@
      bottom springs the real ☰ panel up as the dock target. Everything here is
      inert unless body.editing — see docs/plans/2026-07-15-editable-layout-design.md.
      Kept after the media queries so customised sizes/positions win the cascade. */
-  /* docked controls ARE the ride-panel grid — dropped buttons become tiles beside
-     Auto zoom / Layers / Profile / Steepness */
-  #gloveGrid .ctl{width:auto; height:96px; border-radius:16px; font-size:34px}
-  #gloveGrid #startFab{position:relative; display:block; right:auto; bottom:auto; height:96px;
-    padding:0; font-size:22px; box-shadow:none; width:auto}
-  /* the panel's big START duplicates the on-screen fab — one home per control */
+  /* docked controls ARE the ☰ grid — dropped buttons become tiles beside the fixed ones */
+  #gloveGrid .ctl{width:auto; height:min(26vh,180px); border-radius:18px; font-size:34px}
+  /* START/STOP lives in the ☰ grid — one home per control */
   #panelNav #navBtn{display:none}
   /* map layers live at the top of the panel now, always in reach */
   #styleRow{margin-bottom:4px}
-  @media (max-height:500px){ #gloveGrid .ctl, #gloveGrid #startFab{height:72px; font-size:24px} }
+  @media (max-height:500px){ #gloveGrid .ctl{height:min(24vh,110px); font-size:24px} }
   body.editing #gloveGrid.hot{outline:2px dashed var(--accent); outline-offset:6px;
     background:rgba(0,80,90,.2); border-radius:8px}
   @keyframes edWob{0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.4deg)}}
@@ -367,7 +392,6 @@
   body.editing #vargModeBig{display:block}
   body.editing #vargInd{pointer-events:auto}
   body.editing #vargInd .ind{display:block; opacity:.75}
-  body.editing #startFab{display:block}
   #editReserve, #editCtls, #slotDots{display:none}
   body.editing #editReserve{display:flex; position:fixed; top:0; left:0; right:0; height:64px;
     z-index:50; pointer-events:none; align-items:center; justify-content:center; font-size:11px;
@@ -418,6 +442,8 @@
   <span class="ind blink" id="indR" title="right indicator">▶</span>
 </div>
 <div id="vargModeBig"><span id="vargModeNum">—</span> <small>mode</small></div>
+<div id="bigArrowL" class="bigArrow">⬅</div>
+<div id="bigArrowR" class="bigArrow">➡</div>
 <div id="vargFlash"></div>
 <div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
   <rect width="100%" height="100%" fill="#fff"/>
@@ -442,7 +468,9 @@
   <div class="ctl" id="zoomIn">+</div>
   <div class="ctl preset" id="presetMax" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
 </div>
-<button id="startFab" title="Start navigation"><span id="sfLabel">START</span><svg class="ring" viewBox="0 0 120 48" preserveAspectRatio="none"><rect x="2" y="2" width="116" height="44" rx="14" pathLength="1"/></svg></button>
+<div id="dotBtn" title="tap: centre on me · again: whole route · hold: lock">◎</div>
+<button id="markTurn" title="drop a turn point here">MARK TURN</button>
+<div id="turnHint">tap a point to remove · tap the map to leave</div>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
 <div id="lockPill" title="centre lock — long-press map to unlock">🔒 locked</div>
 
@@ -453,14 +481,22 @@
 </div>
 
 <div id="gloveBtn" class="left" title="ride controls">▦</div>
-<!-- ride panel: the grid IS the dock — fixed tiles and docked controls side by side.
-     No North up / Re-center / Sound tiles (they duplicate on-screen buttons); no STOP
-     tile (START/STOP is one relocatable button, dockable into this grid). -->
+<!-- ☰ grid: the whole screen becomes fat tiles. data-m picks the grid a tile belongs to
+     (ride / idle / both); the grid IS the dock — layout-editor buttons land here too. -->
 <div id="gloveOverlay"><div id="gloveGrid">
-  <div class="gtile" id="gZoom"><div class="gi">⤢</div><div class="gl">Auto zoom</div></div>
-  <div class="gtile" id="gLayers"><div class="gi">🗺</div><div class="gl">Day</div></div>
-  <div class="gtile" id="gProfile"><div class="gi">∿</div><div class="gl">Profile</div></div>
-  <div class="gtile" id="gSteep"><div class="gi">◭</div><div class="gl">Steepness</div></div>
+  <div class="gtile" data-m="ride" id="gMute"><div class="gi">🔊</div><div class="gl">Mute</div></div>
+  <div class="gtile" data-m="ride" id="gMark"><div class="gi">📍</div><div class="gl">Mark spot</div></div>
+  <div class="gtile" data-m="ride" id="gZoomMin"><div class="gi">⊕</div><div class="gl">Zoom close</div></div>
+  <div class="gtile" data-m="ride" id="gZoomMax"><div class="gi">⊖</div><div class="gl">Zoom wide</div></div>
+  <div class="gtile" data-m="ride" id="gZoom"><div class="gi">⤢</div><div class="gl">Auto zoom</div></div>
+  <div class="gtile" data-m="ride" id="gOrient"><div class="gi">N</div><div class="gl">North up</div></div>
+  <div class="gtile" data-m="ride" id="gNum"><div class="gi">—</div><div class="gl">Swap number</div></div>
+  <div class="gtile" data-m="both" id="gLayers"><div class="gi">🗺</div><div class="gl">Day</div></div>
+  <div class="gtile" data-m="both" id="gStartStop"><div class="gi">▶</div><div class="gl">Start</div></div>
+  <div class="gtile" data-m="idle" id="gTracks"><div class="gi">🗂</div><div class="gl">Tracks</div></div>
+  <div class="gtile" data-m="idle" id="gRideProf"><div class="gi">🏍</div><div class="gl">Profile</div></div>
+  <div class="gtile" data-m="idle" id="gDemo"><div class="gi">▶︎</div><div class="gl">Demo ride</div></div>
+  <div class="gtile" data-m="idle" id="gSettings"><div class="gi">⚙</div><div class="gl">Settings</div></div>
 </div></div>
 
 <div id="progress">
@@ -663,7 +699,7 @@ const S = {
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, gloveSide: 'left', ctlEdges: 'sides', vehicle: 'enduro', steep: true, surf: true, trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargSrc: 'vp', vpUrl: '' },
+    varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure' },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
@@ -1229,6 +1265,9 @@ function tone(freq, dur, when, vol) {
 }
 const BEEP = {
   far()      { if (!S.set.sound) return; tone(660, .22, 0); vib([120]); console.log('[beep] far'); },
+  // the audio channel encodes the direction: one beep = right, two beeps = left
+  right()    { if (!S.set.sound) return; tone(990, .18, 0); vib([100]); console.log('[beep] right'); },
+  left()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .24); vib([80, 60, 80]); console.log('[beep] left'); },
   turn()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
@@ -1410,13 +1449,17 @@ async function initMap() {
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
-  map.on('dragstart', () => { if (S.nav) setFollow(false); });
+  map.on('dragstart', () => { if (S.nav) setFollow(false); S.dotFit = false; });
   // gesture zoom (pinch / wheel / double-tap) while navigating = hold, same as the ± buttons
   map.on('zoomend', e => {
     if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom());
     if (S.nav) autoCompass(); // threshold-mode compass tracks zoom level
   });
-  map.on('click', e => { if (S.cueEdit && !S.nav) cueEditTap(e.lngLat); });
+  // riding, one clean tap on the map = TURN MODE (drags/pinches never reach here)
+  map.on('click', e => {
+    if (S.nav) { rideTap(e.lngLat); return; }
+    if (S.cueEdit) cueEditTap(e.lngLat);
+  });
   initLockGesture();
   map.on('mousedown', closeGlove); map.on('touchstart', closeGlove); // tap the map = dismiss glove overlay
   window.__map = map;
@@ -1575,7 +1618,12 @@ function addOverlays() {
   map.addLayer({ id: 'pos-arrow', type: 'symbol', source: 'pos',
     layout: { 'icon-image': 'nav-dart', 'icon-size': 1.5, 'icon-rotate': ['get', 'heading'],
       'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
-  refreshMapData(); refreshTrail(); applyAdvPaint(); refreshPresets();
+  // marked spots (hazard / camp / water — MARK SPOT in the ☰ grid)
+  map.addSource('spots', { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'spot-dots', type: 'circle', source: 'spots',
+    paint: { 'circle-radius': 7, 'circle-color': '#42d7f5',
+      'circle-stroke-width': 2, 'circle-stroke-color': '#0e1216' } });
+  refreshMapData(); refreshTrail(); refreshSpots(); applyAdvPaint(); refreshPresets();
 }
 function navDartImage() { // classic location-arrow: triangle with a notched tail, white-outlined
   const c = document.createElement('canvas'); c.width = c.height = 56;
@@ -1814,12 +1862,33 @@ function presetSpan(k) {
   return k === 'min' ? mn : k === 'max' ? mx : Math.round(Math.sqrt(mn * mx));
 }
 /* cruise zoom priority: manual hold (until the next cue approach) > max preset.
-   A cue approach releases the hold and dives to the min preset to frame the turn. */
+   A cue approach releases any old hold ONCE and dives to the min preset to frame the
+   turn — but a manual zoom DURING the approach is a new hold and wins immediately:
+   the rider broke out on purpose, never re-zoom them into that turn. */
 function cruiseZoom(la) {
   const ns = S.navState;
-  if (ns && ns.approach) { setHold(null); return zoomForSpan(presetSpan('min'), la); }
+  if (ns && ns.approach) {
+    if (!ns.apprArmed) { ns.apprArmed = true; setHold(null); }
+    if (S.zoomHold != null) return null; // rider zoomed out mid-approach — respect it
+    return zoomForSpan(presetSpan('min'), la);
+  }
+  if (ns) ns.apprArmed = false;
   if (S.zoomHold != null) return null; // held — leave the camera zoom alone
   return zoomForSpan(presetSpan('max'), la);
+}
+/* look-ahead offset: the map AHEAD gets the pixels, whichever way it's drawn.
+   Track-up: rider fixed low-third. North-up: the dot migrates slowly OPPOSITE the
+   travel direction (heading south → dot drifts toward the top of the screen). */
+let camOffX = 0, camOffY = 0;
+function camTargetOff() {
+  if (S.turn) return [0, Math.round(innerHeight * 0.18)]; // turn mode: junction fills the view ahead
+  const o = effOrient();
+  if (o === 'north') {
+    if (S.courseBearing == null || !S.pos || S.pos.speed < 1.5) return [camOffX, camOffY]; // hold last
+    const R = Math.min(innerWidth, innerHeight) * 0.18, r = S.courseBearing * Math.PI / 180;
+    return [-Math.sin(r) * R, Math.cos(r) * R];
+  }
+  return [0, Math.round(innerHeight * 0.15)];
 }
 let lastEase = 0;
 function followCamera() {
@@ -1827,12 +1896,20 @@ function followCamera() {
   const now = Date.now(); if (now - lastEase < 800) return;
   lastEase = now;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
-  const opts = { center: [lo, la], duration: ADV('easeMs'), easing: t => t };
-  // off track: freeze the zoom (keep centring) until back on track — no lurching auto-zoom while lost
-  if (S.set.autoZoom && !(S.navState && S.navState.off)) { const z = cruiseZoom(la); if (z != null) opts.zoom = z; }
-  const o = effOrient();
-  if (o === 'course' && S.courseBearing != null) opts.bearing = S.courseBearing;
-  else if (o === 'oriented' && S.deviceHeading != null) opts.bearing = S.deviceHeading;
+  const [tx, ty] = camTargetOff();
+  camOffX += (tx - camOffX) * 0.18; camOffY += (ty - camOffY) * 0.18; // slow migration, not a jump
+  const opts = { center: [lo, la], duration: ADV('easeMs'), easing: t => t,
+    offset: [Math.round(camOffX), Math.round(camOffY)] };
+  if (S.turn) { // turn mode: compass-up to the heading, tight zoom held while following
+    opts.zoom = S.turn.zoom;
+    if (S.courseBearing != null) opts.bearing = S.courseBearing;
+  } else {
+    // off track: freeze the zoom (keep centring) until back on track — no lurching auto-zoom while lost
+    if (S.set.autoZoom && !(S.navState && S.navState.off)) { const z = cruiseZoom(la); if (z != null) opts.zoom = z; }
+    const o = effOrient();
+    if (o === 'course' && S.courseBearing != null) opts.bearing = S.courseBearing;
+    else if (o === 'oriented' && S.deviceHeading != null) opts.bearing = S.deviceHeading;
+  }
   map.easeTo(opts);
 }
 /* manual zoom while navigating = hold: stay at that zoom until the next turn approach */
@@ -1923,9 +2000,38 @@ setFollow(true);
 const lockPill = document.getElementById('lockPill');
 function setLock(on) {
   S.lock = on; lockPill.classList.toggle('on', on);
-  if (mapReady) on ? map.dragPan.disable() : map.dragPan.enable();
+  document.getElementById('dotBtn').classList.toggle('locked', on); // the dot wears the lock state
+  if (mapReady) on ? map.dragPan.disable() : (gestLocked || map.dragPan.enable());
 }
 lockPill.onclick = () => { setLock(false); toast('Centre lock off'); };
+
+/* the dot: tap = centre on me · tap again = whole route · hold = lock-to-centre.
+   Any manual drag breaks follow (and the route view) — never fight the camera. */
+const dotBtn = document.getElementById('dotBtn');
+let dotHoldT = null, dotHeld = false;
+dotBtn.addEventListener('pointerdown', e => {
+  e.preventDefault(); dotHeld = false; clearTimeout(dotHoldT);
+  dotHoldT = setTimeout(() => {
+    dotHeld = true; vib([40]);
+    if (S.lock) { setLock(false); toast('Centre lock off'); }
+    else {
+      setLock(true); setFollow(true); S.dotFit = false;
+      if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 400 }); }
+      toast('Locked to centre — hold the dot to release');
+    }
+  }, 600);
+});
+dotBtn.addEventListener('pointerup', () => {
+  clearTimeout(dotHoldT);
+  if (dotHeld) { dotHeld = false; return; } // the hold consumed this touch
+  if (!S.follow || S.dotFit) { // come home: centre on me
+    S.dotFit = false; setFollow(true);
+    if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 450 }); }
+  } else { // already centred: show the whole route
+    S.dotFit = true; setFollow(false); fitSelected();
+  }
+});
+dotBtn.addEventListener('pointercancel', () => clearTimeout(dotHoldT));
 function initLockGesture() {
   const el = map.getContainer();
   let timer = null, start = null;
@@ -1966,6 +2072,9 @@ function setSound(on) {
   muteBtn.classList.toggle('muted', !on);
   const sc = document.getElementById('soundCtl');
   if (sc) { sc.textContent = on ? '🔊' : '🔇'; sc.classList.toggle('off', !on); }
+  const gm = document.getElementById('gMute');
+  if (gm) { gm.querySelector('.gi').textContent = on ? '🔊' : '🔇';
+    gm.querySelector('.gl').textContent = on ? 'Mute' : 'Muted'; gm.classList.toggle('active', !on); }
 }
 muteBtn.onclick = () => { setSound(!S.set.sound); toast(S.set.sound ? 'Sound on' : 'Muted'); };
 document.getElementById('soundCtl').onclick = () => muteBtn.onclick(); // cluster sound = mute toggle
@@ -2211,11 +2320,13 @@ function startNav() {
   const rev = !!(trk && trk.reverse);
   S.navState = { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0, alertStates: new Map(),
     movingS: 0, avgSpd: null, lastFixT: 0 };
-  S.nav = true; setFollow(true);
+  S.nav = true; setFollow(true); S.dotFit = false; S.numSwap = false;
+  camOffX = camOffY = 0; // look-ahead offset migrates in from centre
+  closeGlove();
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
   document.body.classList.toggle('hasroute', !!trk); // route → turn strip owns the top; free-ride → speed sits at the very top
-  updateStartFab();
   document.getElementById('hudSpeed').classList.add('on');
+  renderMain(); modePing();
   if (trk) { // turn strip + progress strip only make sense with a route
     document.getElementById('hud').classList.add('on');
     prog.classList.add('on'); prog.classList.remove('offtrack', 'countdown');
@@ -2234,9 +2345,10 @@ function startNav() {
 }
 function stopNav() {
   S.nav = false;
+  exitTurnMode(false);
+  S._turnCue = null; updateBigArrows(); applyMoveGestures();
   S.autoOrient = false; S.autoBlock = false; applyOrient(); // hand orientation back to the rider's mode
   document.body.classList.remove('navving', 'hasroute');
-  updateStartFab();
   document.getElementById('hud').classList.remove('on');
   document.getElementById('hudSpeed').classList.remove('on');
   document.getElementById('banner').classList.remove('on');
@@ -2252,39 +2364,8 @@ function stopNav() {
   releaseWake(); stopDemo();
 }
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
-// floating START (bottom-right on the map) — starts nav; picks a track first if none is selected
-const startFab = document.getElementById('startFab');
-let stopHoldT = null, stopHoldFired = false;
-startFab.onclick = () => {
-  if (stopHoldFired) { stopHoldFired = false; return; } // release after a completed hold must not re-START
-  if (!S.nav) startNav(); // starts the selected track, or a free ride if none
-};
-// STOP is hold-to-confirm: the perimeter line must complete its lap (1.15s) —
-// a mid-ride brush of a big red button must never end navigation
-function cancelStopHold() {
-  if (stopHoldT) { clearTimeout(stopHoldT); stopHoldT = null; }
-  startFab.classList.remove('holding');
-}
-startFab.addEventListener('pointerdown', e => {
-  if (!S.nav || (typeof layoutEditing !== 'undefined' && layoutEditing)) return;
-  e.preventDefault();
-  try { startFab.setPointerCapture(e.pointerId); } catch (err) {}
-  stopHoldFired = false;
-  startFab.classList.add('holding');
-  stopHoldT = setTimeout(() => { cancelStopHold(); stopHoldFired = true; closeGlove(); stopNav(); }, 1150);
-});
-startFab.addEventListener('pointerup', () => {
-  if (S.nav && stopHoldT) toast('Hold STOP until the line completes');
-  cancelStopHold();
-});
-startFab.addEventListener('pointercancel', cancelStopHold);
-function updateStartFab() { // one button: green START idle, red hold-to-STOP riding
-  startFab.classList.add('on');
-  startFab.classList.toggle('stop', S.nav);
-  document.getElementById('sfLabel').textContent = S.nav ? 'STOP' : 'START';
-  startFab.title = S.nav ? 'hold to stop navigation' : 'Start navigation';
-}
-updateStartFab();
+// START/STOP is one plain-tap tile in the ☰ grid — the two-tap path (☰ → tile) is the
+// mis-tap protection, so the old hold-to-stop ring is gone.
 
 function onFix(lat, lon, acc, speed, heading) {
   if (!REF) setRef(lat, lon); // free-ride / no data yet: anchor the local projection at the first fix
@@ -2300,7 +2381,9 @@ function onFix(lat, lon, acc, speed, heading) {
   // course bearing: only trust headings above ~7 km/h, low-pass; held frozen when slower
   if (hdg != null && !isNaN(hdg) && (spd || 0) > 2)
     S.courseBearing = S.courseBearing == null ? hdg : S.courseBearing + angDiff(S.courseBearing, hdg) * 0.4;
-  document.getElementById('hudSpeed').innerHTML = Math.round((spd || 0) * 3.6) + ' <small>km/h</small>';
+  renderMain(); applyMoveGestures();
+  // turn mode decays on its own once the junction is cleared — no tap-out needed mid-corner
+  if (S.turn && dist(x, y, S.turn.ax, S.turn.ay) > 60) exitTurnMode();
   refreshPosLayers(); followCamera();
   if (!S.nav || S.sel < 0 || !ns) return;
   if (S.set.trail !== false) trailPush(x, y); // breadcrumb keeps dropping off-track too — the thread back
@@ -2326,7 +2409,7 @@ function onFix(lat, lon, acc, speed, heading) {
     if (t - ns.lastOffBeep > 30e3) { BEEP.off(); ns.lastOffBeep = t; }
     prog.classList.add('offtrack'); // strip dims, labels freeze — no fake ETA off-route
     ns.confirmAt = null;            // wandered off after the turn — nothing to congratulate
-    setHud(null); return;
+    ns.cdOn = false; setHud(null); return;
   }
 
   const s = trk.cum[near.idx];
@@ -2367,7 +2450,8 @@ function onFix(lat, lon, acc, speed, heading) {
     if (dTo <= farM && dTo > nearM && st.far) { st.far = false; BEEP.far(); }
     if (dTo <= nearM && st.near) {
       st.near = false; st.far = false;
-      BEEP.turn();
+      let ty = next.type; if (ns.dir < 0) ty = ty === 'left' ? 'right' : 'left';
+      ty === 'left' ? BEEP.left() : BEEP.right(); // one beep right, two beeps left
     }
   }
 }
@@ -2384,9 +2468,10 @@ function setHud(alert, dTo, dir, farM) {
   const win = Math.max((farM || 160) * ADV('apprMul'), ADV('apprFloor'));
   const show = !!alert && dTo <= win;
   box.style.visibility = show || box.classList.contains('commit') ? '' : 'hidden';
-  if (!show) { fill.style.width = '0'; return; }
+  if (!show) { fill.style.width = '0'; S._turnCue = null; updateBigArrows(); renderMain(); return; }
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
+  S._turnCue = type; updateBigArrows(); renderMain(); // giant side arrow + countdown in the main slot
   const icons = { left: '⬅', right: '➡' };
   const labels = { left: 'turn left', right: 'turn right' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
@@ -2547,6 +2632,231 @@ function drawCountdown(ctx, w, h, ns) {
   ctx.fillStyle = '#fff'; ctx.fillText(txt, w / 2, h / 2 + 1);
 }
 
+/* ---------------- ride view: main number slot, giant arrows, gesture gating ----------------
+   One edge readout — speed (adventure profile) or battery (Stark). On a turn approach the
+   countdown borrows the slot in amber, then the number returns. Nothing is ever centred. */
+function primaryIsBattery() {
+  const stark = (S.set.rideProfile || 'adventure') === 'stark';
+  return S.numSwap ? !stark : stark;
+}
+function cdMain(ns) { // distance or seconds, per the countdown-units setting; seconds freeze when stopped
+  const d = Math.max(0, ns.cdD || 0);
+  if (S.set.countUnit === 's') {
+    const spd = S.pos && S.pos.speed > 0.5 ? S.pos.speed : null;
+    if (spd) cdMain.last = Math.ceil(d / spd) + ' <small>s</small>';
+    return cdMain.last || '· <small>s</small>';
+  }
+  return Math.round(d / 5) * 5 + ' <small>m</small>';
+}
+function renderMain() {
+  const el = document.getElementById('hudSpeed'); if (!el) return;
+  const ns = S.navState;
+  const cd = !!(S.nav && ns && ns.cdOn && !ns.off);
+  el.classList.toggle('cd', cd);
+  if (cd) { el.classList.remove('low'); el.innerHTML = cdMain(ns); return; }
+  if (primaryIsBattery()) {
+    el.classList.toggle('low', varg.soc != null && varg.soc <= 15);
+    el.innerHTML = '🔋' + (varg.soc == null ? '—' : varg.soc) + '<small>%</small>';
+  } else {
+    el.classList.remove('low');
+    el.innerHTML = Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' <small>km/h</small>';
+  }
+}
+/* giant side arrows: solid = upcoming turn on that side; flashing = that indicator is on */
+function updateBigArrows() {
+  const L = document.getElementById('bigArrowL'), R = document.getElementById('bigArrowR');
+  const live = S.set.varg && varg.state === 'on';
+  const indL = live && varg.ind.L, indR = live && varg.ind.R;
+  const turn = S.nav ? S._turnCue : null;
+  L.classList.toggle('on', indL || turn === 'left');
+  R.classList.toggle('on', indR || turn === 'right');
+  L.classList.toggle('blink', indL);
+  R.classList.toggle('blink', indR);
+}
+/* squarish screens drop the mode digit 4s after a change; wide keeps it resident */
+function modePing() {
+  const mb = document.getElementById('vargModeBig');
+  mb.classList.remove('fade');
+  clearTimeout(modePing.t);
+  const squarish = Math.max(innerWidth, innerHeight) / Math.min(innerWidth, innerHeight) < 1.35;
+  if (squarish) modePing.t = setTimeout(() => mb.classList.add('fade'), 4000);
+}
+/* pinch/drag are stop-and-manipulate: disabled above walking speed (with hysteresis
+   so GPS jitter can't flap them). A clean tap still lands — that's TURN MODE. */
+let gestLocked = false;
+function applyMoveGestures() {
+  if (!mapReady) return;
+  const spd = S.pos ? S.pos.speed : 0;
+  const off = S.nav && (gestLocked ? spd > 1.0 : spd > 2.0);
+  if (off === gestLocked) return;
+  gestLocked = off;
+  if (off) { map.dragPan.disable(); map.touchZoomRotate.disable(); map.doubleClickZoom.disable(); }
+  else {
+    if (!S.lock) map.dragPan.enable();
+    map.touchZoomRotate.enable(); map.doubleClickZoom.enable();
+  }
+}
+
+/* ---------------- TURN MODE ----------------
+   Unmarked intersection, one clean tap on the map: snap zoom in, compass-up to the
+   heading, rider low-third — resolve which fork is the track. MARK TURN drops a point.
+   Tap a point = remove it; tap elsewhere right after = it re-places there. Second tap
+   on empty map (or riding ~60 m past the junction) returns to the previous zoom.
+   Turn points ARE cues: they ride the existing overlay system, anchored to geometry —
+   every pass of every analysed track sharing the segment gets the point. */
+function enterTurnMode() {
+  if (S.turn || !mapReady || !S.pos) return;
+  const [la, lo] = toLL(S.pos.x, S.pos.y);
+  // remember the target zoom: followCamera keeps re-easing while we move, and each
+  // ease without a zoom would freeze the interrupted entry animation mid-flight
+  S.turn = { prevZoom: map.getZoom(), zoom: Math.max(16.5, zoomForSpan(presetSpan('min'), la)),
+    ax: S.pos.x, ay: S.pos.y, removed: null };
+  document.body.classList.add('turnmode');
+  const brg = S.courseBearing != null ? S.courseBearing : (S.pos.heading || 0);
+  map.easeTo({ center: [lo, la], zoom: S.turn.zoom,
+    bearing: brg, offset: [0, Math.round(innerHeight * 0.18)], duration: 450 });
+  setHold(null); vib([40]);
+}
+function exitTurnMode(restore = true) {
+  if (!S.turn) return;
+  const t = S.turn; S.turn = null;
+  document.body.classList.remove('turnmode');
+  if (restore && mapReady) {
+    const opts = { zoom: t.prevZoom, duration: 500 };
+    if (effOrient() === 'north') opts.bearing = 0; // north-up gets its north back
+    map.easeTo(opts);
+  }
+}
+function rideTap(lngLat) {
+  if (typeof layoutEditing !== 'undefined' && layoutEditing) return;
+  const [x, y] = toXY(lngLat.lat, lngLat.lng);
+  const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
+  const tapR = Math.max(15, mpp * 30);
+  const hit = findTurnPointNear(x, y, tapR);
+  if (!S.turn) {
+    // a direct tap on a point outside turn mode says "this turn is obvious" — remove it,
+    // and the auto-zoom it was driving releases with it
+    if (hit) { removeTurnPointAt(hit.x, hit.y); toast('Turn point removed'); vib([60]); return; }
+    enterTurnMode(); return;
+  }
+  if (hit) {
+    S.turn.removed = true;
+    removeTurnPointAt(hit.x, hit.y);
+    toast('Turn point removed — tap the track to re-place it'); vib([60]);
+    return;
+  }
+  if (S.turn.removed) { // move = delete + place
+    if (addTurnPointAt(x, y)) { S.turn.removed = null; toast('Turn point moved'); vib([60]); }
+    else toast('No track there — tap on the route');
+    return;
+  }
+  exitTurnMode(); // second tap on empty map
+}
+document.getElementById('markTurn').onclick = () => {
+  if (!S.pos) return;
+  const n = addTurnPointAt(S.pos.x, S.pos.y);
+  if (n) { toast('Turn marked — queued for the pack'); vib([60]); }
+  else toast('No analysed track here to attach a turn to');
+};
+/* nearest visible turn point (any analysed track) within R metres */
+function findTurnPointNear(x, y, R) {
+  let best = null, bd = R;
+  for (const t of S.tracks) {
+    if (!t.alerts) continue;
+    for (const a of t.alerts) {
+      const ax = t.xy[a.idx * 2], ay = t.xy[a.idx * 2 + 1];
+      const d = dist(x, y, ax, ay);
+      if (d < bd) { bd = d; best = { x: ax, y: ay }; }
+    }
+  }
+  return best;
+}
+/* all passes of a track through a point: indices within R, clustered by index gaps —
+   an out-and-back section carries the turn in both directions automatically */
+function trackPassesNear(trk, x, y, R) {
+  const C = trk.cell, cx = (x / C) | 0, cy = (y / C) | 0, RR = Math.ceil(R / C);
+  const cand = [];
+  for (let ix = cx - RR; ix <= cx + RR; ix++) for (let iy = cy - RR; iy <= cy + RR; iy++) {
+    const a = trk.grid.get(ix + ',' + iy); if (a) cand.push(...a);
+  }
+  cand.sort((a, b) => a - b);
+  const idxs = []; let cl = null;
+  for (const i of cand) {
+    const d = dist(x, y, trk.xy[i * 2], trk.xy[i * 2 + 1]);
+    if (d > R) continue;
+    if (cl && i - cl.last <= 40) { cl.last = i; if (d < cl.bd) { cl.bd = d; cl.best = i; } }
+    else { if (cl) idxs.push(cl.best); cl = { last: i, best: i, bd: d }; }
+  }
+  if (cl) idxs.push(cl.best);
+  return idxs;
+}
+function addTurnPointAt(x, y) {
+  let n = 0;
+  for (const t of S.tracks) {
+    if (!t.baseCues || !t.overlay) continue; // only analysed tracks with their overlay loaded
+    let ch = 0;
+    for (const idx of trackPassesNear(t, x, y, 25)) {
+      const at = t.cum[idx];
+      if (t.alerts && t.alerts.some(c => Math.abs(c.at - at) < 30)) continue; // already a point here
+      const ov = cueOverlay(t);
+      const ri = ov.removed.findIndex(r => Math.abs(r - at) < 30);
+      if (ri >= 0) ov.removed.splice(ri, 1); else ov.added.push(mkManualCue(t, idx));
+      ch++;
+    }
+    if (ch) { n += ch; saveCueOverlay(t); applyCueOverlay(t); }
+  }
+  if (n) {
+    const [la, lo] = toLL(x, y); queueTurnEdit('add', la, lo);
+    updateBottomBar(); refreshMapData(); drawProgress(true);
+  }
+  return n;
+}
+function removeTurnPointAt(x, y) {
+  const R = 25; let n = 0;
+  for (const t of S.tracks) {
+    if (!t.baseCues || !t.overlay) continue;
+    const ov = cueOverlay(t); let ch = 0;
+    for (const c of t.baseCues) {
+      if (dist(x, y, t.xy[c.idx * 2], t.xy[c.idx * 2 + 1]) > R) continue;
+      if (!cueRemoved(ov, c.at)) { ov.removed.push(c.at); ch++; }
+    }
+    const before = ov.added.length;
+    ov.added = ov.added.filter(c => dist(x, y, t.xy[c.idx * 2], t.xy[c.idx * 2 + 1]) > R);
+    ch += before - ov.added.length;
+    if (ch) { n += ch; saveCueOverlay(t); applyCueOverlay(t); }
+  }
+  if (n) {
+    const [la, lo] = toLL(x, y); queueTurnEdit('remove', la, lo);
+    updateBottomBar(); refreshMapData(); drawProgress(true);
+  }
+  return n;
+}
+function queueTurnEdit(op, lat, lon) { // pack-sync outbox — the transport lands with group sync
+  try {
+    const q = JSON.parse(localStorage.getItem('dingonav-turnq') || '[]');
+    q.push({ op, la: +lat.toFixed(6), lo: +lon.toFixed(6), t: Date.now() });
+    localStorage.setItem('dingonav-turnq', JSON.stringify(q.slice(-500)));
+  } catch (e) {}
+}
+
+/* ---------------- marked spots: hazard / camp / water — MARK SPOT in the ☰ grid ---------------- */
+let spots = [];
+try { spots = JSON.parse(localStorage.getItem('dingonav-spots') || '[]'); } catch (e) {}
+function markSpot() {
+  if (!S.pos) { toast('No GPS fix yet'); return; }
+  const [la, lo] = toLL(S.pos.x, S.pos.y);
+  spots.push({ la: +la.toFixed(6), lo: +lo.toFixed(6), t: Date.now() });
+  localStorage.setItem('dingonav-spots', JSON.stringify(spots));
+  refreshSpots(); queueTurnEdit('spot', la, lo);
+  toast('Spot marked (' + spots.length + ')'); vib([60]);
+}
+function refreshSpots() {
+  if (!mapReady || !map.getSource('spots')) return;
+  map.getSource('spots').setData({ type: 'FeatureCollection',
+    features: spots.map(s => ({ type: 'Feature', properties: {},
+      geometry: { type: 'Point', coordinates: [s.lo, s.la] } })) });
+}
+
 /* ---------------- backtrack trail: breadcrumb of where you've actually been ---------------- */
 let trailLast = null, trailDirty = false;
 function trailPush(x, y) {
@@ -2576,13 +2886,34 @@ function gloveArm() { clearTimeout(gloveT); gloveT = setTimeout(closeGlove, 8000
 function openGlove() { refreshGlove(); gloveOverlay.classList.add('on'); gloveArm(); }
 function closeGlove() { clearTimeout(gloveT); gloveT = null; gloveOverlay.classList.remove('on'); }
 gloveBtn.onclick = () => gloveOverlay.classList.contains('on') ? closeGlove() : openGlove();
+// tap empty space (not a tile) = close with no action
+gloveOverlay.addEventListener('click', e => {
+  if (e.target === gloveOverlay || e.target === document.getElementById('gloveGrid')) closeGlove();
+});
 function refreshGlove() {
   const trk = S.tracks[S.sel];
   const g = id => document.getElementById(id);
-  g('gSteep').classList.toggle('active', !!(S.set.steep && trk && trk.hasEle));
   g('gZoom').classList.toggle('active', S.set.autoZoom);
   g('gLayers').querySelector('.gl').textContent = curStyle().label || S.set.mapStyle;
-  g('gProfile').classList.toggle('active', !!(S.set.profile && trk && trk.hasEle));
+  g('gMute').querySelector('.gi').textContent = S.set.sound ? '🔊' : '🔇';
+  g('gMute').querySelector('.gl').textContent = S.set.sound ? 'Mute' : 'Muted';
+  g('gMute').classList.toggle('active', !S.set.sound);
+  const o = effOrient();
+  g('gOrient').querySelector('.gi').textContent = ORIENT_GLYPH[o] || 'N';
+  g('gOrient').querySelector('.gl').textContent = ORIENT_LABEL[o] || 'north up';
+  // the number NOT owning the edge slot lives here — tap to swap them
+  g('gNum').querySelector('.gi').textContent = primaryIsBattery()
+    ? Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' km/h'
+    : '🔋 ' + (varg.soc == null ? '—' : varg.soc) + '%';
+  const ss = g('gStartStop');
+  ss.classList.toggle('stop', S.nav);
+  ss.classList.toggle('go', !S.nav);
+  ss.querySelector('.gi').textContent = S.nav ? '■' : '▶';
+  ss.querySelector('.gl').textContent = S.nav ? 'Stop ride' : 'Start';
+  g('gTracks').querySelector('.gl').textContent = trk ? trk.name.slice(0, 16) : 'Tracks';
+  g('gRideProf').querySelector('.gl').textContent = S.set.rideProfile === 'stark' ? 'Stark' : 'Adventure';
+  g('gDemo').classList.toggle('active', !!S.demo);
+  g('gDemo').querySelector('.gl').textContent = S.demo ? 'Stop demo' : 'Demo ride';
 }
 function gloveTap(fn) { return () => { fn(); refreshGlove(); gloveArm(); }; } // act, reflect, re-arm dismiss
 document.getElementById('gZoom').onclick = gloveTap(() => {
@@ -2593,14 +2924,22 @@ document.getElementById('gLayers').onclick = gloveTap(() => {
   const i = STYLE_CYCLE.indexOf(S.set.mapStyle);
   setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]);
 });
-document.getElementById('gProfile').onclick = gloveTap(() => prog.onclick());
-document.getElementById('gSteep').onclick = gloveTap(() => {
-  const trk = S.tracks[S.sel];
-  if (!trk || !trk.hasEle) { toast('No elevation data in this track'); return; }
-  S.set.steep = !S.set.steep; saveSet();
-  document.getElementById('setSteep').checked = S.set.steep;
-  refreshMapData(); drawProgress(true); // surface features re-bake their steepness colours
+document.getElementById('gMute').onclick = gloveTap(() => setSound(!S.set.sound));
+document.getElementById('gOrient').onclick = gloveTap(() => northBtn.onclick());
+document.getElementById('gNum').onclick = gloveTap(() => { S.numSwap = !S.numSwap; renderMain(); });
+document.getElementById('gMark').onclick = () => { closeGlove(); markSpot(); };
+document.getElementById('gZoomMin').onclick = () => { closeGlove(); presetTap('min'); };
+document.getElementById('gZoomMax').onclick = () => { closeGlove(); presetTap('max'); };
+document.getElementById('gStartStop').onclick = () => { closeGlove(); S.nav ? stopNav() : startNav(); };
+document.getElementById('gTracks').onclick = () => { closeGlove(); openPanel();
+  document.querySelector('#setTabs button[data-t="Tracks"]').click(); };
+document.getElementById('gSettings').onclick = () => { closeGlove(); openPanel();
+  document.querySelector('#setTabs button[data-t="General"]').click(); };
+document.getElementById('gRideProf').onclick = gloveTap(() => {
+  S.set.rideProfile = S.set.rideProfile === 'stark' ? 'adventure' : 'stark';
+  saveSet(); S.numSwap = false; renderMain();
 });
+document.getElementById('gDemo').onclick = () => { closeGlove(); S.demo ? (stopDemo(), stopNav()) : startDemo(); };
 function applyGloveSide() {
   gloveBtn.classList.toggle('right', S.set.gloveSide === 'right');
   gloveBtn.classList.toggle('left', S.set.gloveSide !== 'right');
@@ -2869,9 +3208,9 @@ if ('launchQueue' in window && 'setConsumer' in window.launchQueue) {
 const panel = document.getElementById('panel'), shade = document.getElementById('shade');
 function openPanel() { panel.classList.add('on'); shade.classList.add('on'); }
 function closePanel() { panel.classList.remove('on'); shade.classList.remove('on'); }
-// ☰ opens two different panels: ride controls while navigating, Settings otherwise
+// ☰ always opens the tile grid — riding and idle show different tiles, one mental model
 document.getElementById('menuBtn').onclick = () =>
-  S.nav ? (gloveOverlay.classList.contains('on') ? closeGlove() : openGlove()) : openPanel();
+  gloveOverlay.classList.contains('on') ? closeGlove() : openGlove();
 shade.onclick = closePanel;
 
 function refreshTrackList() {
@@ -3115,19 +3454,19 @@ function vargSpecial(sp) { // sp: null | 'rev' | 'crawl'
   vargUI();
 }
 
-function vargFlashCard() { // new mode + its curve settings, ~2 s, on every mode change
+function vargFlashCard() { // new mode + its curve settings, ~4 s, on every mode change
   const f = document.getElementById('vargFlash'), bits = [];
   if (varg.hp != null) bits.push(varg.hp + '<small> hp</small>');
   if (varg.regen != null) bits.push('<small>regen </small>' + varg.regen + '<small>%</small>');
   if (varg.tc != null) bits.push('<small>TC </small>' + varg.tc + '<small>%</small>');
   f.innerHTML = 'M' + varg.mode + (bits.length ? ' <small>·</small> ' + bits.join(' <small>·</small> ') : '');
   f.classList.add('on');
-  clearTimeout(varg.flashT); varg.flashT = setTimeout(() => f.classList.remove('on'), 2200);
+  clearTimeout(varg.flashT); varg.flashT = setTimeout(() => f.classList.remove('on'), 4000);
 }
 
 function vargApplyState(st) { // single entry point for the future mode/config decoder
   for (const k of ['hp', 'regen', 'tc']) if (st[k] != null) varg[k] = st[k];
-  if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; vargFlashCard(); }
+  if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; vargFlashCard(); modePing(); }
   if ('special' in st) vargSpecial(st.special);
   vargUI();
 }
@@ -3316,6 +3655,7 @@ function vargIndUI() {
   l.classList.toggle('on', show && i.L); l.classList.toggle('warn', i.warnL);
   r.classList.toggle('on', show && i.R); r.classList.toggle('warn', i.warnR);
   b.classList.toggle('on', show && i.beam);
+  updateBigArrows(); // blinkers show as the giant side arrows, flashing
 }
 setInterval(() => { // blinker watchdog + self-cancel nag
   const i = varg.ind, now = Date.now(); let ch = false;
@@ -3355,6 +3695,7 @@ function vargUI() {
   document.getElementById('vargSoc').textContent =
     varg.state === 'released' ? 'bike free' : '🔋 ' + (varg.soc == null ? '—%' : varg.soc + '%');
   document.getElementById('vargMode').textContent = varg.state === 'on' ? vargModeTxt() : '';
+  renderMain(); // battery may own the main number slot (Stark profile)
   vargStatus.textContent = !on ? 'Off — telemetry pill hidden.'
     : vpSrc ? {
         off: 'Set the VargPilot server URL below, then Connect.',
@@ -3597,7 +3938,7 @@ const LO_SZ = { S: 0.7, M: 1, L: 1.4 }; // legacy letter sizes — sizes are num
 const LO_ELS = {
   orientCtl: { t: 'btn' }, followBtn: { t: 'btn' }, fitBtn: { t: 'btn' }, soundCtl: { t: 'btn' },
   presetMin: { t: 'btn' }, zoomOut: { t: 'btn' }, zoomIn: { t: 'btn' }, presetMax: { t: 'btn' },
-  startFab: { t: 'btn' }, menuBtn: { t: 'btn', noDock: true }, // docking the way into the menu = softlock
+  menuBtn: { t: 'btn', noDock: true }, // docking the way into the menu = softlock
   hudSpeed: { t: 'ro' }, vargPill: { t: 'ro' }, vargModeBig: { t: 'ro' },
   indL: { t: 'ro' }, indBeam: { t: 'ro' }, indR: { t: 'ro' }, // telltales place individually
 };
@@ -3781,9 +4122,9 @@ function loMove(e) {
 function loFindTarget(px, py) {
   const reg = LO_ELS[loDrag.id];
   if (reg.t === 'btn' && !reg.noDock) {
-    // bottom edge springs the ride panel up; once open, anywhere over it docks
-    // (small margin above its top edge so it doesn't flap)
-    const zone = loPanelOpen ? gloveOverlay.getBoundingClientRect().top - 24 : innerHeight - LO_GRID.botRes;
+    // bottom edge springs the grid up; once open, anywhere over the GRID docks
+    // (the overlay is full-screen now, so the grid box is the target, not the overlay)
+    const zone = loPanelOpen ? dockHost.getBoundingClientRect().top - 24 : innerHeight - LO_GRID.botRes;
     if (py > zone) return { kind: 'dock' };
   }
   const cellH = (innerHeight - LO_GRID.topRes - LO_GRID.botRes) / LO_GRID.rows;
