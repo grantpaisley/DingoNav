@@ -15,6 +15,9 @@
     --ok:#38d178; --warn:#ffb020; --bad:#ff4545;
   }
   *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
+  /* Lucide icons: sized by the parent's font-size, coloured by currentColor */
+  svg.ic{width:1em; height:1em; fill:none; stroke:currentColor; stroke-width:2;
+    stroke-linecap:round; stroke-linejoin:round; display:inline-block; vertical-align:-0.12em; flex:none}
   html,body{height:100%; overflow:hidden; background:var(--bg); color:var(--fg);
     font-family:-apple-system,'Segoe UI',Roboto,sans-serif; user-select:none; -webkit-user-select:none}
   #map{position:fixed; inset:0; background:var(--bg)}
@@ -34,6 +37,8 @@
   #hudFill{position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,176,32,.22);
     transition:width .9s linear}
   #hudArrow{font-size:34px; line-height:1; width:40px; text-align:center; position:relative}
+  #hudArrow svg.ic{display:block; margin:0 auto; vertical-align:0}
+  #hudSpeed svg.ic{width:.85em; height:.85em; vertical-align:-0.06em}
   #hudArrow.left{color:var(--warn)} #hudArrow.right{color:var(--warn)}
   #hudBox.commit{border-bottom-color:var(--ok)}
   #hudBox.commit #hudArrow{color:var(--ok)}
@@ -104,8 +109,9 @@
   /* giant turn arrows: up to ~¼ screen, anchored on the side of the turn — readable in
      peripheral vision. Solid = turn coming up; flashing = your indicator is on. One vocabulary. */
   .bigArrow{position:fixed; top:50%; transform:translateY(-50%); z-index:9; display:none;
-    font-size:min(24vw,24vh); line-height:1; font-weight:900; color:rgba(255,176,32,.9);
-    text-shadow:0 4px 30px rgba(0,0,0,.8); pointer-events:none}
+    font-size:min(24vw,24vh); line-height:1; color:rgba(255,176,32,.9);
+    filter:drop-shadow(0 4px 20px rgba(0,0,0,.6)); pointer-events:none}
+  .bigArrow svg.ic{display:block; fill:currentColor; stroke-width:1.2; vertical-align:0}
   #bigArrowL{left:2vw} #bigArrowR{right:2vw}
   .bigArrow.on{display:block}
   .bigArrow.blink{display:block; animation:vgPulse .8s ease-in-out infinite}
@@ -209,7 +215,8 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer}
   .gtile:active{background:#26313d}
   .gtile.active{border-color:var(--accent)}
-  .gtile .gi{font-size:42px; line-height:1}
+  .gtile .gi{font-size:42px; line-height:1; display:flex; align-items:center; justify-content:center; gap:10px}
+  .gtile .gi .gv{font-size:26px; font-weight:800; font-variant-numeric:tabular-nums}
   .gtile .gl{font-size:15px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.04em}
   .gtile.active .gl{color:var(--accent)}
   /* tiles declare where they belong: ride grid, idle grid, or both */
@@ -425,25 +432,59 @@
 </style>
 </head>
 <body>
+<!-- Lucide icons (lucide.dev, ISC licence) inlined as a sprite — same set lucide-react
+     renders, but with zero dependencies and fully offline. Use: <svg class="ic"><use href="#i-name"/></svg> -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="i-menu" viewBox="0 0 24 24"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></symbol>
+  <symbol id="i-locate-fixed" viewBox="0 0 24 24"><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-maximize-2" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-volume-2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></symbol>
+  <symbol id="i-volume-x" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></symbol>
+  <symbol id="i-map-pin" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></symbol>
+  <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+  <symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
+  <symbol id="i-bike" viewBox="0 0 24 24"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="i-circle-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-navigation" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></symbol>
+  <symbol id="i-battery-medium" viewBox="0 0 24 24"><rect width="16" height="10" x="2" y="7" rx="2" ry="2"/><line x1="22" x2="22" y1="11" y2="13"/><line x1="6" x2="6" y1="11" y2="13"/><line x1="10" x2="10" y1="11" y2="13"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+  <symbol id="i-arrow-left-right" viewBox="0 0 24 24"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></symbol>
+  <symbol id="i-corner-up-left" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></symbol>
+  <symbol id="i-corner-up-right" viewBox="0 0 24 24"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h16"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><line x1="12" x2="12" y1="19" y2="5"/><polyline points="5 12 12 5 19 12"/></symbol>
+  <symbol id="i-arrow-big-left" viewBox="0 0 24 24"><path d="M18 15h-6v4l-7-7 7-7v4h6v6z"/></symbol>
+  <symbol id="i-arrow-big-right" viewBox="0 0 24 24"><path d="M6 9h6V5l7 7-7 7v-4H6V9z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+</svg>
 <div id="map"></div>
 
 <div id="hud"><div id="hudBox">
   <div id="hudFill"></div>
-  <div id="hudArrow">↑</div>
+  <div id="hudArrow"><svg class="ic"><use href="#i-arrow-up"/></svg></div>
   <div id="hudType">next turn</div>
   <div id="hudDist">— <small>m</small></div>
 </div></div>
 <div id="hudSpeed">0 <small>km/h</small></div>
-<div id="muteBtn" title="mute / unmute">🔊</div>
-<div id="vargPill" title="Stark Varg — tap to release / reclaim the bike"><span id="vargSoc">🔋 —%</span><span class="vm" id="vargMode"></span></div>
+<div id="muteBtn" title="mute / unmute"><svg class="ic"><use href="#i-volume-2"/></svg></div>
+<div id="vargPill" title="Stark Varg — tap to release / reclaim the bike"><span id="vargSoc"><svg class="ic"><use href="#i-battery-medium"/></svg> —%</span><span class="vm" id="vargMode"></span></div>
 <div id="vargInd">
   <span class="ind blink" id="indL" title="left indicator">◀</span>
   <span class="ind beam" id="indBeam" title="high beam">≣</span>
   <span class="ind blink" id="indR" title="right indicator">▶</span>
 </div>
 <div id="vargModeBig"><span id="vargModeNum">—</span> <small>mode</small></div>
-<div id="bigArrowL" class="bigArrow">⬅</div>
-<div id="bigArrowR" class="bigArrow">➡</div>
+<div id="bigArrowL" class="bigArrow"><svg class="ic"><use href="#i-arrow-big-left"/></svg></div>
+<div id="bigArrowR" class="bigArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div>
 <div id="vargFlash"></div>
 <div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
   <rect width="100%" height="100%" fill="#fff"/>
@@ -458,21 +499,21 @@
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div id="leftCtl" class="ctlgroup">
   <div class="ctl" id="orientCtl" title="north-up / course-up / compass">N</div>
-  <div class="ctl" id="followBtn" title="centre on location">◎</div>
-  <div class="ctl" id="fitBtn" title="fit track">⛶</div>
-  <div class="ctl" id="soundCtl" title="sound / mute">🔊</div>
+  <div class="ctl" id="followBtn" title="centre on location"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
+  <div class="ctl" id="fitBtn" title="fit track"><svg class="ic"><use href="#i-maximize"/></svg></div>
+  <div class="ctl" id="soundCtl" title="sound / mute"><svg class="ic"><use href="#i-volume-2"/></svg></div>
 </div>
 <div id="rightCtl" class="ctlgroup">
   <div class="ctl preset" id="presetMin" data-p="min" title="favourite zoom — tap to jump, hold to set">min</div>
-  <div class="ctl" id="zoomOut">−</div>
-  <div class="ctl" id="zoomIn">+</div>
+  <div class="ctl" id="zoomOut"><svg class="ic"><use href="#i-minus"/></svg></div>
+  <div class="ctl" id="zoomIn"><svg class="ic"><use href="#i-plus"/></svg></div>
   <div class="ctl preset" id="presetMax" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
 </div>
-<div id="dotBtn" title="tap: centre on me · again: whole route · hold: lock">◎</div>
+<div id="dotBtn" title="tap: centre on me · again: whole route · hold: lock"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
 <button id="markTurn" title="drop a turn point here">MARK TURN</button>
 <div id="turnHint">tap a point to remove · tap the map to leave</div>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
-<div id="lockPill" title="centre lock — long-press map to unlock">🔒 locked</div>
+<div id="lockPill" title="centre lock — long-press map to unlock"><svg class="ic"><use href="#i-lock"/></svg> locked</div>
 
 <div id="emptyState">
   <div class="big">DingoNav</div>
@@ -484,19 +525,19 @@
 <!-- ☰ grid: the whole screen becomes fat tiles. data-m picks the grid a tile belongs to
      (ride / idle / both); the grid IS the dock — layout-editor buttons land here too. -->
 <div id="gloveOverlay"><div id="gloveGrid">
-  <div class="gtile" data-m="ride" id="gMute"><div class="gi">🔊</div><div class="gl">Mute</div></div>
-  <div class="gtile" data-m="ride" id="gMark"><div class="gi">📍</div><div class="gl">Mark spot</div></div>
-  <div class="gtile" data-m="ride" id="gZoomMin"><div class="gi">⊕</div><div class="gl">Zoom close</div></div>
-  <div class="gtile" data-m="ride" id="gZoomMax"><div class="gi">⊖</div><div class="gl">Zoom wide</div></div>
-  <div class="gtile" data-m="ride" id="gZoom"><div class="gi">⤢</div><div class="gl">Auto zoom</div></div>
+  <div class="gtile" data-m="ride" id="gMute"><div class="gi"><svg class="ic"><use href="#i-volume-2"/></svg></div><div class="gl">Mute</div></div>
+  <div class="gtile" data-m="ride" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
+  <div class="gtile" data-m="ride" id="gZoomMin"><div class="gi"><svg class="ic"><use href="#i-zoom-in"/></svg></div><div class="gl">Zoom close</div></div>
+  <div class="gtile" data-m="ride" id="gZoomMax"><div class="gi"><svg class="ic"><use href="#i-zoom-out"/></svg></div><div class="gl">Zoom wide</div></div>
+  <div class="gtile" data-m="ride" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
   <div class="gtile" data-m="ride" id="gOrient"><div class="gi">N</div><div class="gl">North up</div></div>
-  <div class="gtile" data-m="ride" id="gNum"><div class="gi">—</div><div class="gl">Swap number</div></div>
-  <div class="gtile" data-m="both" id="gLayers"><div class="gi">🗺</div><div class="gl">Day</div></div>
-  <div class="gtile" data-m="both" id="gStartStop"><div class="gi">▶</div><div class="gl">Start</div></div>
-  <div class="gtile" data-m="idle" id="gTracks"><div class="gi">🗂</div><div class="gl">Tracks</div></div>
-  <div class="gtile" data-m="idle" id="gRideProf"><div class="gi">🏍</div><div class="gl">Profile</div></div>
-  <div class="gtile" data-m="idle" id="gDemo"><div class="gi">▶︎</div><div class="gl">Demo ride</div></div>
-  <div class="gtile" data-m="idle" id="gSettings"><div class="gi">⚙</div><div class="gl">Settings</div></div>
+  <div class="gtile" data-m="ride" id="gNum"><div class="gi"><svg class="ic"><use href="#i-battery-medium"/></svg></div><div class="gl">Swap number</div></div>
+  <div class="gtile" data-m="both" id="gLayers"><div class="gi"><svg class="ic"><use href="#i-layers"/></svg></div><div class="gl">Day</div></div>
+  <div class="gtile" data-m="both" id="gStartStop"><div class="gi"><svg class="ic"><use href="#i-play"/></svg></div><div class="gl">Start</div></div>
+  <div class="gtile" data-m="idle" id="gTracks"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Tracks</div></div>
+  <div class="gtile" data-m="idle" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
+  <div class="gtile" data-m="idle" id="gDemo"><div class="gi"><svg class="ic"><use href="#i-circle-play"/></svg></div><div class="gl">Demo ride</div></div>
+  <div class="gtile" data-m="idle" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
 </div></div>
 
 <div id="progress">
@@ -504,7 +545,7 @@
   <div id="progLabels"><span id="progDone">—</span><span id="progTogo">—</span></div>
 </div>
 
-<div id="menuBtn" title="menu">☰</div>
+<div id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
 <div id="bottom">
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
   <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none">✎</div>
@@ -1273,6 +1314,16 @@ const BEEP = {
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
 };
 function vib(pat) { if (navigator.vibrate) navigator.vibrate(pat); }
+
+/* ---------------- Lucide icon helpers (sprite is inlined at the top of <body>) ---------------- */
+function icSvg(name) { return '<svg class="ic"><use href="#i-' + name + '"/></svg>'; }
+function setIc(el, name) {
+  const u = el.querySelector && el.querySelector('use');
+  if (u) u.setAttribute('href', '#i-' + name); else el.innerHTML = icSvg(name);
+}
+// orientation faces: north stays a letter (clearest), course/compass get their icons
+const ORIENT_ICON = { course: 'navigation', oriented: 'compass' };
+function orientFace(el, o) { if (ORIENT_ICON[o]) setIc(el, ORIENT_ICON[o]); else el.textContent = 'N'; }
 
 /* ---------------- MapLibre setup ---------------- */
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -2068,12 +2119,12 @@ const muteBtn = document.getElementById('muteBtn');
 function setSound(on) {
   S.set.sound = on; saveSet();
   document.getElementById('setSound').checked = on;
-  muteBtn.textContent = on ? '🔊' : '🔇';
+  setIc(muteBtn, on ? 'volume-2' : 'volume-x');
   muteBtn.classList.toggle('muted', !on);
   const sc = document.getElementById('soundCtl');
-  if (sc) { sc.textContent = on ? '🔊' : '🔇'; sc.classList.toggle('off', !on); }
+  if (sc) { setIc(sc, on ? 'volume-2' : 'volume-x'); sc.classList.toggle('off', !on); }
   const gm = document.getElementById('gMute');
-  if (gm) { gm.querySelector('.gi').textContent = on ? '🔊' : '🔇';
+  if (gm) { setIc(gm.querySelector('.gi'), on ? 'volume-2' : 'volume-x');
     gm.querySelector('.gl').textContent = on ? 'Mute' : 'Muted'; gm.classList.toggle('active', !on); }
 }
 muteBtn.onclick = () => { setSound(!S.set.sound); toast(S.set.sound ? 'Sound on' : 'Muted'); };
@@ -2238,7 +2289,7 @@ function applyOrient() {
   northBtn.classList.toggle('oriented', o === 'oriented');
   northInner.textContent = ORIENT_GLYPH[o] || 'N';
   const oc = document.getElementById('orientCtl'); // cluster orientation button mirrors the mode
-  if (oc) { oc.textContent = ORIENT_GLYPH[o] || 'N'; oc.classList.toggle('active', o !== 'north'); }
+  if (oc) { orientFace(oc, o); oc.classList.toggle('active', o !== 'north'); }
   document.getElementById('orientLabel').textContent = (ORIENT_LABEL[o] || 'north up') + (S.autoOrient ? ' · auto' : '');
   if (o === 'oriented') enableCompass(false); else disableCompass();
   if (!mapReady) return;
@@ -2472,7 +2523,7 @@ function setHud(alert, dTo, dir, farM) {
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
   S._turnCue = type; updateBigArrows(); renderMain(); // giant side arrow + countdown in the main slot
-  const icons = { left: '⬅', right: '➡' };
+  const icons = { left: 'corner-up-left', right: 'corner-up-right' };
   const labels = { left: 'turn left', right: 'turn right' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
   const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
@@ -2480,9 +2531,9 @@ function setHud(alert, dTo, dir, farM) {
   // north-up: rotate the arrow to the turn's actual exit bearing; course-up: flat left/right
   if (S.set.orient === 'north' && alert.outBrg != null) {
     const exit = dir > 0 ? alert.outBrg : (alert.inBrg + 180) % 360;
-    arrow.textContent = '⬆'; arrow.className = type; arrow.style.transform = 'rotate(' + exit + 'deg)';
+    setIc(arrow, 'arrow-up'); arrow.className = type; arrow.style.transform = 'rotate(' + exit + 'deg)';
   } else {
-    arrow.textContent = icons[type] || '⬆'; arrow.className = type; arrow.style.transform = '';
+    setIc(arrow, icons[type] || 'arrow-up'); arrow.className = type; arrow.style.transform = '';
   }
   distEl.innerHTML = (dTo >= 995 ? (dTo / 1000).toFixed(1) + ' <small>km</small>' : Math.round(dTo / 5) * 5 + ' <small>m</small>');
   typeEl.textContent = (labels[type] || 'turn') + ontoTxt;
@@ -2656,7 +2707,7 @@ function renderMain() {
   if (cd) { el.classList.remove('low'); el.innerHTML = cdMain(ns); return; }
   if (primaryIsBattery()) {
     el.classList.toggle('low', varg.soc != null && varg.soc <= 15);
-    el.innerHTML = '🔋' + (varg.soc == null ? '—' : varg.soc) + '<small>%</small>';
+    el.innerHTML = icSvg('battery-medium') + ' ' + (varg.soc == null ? '—' : varg.soc) + '<small>%</small>';
   } else {
     el.classList.remove('low');
     el.innerHTML = Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' <small>km/h</small>';
@@ -2895,22 +2946,23 @@ function refreshGlove() {
   const g = id => document.getElementById(id);
   g('gZoom').classList.toggle('active', S.set.autoZoom);
   g('gLayers').querySelector('.gl').textContent = curStyle().label || S.set.mapStyle;
-  g('gMute').querySelector('.gi').textContent = S.set.sound ? '🔊' : '🔇';
+  setIc(g('gMute').querySelector('.gi'), S.set.sound ? 'volume-2' : 'volume-x');
   g('gMute').querySelector('.gl').textContent = S.set.sound ? 'Mute' : 'Muted';
   g('gMute').classList.toggle('active', !S.set.sound);
   const o = effOrient();
-  g('gOrient').querySelector('.gi').textContent = ORIENT_GLYPH[o] || 'N';
+  orientFace(g('gOrient').querySelector('.gi'), o);
   g('gOrient').querySelector('.gl').textContent = ORIENT_LABEL[o] || 'north up';
   // the number NOT owning the edge slot lives here — tap to swap them
-  g('gNum').querySelector('.gi').textContent = primaryIsBattery()
-    ? Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' km/h'
-    : '🔋 ' + (varg.soc == null ? '—' : varg.soc) + '%';
+  g('gNum').querySelector('.gi').innerHTML = primaryIsBattery()
+    ? icSvg('gauge') + '<span class="gv">' + Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' km/h</span>'
+    : icSvg('battery-medium') + '<span class="gv">' + (varg.soc == null ? '—' : varg.soc) + '%</span>';
   const ss = g('gStartStop');
   ss.classList.toggle('stop', S.nav);
   ss.classList.toggle('go', !S.nav);
-  ss.querySelector('.gi').textContent = S.nav ? '■' : '▶';
+  setIc(ss.querySelector('.gi'), S.nav ? 'square' : 'play');
   ss.querySelector('.gl').textContent = S.nav ? 'Stop ride' : 'Start';
   g('gTracks').querySelector('.gl').textContent = trk ? trk.name.slice(0, 16) : 'Tracks';
+  setIc(g('gRideProf').querySelector('.gi'), S.set.rideProfile === 'stark' ? 'zap' : 'bike');
   g('gRideProf').querySelector('.gl').textContent = S.set.rideProfile === 'stark' ? 'Stark' : 'Adventure';
   g('gDemo').classList.toggle('active', !!S.demo);
   g('gDemo').querySelector('.gl').textContent = S.demo ? 'Stop demo' : 'Demo ride';
@@ -3692,8 +3744,8 @@ function vargUI() {
   vargPill.classList.toggle('rel', varg.state === 'released');
   vargPill.classList.toggle('wait', varg.state === 'connecting' || varg.state === 'retry');
   vargPill.classList.toggle('low', varg.soc != null && varg.soc <= 15);
-  document.getElementById('vargSoc').textContent =
-    varg.state === 'released' ? 'bike free' : '🔋 ' + (varg.soc == null ? '—%' : varg.soc + '%');
+  document.getElementById('vargSoc').innerHTML =
+    varg.state === 'released' ? 'bike free' : icSvg('battery-medium') + ' ' + (varg.soc == null ? '—%' : varg.soc + '%');
   document.getElementById('vargMode').textContent = varg.state === 'on' ? vargModeTxt() : '';
   renderMain(); // battery may own the main number slot (Stark profile)
   vargStatus.textContent = !on ? 'Off — telemetry pill hidden.'
