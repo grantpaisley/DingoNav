@@ -611,6 +611,9 @@
     </div>
     <div class="hint">Load .gpx tracks and a heatmap .geojson (exported from <b>Dingo</b>). Everything is stored on this device and works fully offline.</div>
     <div class="hint" id="heatInfo"></div>
+    <h3>Turn points</h3>
+    <div class="hint" id="turnSyncInfo"></div>
+    <div class="btnRow"><button class="btn" id="turnExportBtn"><svg class="ic"><use href="#i-upload"/></svg> Copy turn edits for Dingo</button></div>
   </div>
 
   <div class="tabSec" id="tabGeneral">
@@ -1273,6 +1276,7 @@ async function analyzeRouteInner(trk) {
     trk.wayCls = cls;
     await loadCueOverlay(trk);
     applyCueOverlay(trk);
+    retryPendingEdits(); // pack/ride turn edits that arrived before this track was ready
   }
 }
 
@@ -2855,7 +2859,7 @@ function trackPassesNear(trk, x, y, R) {
   if (cl) idxs.push(cl.best);
   return idxs;
 }
-function addTurnPointAt(x, y) {
+function addTurnPointAt(x, y, fromRemote) {
   let n = 0;
   for (const t of S.tracks) {
     if (!t.baseCues || !t.overlay) continue; // only analysed tracks with their overlay loaded
@@ -2871,12 +2875,12 @@ function addTurnPointAt(x, y) {
     if (ch) { n += ch; saveCueOverlay(t); applyCueOverlay(t); }
   }
   if (n) {
-    const [la, lo] = toLL(x, y); queueTurnEdit('add', la, lo);
+    if (!fromRemote) { const [la, lo] = toLL(x, y); queueTurnEdit('add', la, lo); }
     updateBottomBar(); refreshMapData(); drawProgress(true);
   }
   return n;
 }
-function removeTurnPointAt(x, y) {
+function removeTurnPointAt(x, y, fromRemote) {
   const R = 25; let n = 0;
   for (const t of S.tracks) {
     if (!t.baseCues || !t.overlay) continue;
@@ -2891,17 +2895,96 @@ function removeTurnPointAt(x, y) {
     if (ch) { n += ch; saveCueOverlay(t); applyCueOverlay(t); }
   }
   if (n) {
-    const [la, lo] = toLL(x, y); queueTurnEdit('remove', la, lo);
+    if (!fromRemote) { const [la, lo] = toLL(x, y); queueTurnEdit('remove', la, lo); }
     updateBottomBar(); refreshMapData(); drawProgress(true);
   }
   return n;
 }
-function queueTurnEdit(op, lat, lon) { // pack-sync outbox — the transport lands with group sync
+
+/* ---------------- turn-point pack sync ----------------
+   Outbox: every local add/remove/spot is a contribution record — published live to the
+   ride topic (the ride name defaults to the pack slug, so everyone riding the same pack
+   shares a channel), and exportable as JSON for Dingo to merge into the pack. Inbox:
+   turn messages from the topic, or a `turnEdits` array in a loaded bundle, apply by
+   geometry to every analysed track; edits landing before analysis wait in a pending
+   list and retry after each track's cues arrive. A seen-id set makes application
+   idempotent — our own WS echo, a bundle replaying an edit we already made, or the
+   same edit from two riders all collapse to one change. */
+const turnSync = { outbox: [], pending: [], seen: new Set() };
+try { turnSync.outbox = JSON.parse(localStorage.getItem('dingonav-turnq') || '[]'); } catch (e) {}
+try { turnSync.pending = JSON.parse(localStorage.getItem('dingonav-turnpend') || '[]'); } catch (e) {}
+try { for (const id of JSON.parse(localStorage.getItem('dingonav-turnseen') || '[]')) turnSync.seen.add(id); } catch (e) {}
+function turnEditId(e) {
+  const s = e.op + '|' + e.la + '|' + e.lo + '|' + e.t;
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+for (const e of turnSync.outbox) if (!e.id) { e.id = turnEditId(e); turnSync.seen.add(e.id); } // v1 entries
+function saveTurnSync() {
   try {
-    const q = JSON.parse(localStorage.getItem('dingonav-turnq') || '[]');
-    q.push({ op, la: +lat.toFixed(6), lo: +lon.toFixed(6), t: Date.now() });
-    localStorage.setItem('dingonav-turnq', JSON.stringify(q.slice(-500)));
+    localStorage.setItem('dingonav-turnq', JSON.stringify(turnSync.outbox.slice(-500)));
+    localStorage.setItem('dingonav-turnpend', JSON.stringify(turnSync.pending.slice(-200)));
+    localStorage.setItem('dingonav-turnseen', JSON.stringify([...turnSync.seen].slice(-1000)));
   } catch (e) {}
+  turnSyncInfo();
+}
+function queueTurnEdit(op, lat, lon) {
+  const e = { op, la: +lat.toFixed(6), lo: +lon.toFixed(6), t: Date.now(), by: S.set.name || 'rider' };
+  e.id = turnEditId(e);
+  turnSync.seen.add(e.id); // the topic echoes our own message back — never re-apply it
+  turnSync.outbox.push(e);
+  saveTurnSync();
+  publishTurnEdits();
+}
+function publishTurnEdits() { // flush unsent contributions to the ride topic
+  const topic = friendTopic();
+  if (!topic || !navigator.onLine) return;
+  for (const e of turnSync.outbox) {
+    if (e.sent) continue;
+    fetch('https://ntfy.sh/' + topic, { method: 'POST',
+      body: JSON.stringify({ k: 'turn', id: e.id, op: e.op, la: e.la, lo: e.lo, t: e.t, by: e.by }),
+      keepalive: true })
+      .then(r => { if (r.ok) { e.sent = 1; saveTurnSync(); } })
+      .catch(() => {}); // offline in the bush — stays queued, flushes on the next connect
+  }
+}
+function applyRemoteEdit(e, quiet) {
+  if (!e || !e.op || e.la == null || e.lo == null) return;
+  if (!e.id) e.id = turnEditId(e);
+  if (turnSync.seen.has(e.id)) return;
+  turnSync.seen.add(e.id);
+  if (e.op === 'spot') {
+    spots.push({ la: e.la, lo: e.lo, t: e.t || Date.now() });
+    localStorage.setItem('dingonav-spots', JSON.stringify(spots));
+    refreshSpots(); saveTurnSync();
+    if (!quiet) toast('Spot shared by ' + (e.by || 'a rider'));
+    return;
+  }
+  if (!REF) { turnSync.pending.push(e); saveTurnSync(); return; } // nothing loaded yet
+  const [x, y] = toXY(e.la, e.lo);
+  const n = e.op === 'add' ? addTurnPointAt(x, y, true) : removeTurnPointAt(x, y, true);
+  if (!n) turnSync.pending.push(e); // no analysed track there yet — retries after analysis
+  else if (!quiet) toast((e.op === 'add' ? 'Turn point added by ' : 'Turn point removed by ') + (e.by || 'a rider'));
+  saveTurnSync();
+}
+function retryPendingEdits() { // runs after each track's cue analysis lands
+  if (!turnSync.pending.length || !REF) return;
+  const list = turnSync.pending; turnSync.pending = [];
+  for (const e of list) {
+    const [x, y] = toXY(e.la, e.lo);
+    const n = e.op === 'add' ? addTurnPointAt(x, y, true) : removeTurnPointAt(x, y, true);
+    if (!n) turnSync.pending.push(e);
+  }
+  saveTurnSync();
+}
+function turnSyncInfo() {
+  const el = document.getElementById('turnSyncInfo'); if (!el) return;
+  const n = turnSync.outbox.length, unsent = turnSync.outbox.filter(e => !e.sent).length;
+  el.textContent = n
+    ? n + ' turn-point edit' + (n === 1 ? '' : 's') + ' queued for the pack'
+      + (unsent ? ' (' + unsent + ' not yet shared with the ride group)' : ' — all shared live')
+      + (turnSync.pending.length ? ' · ' + turnSync.pending.length + ' incoming waiting for analysis' : '')
+    : 'Turn points marked while riding queue here — shared live with the ride group, and copyable into Dingo to update the pack.';
 }
 
 /* ---------------- marked spots: hazard / camp / water — MARK SPOT in the ☰ grid ---------------- */
@@ -3059,17 +3142,28 @@ document.getElementById('testBeep').onclick = () => { audio(); BEEP.turn(); };
 
 /* ---------------- friends via ntfy.sh ---------------- */
 let friendWS = null, friendPub = null, friendBackoff = 2000;
+function friendTopic() {
+  const code = (S.set.code || '').trim(); if (!code) return '';
+  return 'dingonav-' + code.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+}
+// The socket stays up whenever a ride name is set — turn-point edits flow while
+// planning at home too. POSITIONS only publish while actually navigating.
 function startFriends() {
-  const code = (S.set.code || '').trim(); if (!code) return;
-  const topic = 'dingonav-' + code.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const topic = friendTopic();
+  if (!topic) {
+    if (friendWS) { friendWS.onclose = null; friendWS.close(); friendWS = null; }
+    if (friendPub) { clearInterval(friendPub); friendPub = null; }
+    setFriendStatus('off — enter a shared ride name to see friends');
+    return;
+  }
   connectFriendWS(topic);
   if (friendPub) clearInterval(friendPub);
   friendPub = setInterval(() => {
-    if (!S.pos || !navigator.onLine) return;
+    if (!S.nav || !S.pos || !navigator.onLine) return;
     const [lat, lon] = toLL(S.pos.x, S.pos.y);
     fetch('https://ntfy.sh/' + topic, { method: 'POST', body: JSON.stringify({ n: S.set.name || 'rider', la: +lat.toFixed(5), lo: +lon.toFixed(5) }), keepalive: true }).catch(() => {});
   }, 20000);
-  setFriendStatus('sharing as "' + (S.set.name || 'rider') + '" on ' + topic);
+  setFriendStatus('on ' + topic + ' as "' + (S.set.name || 'rider') + '" — position shares while riding; turn points share live');
 }
 function connectFriendWS(topic) {
   if (friendWS) { friendWS.onclose = null; friendWS.close(); }
@@ -3080,13 +3174,14 @@ function connectFriendWS(topic) {
         const m = JSON.parse(ev.data);
         if (m.event !== 'message') return;
         const d = JSON.parse(m.message);
+        if (d.k === 'turn') { applyRemoteEdit(d); return; } // a rider's turn-point edit
         if (!d.n || d.n === S.set.name) return;
         S.friends.set(d.n, { lat: d.la, lon: d.lo, t: Date.now() });
         refreshFriends();
       } catch (e) {}
     };
-    friendWS.onopen = () => { friendBackoff = 2000; };
-    friendWS.onclose = () => { if (S.nav && S.set.code) setTimeout(() => connectFriendWS(topic), friendBackoff = Math.min(60000, friendBackoff * 2)); };
+    friendWS.onopen = () => { friendBackoff = 2000; publishTurnEdits(); }; // flush the outbox on every (re)connect
+    friendWS.onclose = () => { if (S.set.code) setTimeout(() => connectFriendWS(topic), friendBackoff = Math.min(60000, friendBackoff * 2)); };
   } catch (e) {}
 }
 function setFriendStatus(s) { document.getElementById('friendStatus').textContent = s; }
@@ -3116,6 +3211,9 @@ async function addFile(name, text) {
         try { await addFile(t.name, t.gpx); nT++; }
         catch (e) { errs++; console.warn('bundle track failed', t.name, e); }
       }
+      // pack-carried turn edits: replay other riders' contributions on this download
+      // (idempotent — the seen-id set skips anything this device already has)
+      if (Array.isArray(obj.turnEdits)) for (const e of obj.turnEdits) applyRemoteEdit(e, true);
       // v2 meta: the pack's display name + free-text notes (surfaced on load)
       return { bundle: true, tracks: nT, heatmap: !!obj.heatmap, errs,
                bundleName: obj.name || '', description: obj.description || '' };
@@ -3986,9 +4084,19 @@ for (const b of document.querySelectorAll('#edgesSeg button'))
 applyEdges();
 const nameEl = document.getElementById('myName'), codeEl = document.getElementById('rideCode'), emailEl = document.getElementById('myEmail');
 nameEl.value = S.set.name; codeEl.value = S.set.code; emailEl.value = S.set.email || '';
+/* turn-point contribution export: the whole outbox as JSON — paste into Dingo to bake
+   the edits into the pack, so every future download carries them */
+document.getElementById('turnExportBtn').onclick = async () => {
+  if (!turnSync.outbox.length) { toast('No turn-point edits queued yet'); return; }
+  const txt = JSON.stringify({ turnEdits: turnSync.outbox.map(({ sent, ...e }) => e) }, null, 1);
+  console.log('[turnsync]', txt); // clipboard is flaky in webviews — always logged too
+  try { await navigator.clipboard.writeText(txt); toast('Turn edits copied — paste into Dingo to update the pack'); }
+  catch (e) { toast('Clipboard blocked — turn edits logged to the console'); }
+};
+turnSyncInfo();
 nameEl.onchange = () => { S.set.name = nameEl.value.trim(); saveSet(); };
 emailEl.onchange = () => { S.set.email = emailEl.value.trim(); saveSet(); };
-codeEl.onchange = () => { S.set.code = codeEl.value.trim(); saveSet(); if (S.nav) startFriends(); };
+codeEl.onchange = () => { S.set.code = codeEl.value.trim(); saveSet(); startFriends(); };
 
 /* ---------------- editable screen layout (edit mode) ----------------
    Design tool (Settings → General → Edit screen layout): the floating chrome
@@ -4421,6 +4529,7 @@ async function boot() {
     analyzeRoute(S.tracks[S.sel]).then(() => { updateBottomBar(); refreshMapData(); });
   fitSelected();
   if (!S.demo) startGPS(); // show the location dot from the start, not only while navigating
+  startFriends(); // ride-name socket up from boot: turn-point edits sync while planning too
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
