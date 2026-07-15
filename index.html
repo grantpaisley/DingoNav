@@ -465,6 +465,12 @@
   <symbol id="i-arrow-big-left" viewBox="0 0 24 24"><path d="M18 15h-6v4l-7-7 7-7v4h6v6z"/></symbol>
   <symbol id="i-arrow-big-right" viewBox="0 0 24 24"><path d="M6 9h6V5l7 7-7 7v-4H6V9z"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></symbol>
+  <symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/></symbol>
 </svg>
 <div id="map"></div>
 
@@ -548,23 +554,23 @@
 <div id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
 <div id="bottom">
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
-  <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none">✎</div>
+  <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none"><svg class="ic"><use href="#i-pencil"/></svg></div>
 </div>
 
 <!-- edit-mode chrome: inert unless body.editing (see editable-layout design doc) -->
 <div id="editReserve">turn strip zone — kept clear</div>
 <div id="slotDots"></div>
 <div id="editCtls">
-  <button class="edbtn" id="editExport">⇪ Export</button>
-  <button class="edbtn" id="editReset">↺ Reset</button>
-  <button class="edbtn" id="editDone">✓ Done</button>
+  <button class="edbtn" id="editExport"><svg class="ic"><use href="#i-upload"/></svg> Export</button>
+  <button class="edbtn" id="editReset"><svg class="ic"><use href="#i-rotate-ccw"/></svg> Reset</button>
+  <button class="edbtn" id="editDone"><svg class="ic"><use href="#i-check"/></svg> Done</button>
 </div>
 
 <div id="shade"></div>
 <div id="panel">
   <div id="panelNav">
     <button id="navBtn" disabled>START</button>
-    <div class="ctl" id="revBtn" title="reverse direction" style="display:none">⇄</div>
+    <div class="ctl" id="revBtn" title="reverse direction" style="display:none"><svg class="ic"><use href="#i-arrow-left-right"/></svg></div>
   </div>
   <div class="row" id="styleRow"><label>Map layers</label><span class="seg" id="styleSeg">
     <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button><button data-s="satellite">Sat</button></span></div>
@@ -615,12 +621,12 @@
     <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
     <div class="row"><label>Control buttons on</label><span class="seg" id="edgesSeg">
       <button data-e="sides">Left &amp; right</button><button data-e="tb">Top &amp; bottom</button></span></div>
-    <div class="btnRow"><button class="btn" id="layoutEditBtn">✥ Edit screen layout</button></div>
+    <div class="btnRow"><button class="btn" id="layoutEditBtn"><svg class="ic"><use href="#i-move"/></svg> Edit screen layout</button></div>
     <div class="hint">Drag buttons and readouts anywhere; drag the cyan corner dot on a readout to
       resize it; drop a button on the bottom tray to dock it in this menu. Saved separately for
       portrait and landscape.</div>
 
-    <div class="btnRow"><button class="btn" id="fsBtn">⛶ Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
+    <div class="btnRow"><button class="btn" id="fsBtn"><svg class="ic"><use href="#i-maximize"/></svg> Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
 
     <div class="row"><label>Show advanced tab</label><span class="sw"><input type="checkbox" id="setShowAdv"><span></span></span></div>
@@ -639,7 +645,7 @@
     <div class="row"><label>Steepness colouring</label><span class="sw"><input type="checkbox" id="setSteep"><span></span></span></div>
     <div class="row"><label>Road-surface patterns</label><span class="sw"><input type="checkbox" id="setSurf"><span></span></span></div>
     <div class="row"><label>Backtrack trail</label><span class="sw"><input type="checkbox" id="setTrail"><span></span></span></div>
-    <div class="btnRow"><button class="btn" id="demoBtn">▶ Demo ride (simulate GPS)</button><button class="btn" id="testBeep">Test beep</button></div>
+    <div class="btnRow"><button class="btn" id="demoBtn"><svg class="ic"><use href="#i-circle-play"/></svg> Demo ride (simulate GPS)</button><button class="btn" id="testBeep"><svg class="ic"><use href="#i-volume-2"/></svg> Test beep</button></div>
     <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
   </div>
 
@@ -3276,7 +3282,7 @@ function refreshTrackList() {
     const row = document.createElement('div');
     row.className = 'trk' + (i === S.sel ? ' sel' : '');
     row.innerHTML = `<span class="dot" style="background:${i === S.sel ? 'var(--accent)' : '#5a6a78'}"></span>
-      <span class="nm">${t.name}</span><span class="len">${(t.lengthM / 1000).toFixed(1)} km</span><span class="del">✕</span>`;
+      <span class="nm">${t.name}</span><span class="len">${(t.lengthM / 1000).toFixed(1)} km</span><span class="del"><svg class="ic"><use href="#i-x"/></svg></span>`;
     row.querySelector('.del').onclick = async ev => {
       ev.stopPropagation();
       await idb.del(t.id);
@@ -3936,12 +3942,12 @@ function buildAdv() {
     row.className = 'row';
     const v = advGet(r);
     if (r.col) {
-      row.innerHTML = `<label>${r.l}</label><input type="color" value="${v}"><span class="advRst" title="reset">↺</span>`;
+      row.innerHTML = `<label>${r.l}</label><input type="color" value="${v}"><span class="advRst" title="reset"><svg class="ic"><use href="#i-rotate-ccw"/></svg></span>`;
       const inp = row.querySelector('input');
       inp.oninput = () => advSet(r, inp.value);
     } else {
       row.innerHTML = `<label>${r.l}</label><input type="range" min="${r.min}" max="${r.max}" step="${r.step}" value="${v}">
-        <span class="advVal">${v}</span><span class="advRst" title="reset">↺</span>`;
+        <span class="advVal">${v}</span><span class="advRst" title="reset"><svg class="ic"><use href="#i-rotate-ccw"/></svg></span>`;
       const inp = row.querySelector('input'), val = row.querySelector('.advVal');
       inp.oninput = () => { const n = +inp.value; val.textContent = n; advSet(r, n); };
     }
