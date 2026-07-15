@@ -43,6 +43,11 @@ all else is translucent overlay.
 - **Giant turn arrow**: solid yellow arrow up to ~¼ screen, anchored on the side of the
   turn (right arrow hugs right edge, left hugs left). Readable in peripheral vision.
   **The same symbol flashing = indicator on** (from telemetry). One visual vocabulary.
+- **Turn countdown borrows the main number slot**: on turn approach the profile's
+  primary number (speed on adventure, battery on Stark) is temporarily replaced by
+  distance-or-seconds to the intersection (existing setting, incl. freeze-at-last-value
+  when stopped), styled in turn amber to match the arrow so it can't be misread as
+  speed/battery. Primary number returns after the turn. Zero new resident elements.
 
 **Interactive elements (exactly three):**
 
