@@ -29,6 +29,10 @@ Keynote/Final Cut pattern; the preview is the point.
   it should feel native next to Finder, not like the PWA.
 - **Segmented control floating top-centre**: Day / Trail / Dark / Sat. Re-skins the whole
   scene instantly; flicking through all four is how a theme is audited.
+- **Resolution switcher** beside it: **Full window / 1440×720 / 720×1440 / 720×720** —
+  the dash's landscape, portrait, and half-screen modes. The preview letterboxes to the
+  chosen frame at ride zoom (scaled to fit, true aspect), so a theme is judged on the
+  pixels the Varg dash actually gets.
 - **▶ Ride** button bottom-left of the preview (ride simulation, below).
 
 ## The fake map — one scene, four skins
@@ -125,8 +129,9 @@ fits the app's DNA:
 ▶ animates the position arrow along the staged route (~20 s loop, rAF + SVG transforms):
 ridden portion dims live, breadcrumbs drop, chevrons/turn accent work ahead, giant arrow
 flashes at the switchback. All controls apply mid-flight — legibility is judged **in
-motion**, not as a poster. Speed 1×/3× + pause. (Deferred, cut from scope: dash-crop
-toggle, glare simulation, extra-clutter toggle.)
+motion**, not as a poster. Speed 1×/3× + pause. Works combined with the
+resolution switcher — riding at 720×720 is the harshest legibility test. (Deferred, cut
+from scope: glare simulation, extra-clutter toggle.)
 
 ## Handoff
 
