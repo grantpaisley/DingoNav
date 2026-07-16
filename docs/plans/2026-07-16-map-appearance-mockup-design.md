@@ -35,7 +35,16 @@ Keynote/Final Cut pattern; the preview is the point.
   pixels the Varg dash actually gets.
 - **▶ Ride** button bottom-left of the preview (ride simulation, below).
 
-## The fake map — one scene, four skins
+## The map — one scene, four skins
+
+> **Update 2026-07-16:** the hand-authored scene didn't hold up aesthetically; the scene
+> is now **real data** baked from a `.dingonav` bundle ("Palm Test": two Palm Dale loop
+> recordings + heat + basemap/hillshade PMTiles + satellite tiles) by
+> `mockups/tools/extract-bundle.py` → `palm-data.js` + `palm-sat.jpg` + `palm-hill.png`.
+> Real route surfaces (matched against OSM ways), real grades (GPX elevation), real cues
+> (sharpest turns), real heat density, real Esri imagery for Sat, DEM-derived hillshade.
+> Full-window mode gained drag-pan / wheel-zoom / double-click-reset. Any bundle can
+> re-stage the lab. The rest of this section describes the staging intent it replaced.
 
 Hand-authored **SVG** scene (restyle = CSS variable swap, no redraw code) mimicking each
 basemap style:

@@ -1,11 +1,14 @@
 <!doctype html>
 <!-- DingoNav — Map Appearance Lab
      Standalone style mock-up (design: docs/plans/2026-07-16-map-appearance-mockup-design.md).
-     One file, zero dependencies, fully offline — double-click to open. Never ships in the PWA.
-     One hand-authored SVG scene, four skins (Day/Trail/Dark/Sat) via CSS variables; a Mac-style
-     inspector tunes route/heat/basemap/chrome; themes round-trip as JSON via Copy/Paste.
-     A resolution switcher letterboxes the preview to the dash panel (1440×720 / 720×1440 /
-     720×720) at ride zoom, camera tracking the position arrow. -->
+     Fully offline, zero dependencies — double-click to open. Never ships in the PWA.
+     The scene is REAL DATA baked from a .dingonav bundle by tools/extract-bundle.py:
+     palm-data.js (tracks, heat, basemap vectors, labels, real grades/cues) + palm-sat.jpg.
+     Four skins (Day/Trail/Dark/Sat) via CSS variables; a Mac-style inspector tunes
+     route/heat/basemap/chrome; themes round-trip as JSON via Copy/Paste. A resolution
+     switcher letterboxes the preview to the dash panel (1440×720 / 720×1440 / 720×720)
+     at ride zoom, camera tracking the position arrow. Full mode: drag to pan, wheel to
+     zoom, double-click to reset. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -18,33 +21,34 @@
     --btn-op:.4; --btn-size:1; --readout-size:1; --turn-accent:#ffb020;
     --bri-ground:1; --bri-road:1;
     /* ---- skin: Day (light paper bushland) ---- */
-    --m-ground:#f2efe7; --m-park:#dae6c4; --m-bush:#c8dcb0; --m-clear:#ece3cc;
-    --m-water:#a8cbd9; --m-water-line:#8fb9cc; --m-bldg:#ddd6c8;
-    --m-road-cas:#c9c2b4; --m-road:#ffffff; --m-road-minor:#faf6ec;
+    --m-ground:#f2efe7; --m-park:#dfe8ca; --m-bush:#c8dcb0; --m-clear:#ece3cc;
+    --m-urban:#e9e3d6; --m-water:#a8cbd9; --m-water-line:#8fb9cc; --m-bldg:#d5cdbc;
+    --m-road-cas:#c9c2b4; --m-road:#ffffff; --m-road-minor:#faf6ec; --m-rail:#b5aca0;
     --m-label:#6b6357; --m-label-halo:rgba(255,255,255,.85);
-    --hill-op:.16; --sat-show:none;
+    --hill-op:.5; --sat-show:none; --base-op:1;
     --chrome-plate:rgba(20,26,32,.62); --chrome-text:#fff;
   }
   body[data-style="trail"]{
-    --m-ground:#f7f4ea; --m-park:#c6dda6; --m-bush:#aacb87; --m-clear:#eadfc0;
-    --m-water:#9cc3d4; --m-water-line:#84b2c8; --m-bldg:#d8d3ca;
-    --m-road-cas:#a89f8c; --m-road:#ffffff; --m-road-minor:#fffdf6;
-    --m-label:#4e4738; --hill-op:.1;
+    --m-ground:#f7f4ea; --m-park:#cfe0b2; --m-bush:#aacb87; --m-clear:#eadfc0;
+    --m-urban:#eae4d8; --m-water:#9cc3d4; --m-water-line:#84b2c8; --m-bldg:#d0c9bd;
+    --m-road-cas:#a89f8c; --m-road:#ffffff; --m-road-minor:#fffdf6; --m-rail:#a39a8d;
+    --m-label:#4e4738; --hill-op:.3;
   }
   body[data-style="dark"]{
     /* deliberately murky — the Basemap knobs exist to fix exactly this */
     --m-ground:#0e1216; --m-park:#101a12; --m-bush:#0d1710; --m-clear:#14181c;
-    --m-water:#0c1e2a; --m-water-line:#163243; --m-bldg:#1a2027;
-    --m-road-cas:#1c242e; --m-road:#29323d; --m-road-minor:#202932;
+    --m-urban:#12171d; --m-water:#0c1e2a; --m-water-line:#163243; --m-bldg:#1a2027;
+    --m-road-cas:#1c242e; --m-road:#29323d; --m-road-minor:#202932; --m-rail:#222b35;
     --m-label:#3a4754; --m-label-halo:rgba(0,0,0,.6);
     --hill-op:0;
   }
   body[data-style="sat"]{
-    --m-ground:#46503c; --m-park:#35452e; --m-bush:#2c3a26; --m-clear:#857a58;
-    --m-water:#16303f; --m-water-line:#1d4256; --m-bldg:#6a6353;
-    --m-road-cas:rgba(0,0,0,.35); --m-road:#d8d2c2; --m-road-minor:#b8b1a0;
+    --m-ground:#46503c; --m-park:transparent; --m-bush:transparent; --m-clear:transparent;
+    --m-urban:transparent; --m-water:rgba(22,48,63,.5); --m-water-line:#7fb7d4; --m-bldg:transparent;
+    --m-road-cas:rgba(0,0,0,.4); --m-road:rgba(226,220,202,.85); --m-road-minor:rgba(200,193,175,.5);
+    --m-rail:rgba(210,205,190,.4);
     --m-label:#ffffff; --m-label-halo:rgba(0,0,0,.75);
-    --hill-op:.22; --sat-show:block;
+    --hill-op:0; --sat-show:inline;
   }
 
   *{box-sizing:border-box; margin:0}
@@ -54,7 +58,7 @@
        user-select:none}
 
   /* ================= map stage ================= */
-  #stage{position:fixed; inset:0}
+  #stage{position:fixed; inset:0; background:#111}
   #frame{position:absolute; inset:0; overflow:hidden}
   body.framed #stage{background:radial-gradient(1200px 700px at 40% 42%, #17191d, #0a0b0d)}
   body.framed #frame{border-radius:14px; background:#111;
@@ -63,18 +67,22 @@
        color:rgba(255,255,255,.42); font-size:11.5px; font-weight:600; letter-spacing:.05em;
        pointer-events:none}
   body.framed #frameCap{display:block}
-  #scene{width:100%; height:100%; display:block}
-  #gSat{display:var(--sat-show)}
+  #scene{width:100%; height:100%; display:block; cursor:grab}
+  #gCrumbs circle{r:var(--crumb-r, 3px)}
+  #scene.panning{cursor:grabbing}
+  body.framed #scene{cursor:default}
+  #satImg{display:var(--sat-show)}
+  #hillImg{opacity:var(--hill-op); mix-blend-mode:soft-light; pointer-events:none}
   #gGround{filter:brightness(var(--bri-ground))}
   #gWays{filter:brightness(var(--bri-road))}
   .lbl{font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-       fill:var(--m-label); paint-order:stroke; stroke:var(--m-label-halo); stroke-width:3px;
+       fill:var(--m-label); paint-order:stroke; stroke:var(--m-label-halo);
        stroke-linejoin:round}
-  .lbl-area{font-size:21px; font-weight:600; letter-spacing:.55em; opacity:.75}
-  .lbl-road{font-size:13px; font-weight:600; letter-spacing:.12em}
-  .lbl-water{font-size:13.5px; font-style:italic; fill:var(--m-water-line); font-weight:500}
-  .lbl-town{font-size:17px; font-weight:700; letter-spacing:.08em}
-  .lbl-peak{font-size:12.5px; font-weight:600}
+  .lbl-area{font-weight:600; letter-spacing:.5em; opacity:.8}
+  .lbl-road{font-weight:600; letter-spacing:.1em}
+  .lbl-water{font-style:italic; fill:var(--m-water-line); font-weight:500}
+  .lbl-town{font-weight:700; letter-spacing:.08em}
+  .lbl-peak{font-weight:600}
 
   /* ================= floating chrome ================= */
   #topBar{position:fixed; top:14px; left:0; right:360px; z-index:30; display:flex;
@@ -290,156 +298,55 @@
 
 <div id="stage">
 <div id="frame">
-<svg id="scene" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-label="Map preview">
+<svg id="scene" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" aria-label="Map preview">
   <defs>
-    <filter id="fHill" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="14"/>
-    </filter>
-    <filter id="fSatNoise" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.006 0.009" numOctaves="4" seed="7" result="n"/>
-      <feColorMatrix in="n" type="matrix"
-        values="0 0 0 0 0.15  0 0 0 0 0.19  0 0 0 0 0.10  0 0 0 0.85 0"/>
-    </filter>
-    <filter id="fSatGrain" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="31" result="n"/>
-      <feColorMatrix in="n" type="matrix"
-        values="0 0 0 0 0.85  0 0 0 0 0.82  0 0 0 0 0.68  0 0 0 0.16 0"/>
-    </filter>
-    <!-- the route, once — measured for sim/chevrons, referenced by knockout masks -->
-    <path id="pFull" fill="none" d="M 150,880 C 240,861 335,845 430,824 C 472,806 506,772 521,722
-      C 536,672 562,618 600,560 C 630,552 652,546 655,532 C 658,518 592,520 589,505
-      C 586,490 660,492 663,477 C 666,462 594,464 591,449 C 588,434 662,436 668,420
-      C 675,396 689,348 700,300 C 758,272 858,258 958,258 C 1058,258 1122,262 1170,272
-      C 1262,292 1332,340 1352,420 C 1369,485 1332,560 1290,612"/>
+    <!-- the route, once — measured for sim/chevrons, referenced by knockout masks.
+         All geometry is baked from the bundle by buildScene() at boot. -->
+    <path id="pFull" fill="none"/>
     <!-- heat geometry, once; styled here, drawn twice via <use> (under-route + knocked-out) -->
-    <g id="heatGeom" fill="none" stroke-linecap="round">
-      <!-- own: rode the fork trail AND the fire road (shares the route corridor) -->
-      <path class="h-own" d="M 600,560 C 668,566 738,548 806,552 C 884,557 946,542 1016,562
-        C 1076,578 1120,600 1160,632"/>
-      <path class="h-own" d="M 700,300 C 758,272 858,258 958,258 C 1058,258 1122,262 1170,272
-        C 1230,286 1262,220 1302,182"/>
-      <path class="h-own" d="M 560,600 C 580,585 588,572 600,560 C 612,548 632,542 650,536"/>
-      <!-- others: the highway, a crossing, and a strand into the junction -->
-      <path class="h-other" d="M 40,940 C 240,905 420,912 610,930 C 800,948 1010,918 1200,940
-        C 1320,953 1450,940 1580,955"/>
-      <path class="h-other" d="M 380,700 C 450,690 500,718 521,722 C 560,728 600,700 660,690
-        C 720,682 762,640 792,600"/>
-      <path class="h-other" d="M 478,612 C 518,590 560,574 600,560 C 640,548 662,540 688,520"/>
-      <!-- planned: heads NW from the junction + a wee loop south of it -->
-      <path class="h-plan" d="M 600,560 C 545,505 480,468 405,432 C 330,398 285,355 255,300
-        C 230,255 235,190 260,140"/>
-      <path class="h-plan" d="M 600,560 C 620,600 590,640 550,640 C 510,640 500,600 530,580
-        C 550,566 575,562 600,560"/>
-    </g>
-    <!-- road geometry lives here unstroked: a path's own stroke can't be overridden per
-         <use>, so casing + core are two <use> instances stroked individually -->
-    <path id="pHwy" fill="none"
-      d="M 40,940 C 240,905 420,912 610,930 C 800,948 1010,918 1200,940 C 1320,953 1450,940 1580,955"/>
-    <path id="pRdMinor" fill="none"
-      d="M 60,896 C 100,890 125,885 150,880 C 240,861 335,845 430,824 C 530,808 640,812 740,830
-      C 850,848 960,838 1060,856"/>
-    <mask id="mKnock" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1000">
-      <rect width="1600" height="1000" fill="#fff"/>
+    <g id="heatGeom" fill="none" stroke-linecap="round"></g>
+    <mask id="mKnock" maskUnits="userSpaceOnUse">
+      <rect id="knockRect" fill="#fff"/>
       <use href="#pFull" id="knockStroke" stroke="#000" stroke-width="36" stroke-linecap="round"/>
     </mask>
-    <mask id="mUnder" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1000">
-      <rect width="1600" height="1000" fill="#000"/>
+    <mask id="mUnder" maskUnits="userSpaceOnUse">
+      <rect id="underRect" fill="#000"/>
       <use href="#pFull" id="underStroke" stroke="#fff" stroke-width="36" stroke-linecap="round"/>
     </mask>
+    <!-- basemap tiles carry buffer geometry past the scene rect; clip it off -->
+    <clipPath id="sceneClip"><rect id="clipRect"/></clipPath>
   </defs>
 
-  <!-- ground + landcover + water (Ground brightness knob) -->
-  <g id="gGround">
-    <rect width="1600" height="1000" fill="var(--m-ground)"/>
-    <g id="gSat">
-      <rect width="1600" height="1000" filter="url(#fSatNoise)"/>
-      <rect width="1600" height="1000" filter="url(#fSatGrain)"/>
-    </g>
-    <path fill="var(--m-park)" d="M -20,80 C 300,20 700,60 900,140 C 1050,210 1000,420 1120,520
-      C 1230,610 1180,760 1050,800 C 850,860 500,830 260,860 C 60,880 -20,760 -20,600 Z"/>
-    <path fill="var(--m-bush)" d="M 480,300 C 600,240 760,240 840,320 C 900,390 860,520 760,560
-      C 660,600 520,560 480,470 Z"/>
-    <path fill="var(--m-bush)" d="M 150,180 C 260,140 380,160 420,230 C 460,300 400,380 300,390
-      C 200,400 120,330 150,180 Z" opacity=".7"/>
-    <path fill="var(--m-clear)" d="M 1180,660 C 1300,640 1460,660 1540,720 C 1580,760 1560,860 1460,880
-      C 1340,900 1220,860 1180,780 Z"/>
-    <path fill="var(--m-clear)" d="M 1150,90 C 1260,60 1400,80 1470,140 C 1520,190 1480,280 1380,290
-      C 1270,300 1130,220 1150,90 Z" opacity=".8"/>
-    <path fill="none" stroke="var(--m-water-line)" stroke-width="5" stroke-linecap="round" id="pCreek"
-      d="M 240,40 C 262,120 232,200 282,270 C 332,340 408,360 452,430 C 488,486 470,556 430,610
-      C 400,650 350,680 310,730"/>
-    <ellipse cx="1315" cy="655" rx="52" ry="30" fill="var(--m-water)"
-      stroke="var(--m-water-line)" stroke-width="2"/>
-    <!-- Kulnura buildings -->
-    <g fill="var(--m-bldg)">
-      <rect x="1352" y="838" width="26" height="18" rx="2"/>
-      <rect x="1394" y="828" width="20" height="24" rx="2"/>
-      <rect x="1430" y="842" width="30" height="16" rx="2"/>
-      <rect x="1382" y="872" width="24" height="20" rx="2"/>
-      <rect x="1442" y="876" width="18" height="16" rx="2"/>
-      <rect x="1480" y="850" width="22" height="20" rx="2"/>
-    </g>
-  </g>
-
-  <!-- hillshade (NW light) -->
-  <g id="gHill" filter="url(#fHill)" opacity="var(--hill-op)">
-    <path fill="#3a3325" d="M 700,560 C 780,480 800,380 762,300 C 830,340 872,460 822,560
-      C 782,622 722,600 700,560 Z"/>
-    <path fill="#fffbe8" d="M 640,520 C 600,440 620,340 690,290 C 640,360 650,470 690,540 Z" opacity=".8"/>
-    <path fill="#3a3325" d="M 1300,470 C 1360,500 1390,560 1370,630 C 1330,580 1290,530 1280,490 Z"/>
-    <path fill="#3a3325" d="M 300,260 C 380,240 420,280 430,340 C 370,320 320,300 300,260 Z" opacity=".7"/>
+  <!-- ground + landcover + water + buildings (Ground brightness knob) -->
+  <g id="gGround" clip-path="url(#sceneClip)">
+    <rect id="groundRect" fill="var(--m-ground)"/>
+    <image id="satImg" preserveAspectRatio="none"/>
+    <g id="gLand"></g>
+    <image id="hillImg" preserveAspectRatio="none"/>
   </g>
 
   <!-- roads + basemap trails (Roads & trails brightness knob) -->
-  <g id="gWays" fill="none">
-    <g id="gRoads">
-      <use href="#pHwy" stroke="var(--m-road-cas)" stroke-width="11" stroke-linecap="round"/>
-      <use href="#pHwy" stroke="var(--m-road)" stroke-width="7" stroke-linecap="round"/>
-      <use href="#pRdMinor" stroke="var(--m-road-cas)" stroke-width="8" stroke-linecap="round"/>
-      <use href="#pRdMinor" stroke="var(--m-road-minor)" stroke-width="5" stroke-linecap="round"/>
-      <path stroke="var(--m-road-minor)" stroke-width="4" stroke-linecap="round"
-        d="M 1340,930 C 1380,880 1420,860 1470,850 M 1400,940 C 1420,900 1440,880 1480,860"/>
-    </g>
-    <!-- minor trails; the first shares the route's approach then forks off at the junction -->
-    <g id="gTrails" stroke-linecap="round" stroke-dasharray="7 5">
-      <path class="trailln" data-w="3" d="M 552,648 C 570,618 584,588 600,560 C 668,566 738,548 806,552
-        C 884,557 946,542 1016,562 C 1076,578 1120,600 1160,632"/>
-      <path class="trailln" data-w="2.4" d="M 90,540 C 180,520 260,540 330,510 C 410,475 470,500 540,470"/>
-      <path class="trailln" data-w="2.4" d="M 980,70 C 985,150 1000,220 1035,280 C 1070,340 1140,370 1210,385"/>
-      <path class="trailln" data-w="2" d="M 1230,760 C 1280,720 1310,680 1320,640"/>
-    </g>
+  <g id="gWays" fill="none" clip-path="url(#sceneClip)">
+    <g id="gRoads"></g>
+    <g id="gTrails"></g>
   </g>
 
   <!-- heatmap: dim copy visible only in the knocked corridor, full copy everywhere else -->
-  <g id="gHeatUnder" mask="url(#mUnder)" opacity="0"><use href="#heatGeom"/></g>
-  <g id="gHeatMain" mask="url(#mKnock)"><use href="#heatGeom"/></g>
+  <g id="gHeatUnder" mask="url(#mUnder)" opacity="0" clip-path="url(#sceneClip)"><use href="#heatGeom"/></g>
+  <g id="gHeatMain" mask="url(#mKnock)" clip-path="url(#sceneClip)"><use href="#heatGeom"/></g>
 
   <!-- labels (Label intensity knob) -->
-  <g id="gLabels">
-    <text class="lbl lbl-area" x="185" y="470" transform="rotate(-9 185 470)">OURIMBAH STATE FOREST</text>
-    <text class="lbl lbl-town" x="1388" y="812">Kulnura</text>
-    <g class="lbl lbl-peak">
-      <path d="M 742,218 l 7,12 h -14 Z" fill="var(--m-label)" stroke="none"/>
-      <text x="754" y="230">Bumble Hill · 348 m</text>
-    </g>
-    <text class="lbl lbl-road"><textPath href="#pRdMinor" startOffset="56%">GRETA RD</textPath></text>
-    <text class="lbl lbl-road"><textPath href="#pHwy" startOffset="70%">GEORGE DOWNES DR</textPath></text>
-    <text class="lbl lbl-water"><textPath href="#pCreek" startOffset="42%">Cedar Brush Creek</textPath></text>
-    <text class="lbl lbl-water" x="1290" y="700" font-size="11">Boondah Dam</text>
-  </g>
+  <g id="gLabels"></g>
 
-  <!-- route: continuous casing under per-surface cores; chevrons; ridden overlay on top -->
+  <!-- second file in the bundle under the route: casing under per-surface cores -->
   <g id="gRoute" fill="none">
+    <path id="track2Ln" stroke-linecap="round" stroke-linejoin="round"/>
     <use href="#pFull" id="rteCasing" stroke-linecap="round" stroke-linejoin="round"/>
     <g id="gCores" stroke-linejoin="round">
-      <path id="coreSealed" stroke-linecap="round" d="M 150,880 C 240,861 335,845 430,824"/>
-      <path id="coreDirt" d="M 430,824 C 472,806 506,772 521,722 C 536,672 562,618 600,560
-        M 700,300 C 758,272 858,258 958,258 C 1058,258 1122,262 1170,272"/>
-      <path id="coreSingle" stroke-linecap="round" d="M 600,560 C 630,552 652,546 655,532
-        C 658,518 592,520 589,505 C 586,490 660,492 663,477 C 666,462 594,464 591,449
-        C 588,434 662,436 668,420 C 675,396 689,348 700,300"/>
-      <path id="coreUnmapped" stroke-linecap="round" d="M 1170,272 C 1262,292 1332,340 1352,420
-        C 1369,485 1332,560 1290,612"/>
+      <path id="coreSealed" stroke-linecap="round"/>
+      <path id="coreDirt"/>
+      <path id="coreSingle" stroke-linecap="round"/>
+      <path id="coreUnmapped" stroke-linecap="round"/>
     </g>
     <g id="gSteep" stroke-linejoin="round" style="display:none"></g>
     <text id="chevText" style="pointer-events:none"><textPath id="chevTP" href="#pFull"></textPath></text>
@@ -507,7 +414,8 @@
   <div id="inspBody"></div>
   <div id="inspFoot">Every control edits the <b>global</b> theme; the dot pins it for the style you're
     viewing only. ⚠ marks colour pairs too close to tell apart — a warning, never a block.
-    Copy → ask Claude for variants → Paste.</div>
+    Copy → ask Claude for variants → Paste. Scene: real “Palm Test” bundle — imagery Esri/Maxar,
+    map data © OpenStreetMap.</div>
 </aside>
 
 <div id="modalBg"><div id="modal">
@@ -522,6 +430,7 @@
 </div></div>
 <div id="toast"></div>
 
+<script src="palm-data.js?v=2"></script>
 <script>
 'use strict';
 /* ============================ settings model ============================ */
@@ -534,6 +443,7 @@ const DEFAULTS = {
   dirtDash: 2.4, dirtGap: 1.4, singleDash: 0.1, singleGap: 1.7, unmappedStyle: 'ghost',
   riddenMode: 'dim', riddenDim: 0.55, riddenCol: '#5f6d78',
   chevSize: 14, chevGap: 90, chevCol: '#003a44', steepCore: false,
+  t2Col: '#9d7bff', t2W: 2.5, t2Op: 0.8,
   // heatmap trio
   heatOwnCol: '#ff7a00', heatOwnW: 3, heatOwnOp: 0.85,
   heatOtherCol: '#ff2d2d', heatOtherW: 2.5, heatOtherOp: 0.6,
@@ -655,13 +565,17 @@ const GROUPS = [
     { k: 'chevSize', label: 'Size (0 = off)', type: 'range', min: 0, max: 26, step: 1, fmt: fmtN(0) },
     { k: 'chevGap', label: 'Spacing', type: 'range', min: 30, max: 220, step: 5, fmt: fmtN(0) },
     { k: 'chevCol', label: 'Colour', type: 'color' },
+    { type: 'sub', label: 'Second track (other file in the bundle)' },
+    { k: 't2Col', label: 'Colour', type: 'color' },
+    { k: 't2W', label: 'Width', type: 'range', min: 1, max: 6, step: 0.25, fmt: fmtPx },
+    { k: 't2Op', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.05, fmt: fmtPct },
   ]},
   { id: 'heat', title: 'Heatmap', open: true, rows: [
     { type: 'sub', label: 'Own rides' },
     { k: 'heatOwnCol', label: 'Colour', type: 'color' },
     { k: 'heatOwnW', label: 'Width', type: 'range', min: 1, max: 8, step: 0.25, fmt: fmtPx },
     { k: 'heatOwnOp', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.05, fmt: fmtPct },
-    { type: 'sub', label: 'Others' },
+    { type: 'sub', label: 'Others (none in this bundle)' },
     { k: 'heatOtherCol', label: 'Colour', type: 'color' },
     { k: 'heatOtherW', label: 'Width', type: 'range', min: 1, max: 8, step: 0.25, fmt: fmtPx },
     { k: 'heatOtherOp', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.05, fmt: fmtPct },
@@ -884,6 +798,7 @@ const GUARD_PAIRS = [
   ['coreCol', 'heatOtherCol', 'route core vs others heat'],
   ['coreCol', 'heatPlanCol', 'route core vs planned'],
   ['coreCol', 'trailCol', 'route core vs basemap trails'],
+  ['coreCol', 't2Col', 'route core vs second track'],
   ['heatOwnCol', 'heatOtherCol', 'own vs others heat'],
   ['heatOwnCol', 'heatPlanCol', 'own vs planned heat'],
   ['heatOtherCol', 'heatPlanCol', 'others vs planned heat'],
@@ -910,42 +825,101 @@ function runGuard() {
   }
 }
 
-/* ============================ scene wiring ============================ */
+/* ============================ scene build (real bundle data) ============================ */
+const SCENE_W = PALM.W, SCENE_H = PALM.H;
+const NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS(NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(el);
+  return el;
+}
+function buildScene() {
+  $('scene').setAttribute('viewBox', `0 0 ${SCENE_W} ${SCENE_H}`);
+  for (const id of ['groundRect', 'knockRect', 'underRect', 'clipRect'])
+    Object.entries({ x: 0, y: 0, width: SCENE_W, height: SCENE_H }).forEach(([k, v]) => $(id).setAttribute(k, v));
+  for (const m of ['mKnock', 'mUnder'])
+    Object.entries({ x: 0, y: 0, width: SCENE_W, height: SCENE_H }).forEach(([k, v]) => $(m).setAttribute(k, v));
+  // satellite + hillshade rasters cover the scene rect exactly
+  for (const [id, href] of [['satImg', PALM.sat], ['hillImg', PALM.hill]]) {
+    if (!href) continue;
+    const im = $(id);
+    im.setAttribute('href', href);
+    Object.entries({ x: 0, y: 0, width: SCENE_W, height: SCENE_H }).forEach(([k, v]) => im.setAttribute(k, v));
+  }
+  // landcover + water + buildings (paint order: urban under clear under park under bush)
+  const land = $('gLand');
+  const POLY_STYLE = { urban: '--m-urban', clear: '--m-clear', park: '--m-park', bush: '--m-bush' };
+  for (const g of ['urban', 'clear', 'park', 'bush']) {
+    if (PALM.base.polys[g]) svgEl('path', { d: PALM.base.polys[g], fill: `var(${POLY_STYLE[g]})` }, land);
+  }
+  if (PALM.base.lines.creek) svgEl('path', { d: PALM.base.lines.creek, fill: 'none',
+    stroke: 'var(--m-water-line)', 'stroke-width': 1.6, 'stroke-linecap': 'round' }, land);
+  if (PALM.base.lines.river) svgEl('path', { d: PALM.base.lines.river, fill: 'none',
+    stroke: 'var(--m-water-line)', 'stroke-width': 3, 'stroke-linecap': 'round' }, land);
+  if (PALM.base.polys.water) svgEl('path', { d: PALM.base.polys.water, fill: 'var(--m-water)',
+    stroke: 'var(--m-water-line)', 'stroke-width': 1 }, land);
+  if (PALM.base.polys.bldg) svgEl('path', { d: PALM.base.polys.bldg, fill: 'var(--m-bldg)' }, land);
+  // roads: casing + core pairs, small under big; rail dashed
+  const roads = $('gRoads');
+  const ROAD_W = { minor: [6, 4, '--m-road-minor'], major: [8.5, 5.5, '--m-road'], hwy: [12, 8, '--m-road'] };
+  if (PALM.base.lines.rail) svgEl('path', { d: PALM.base.lines.rail, fill: 'none', stroke: 'var(--m-rail)',
+    'stroke-width': 2.6, 'stroke-dasharray': '10 6' }, roads);
+  for (const g of ['minor', 'major', 'hwy']) {
+    if (!PALM.base.lines[g]) continue;
+    svgEl('path', { d: PALM.base.lines[g], fill: 'none', stroke: 'var(--m-road-cas)',
+      'stroke-width': ROAD_W[g][0], 'stroke-linecap': 'round' }, roads);
+  }
+  for (const g of ['minor', 'major', 'hwy']) {
+    if (!PALM.base.lines[g]) continue;
+    svgEl('path', { d: PALM.base.lines[g], fill: 'none', stroke: `var(${ROAD_W[g][2]})`,
+      'stroke-width': ROAD_W[g][1], 'stroke-linecap': 'round' }, roads);
+  }
+  // basemap trails (fire-road tracks + walking paths) — colour/width knob targets .trailln
+  const trails = $('gTrails');
+  if (PALM.base.lines.track) svgEl('path', { d: PALM.base.lines.track, fill: 'none', class: 'trailln',
+    'data-w': 3, 'stroke-dasharray': '9 6', 'stroke-linecap': 'round' }, trails);
+  if (PALM.base.lines.path) svgEl('path', { d: PALM.base.lines.path, fill: 'none', class: 'trailln',
+    'data-w': 2, 'stroke-dasharray': '5 5', 'stroke-linecap': 'round' }, trails);
+  // heat: one path per ride so overlapping rides accumulate opacity (real density)
+  const hg = $('heatGeom');
+  for (const cls of ['other', 'plan', 'own'])
+    for (const d of PALM.heat[cls] || []) svgEl('path', { d, class: 'h-' + cls }, hg);
+  // labels: real place/way names from the basemap. Base sizes are px-at-camK-1;
+  // scaleLabels() keeps them screen-constant across camera zooms, like a real renderer.
+  const gl = $('gLabels'), defs = document.querySelector('defs');
+  const LBL_PX = { town: 20, forest: 23, peak: 13 };
+  PALM.labels.points.forEach(l => {
+    const t = svgEl('text', { x: l.x, y: l.y, class: 'lbl lbl-' + (l.k === 'forest' ? 'area' : l.k),
+      'text-anchor': 'middle', 'data-px': LBL_PX[l.k] || 15 }, gl);
+    t.textContent = l.k === 'forest' ? l.t.toUpperCase() : l.t;
+  });
+  PALM.labels.ways.forEach((l, i) => {
+    svgEl('path', { id: 'lblP' + i, d: l.d, fill: 'none' }, defs);
+    const t = svgEl('text', { class: 'lbl lbl-' + l.k, 'data-px': 12.5 }, gl);
+    const tp = svgEl('textPath', { href: '#lblP' + i, startOffset: '50%', 'text-anchor': 'middle' }, t);
+    tp.textContent = l.k === 'road' ? l.t.toUpperCase() : l.t;
+  });
+  // the two files: route + second track
+  $('pFull').setAttribute('d', PALM.route.d);
+  if (PALM.track2) $('track2Ln').setAttribute('d', PALM.track2.d);
+}
+buildScene();
+
 const fullPath = $('pFull');
 const fullLen = fullPath.getTotalLength();
-// per-surface spans as fractions of the full route (measured, not hard-coded)
-const SEG_DS = [
-  ['sealed', 'M 150,880 C 240,861 335,845 430,824'],
-  ['dirt', 'M 430,824 C 472,806 506,772 521,722 C 536,672 562,618 600,560'],
-  ['single', 'M 600,560 C 630,552 652,546 655,532 C 658,518 592,520 589,505 C 586,490 660,492 663,477 C 666,462 594,464 591,449 C 588,434 662,436 668,420 C 675,396 689,348 700,300'],
-  ['dirt', 'M 700,300 C 758,272 858,258 958,258 C 1058,258 1122,262 1170,272'],
-  ['unmapped', 'M 1170,272 C 1262,292 1332,340 1352,420 C 1369,485 1332,560 1290,612'],
-];
-const SURF_SPANS = (() => {
-  const ns = 'http://www.w3.org/2000/svg';
-  const defs = document.querySelector('defs');
-  let acc = 0;
-  return SEG_DS.map(([s, d]) => {
-    const p = document.createElementNS(ns, 'path');
-    p.setAttribute('d', d); defs.appendChild(p);
-    const len = p.getTotalLength(); defs.removeChild(p);
-    const span = { s, f0: acc / fullLen, f1: (acc + len) / fullLen };
-    acc += len; return span;
-  });
-})();
-const F_HAIRPIN = SURF_SPANS[2].f0 + (SURF_SPANS[2].f1 - SURF_SPANS[2].f0) * 0.22; // second hairpin
-const F_VALLEY = SURF_SPANS[4].f0;
+// per-surface spans: REAL — the route matched against the basemap's ways at bake time
+const SURF_SPANS = PALM.route.spans.map(sp => ({ s: sp.s, f0: sp.f0, f1: sp.f1, d: sp.d }));
+const CORE_D = {};
+for (const sp of SURF_SPANS) CORE_D[sp.s] = (CORE_D[sp.s] || '') + sp.d;
+$('coreSealed').setAttribute('d', CORE_D.sealed || 'M0 0');
+$('coreDirt').setAttribute('d', CORE_D.dirt || 'M0 0');
+$('coreSingle').setAttribute('d', CORE_D.single || 'M0 0');
+$('coreUnmapped').setAttribute('d', CORE_D.unmapped || 'M0 0');
 function surfAt(t) { for (const sp of SURF_SPANS) if (t <= sp.f1) return sp.s; return 'unmapped'; }
-function gradeAt(t) { // hand-authored profile: flat lead-in, building climb, brutal switchbacks, easy top, steep drop
-  for (const sp of SURF_SPANS) {
-    if (t > sp.f1) continue;
-    const u = (t - sp.f0) / (sp.f1 - sp.f0);
-    if (sp.s === 'sealed') return 2;
-    if (sp.s === 'single') return 16 + 8 * Math.sin(u * Math.PI);
-    if (sp.s === 'unmapped') return 9 + 8 * u;
-    return sp.f0 < 0.3 ? 5 + 9 * u : 4; // first dirt = the climb, second = fire road
-  }
-  return 4;
+const GRADES = PALM.route.grades; // real elevation, smoothed ±75 m, |%|
+function gradeAt(t) {
+  return GRADES[Math.max(0, Math.min(GRADES.length - 1, Math.round(t * (GRADES.length - 1))))];
 }
 const GRADE_BOUNDS = [4, 8, 14, 22];
 function gradeColor(g) {
@@ -983,6 +957,12 @@ function applyScene() {
   cas.setAttribute('stroke-width', (coreW + 2 * edge).toFixed(2));
   cas.setAttribute('stroke-opacity', eff('casingOp'));
   cas.style.filter = eff('casingStyle') === 'glow' ? `blur(${Math.max(1, edge * 0.9).toFixed(1)}px)` : '';
+
+  // the bundle's second file, under the active route
+  const t2 = $('track2Ln');
+  t2.setAttribute('stroke', eff('t2Col'));
+  t2.setAttribute('stroke-width', eff('t2W'));
+  t2.setAttribute('stroke-opacity', eff('t2Op'));
 
   // route: per-surface cores
   const setCore = (id, dash, cap, op, w) => {
@@ -1052,7 +1032,7 @@ function rebuildChevrons() {
   if (size <= 0) { t.style.display = 'none'; return; }
   t.style.display = '';
   const gap = eff('chevGap');
-  const n = Math.max(1, Math.min(200, Math.floor(fullLen / gap)));
+  const n = Math.max(1, Math.min(600, Math.floor(fullLen / gap)));
   tp.textContent = '›'.repeat(n);
   t.setAttribute('font-size', size);
   t.setAttribute('font-weight', '800');
@@ -1075,7 +1055,7 @@ function rebuildSteep() {
     dirt: `${(eff('dirtDash') * coreW).toFixed(2)} ${(eff('dirtGap') * coreW).toFixed(2)}`,
     single: `${(eff('singleDash') * coreW).toFixed(2)} ${(eff('singleGap') * coreW).toFixed(2)}`,
   };
-  const step = 11;
+  const step = Math.max(8, fullLen / 2400);
   let runD = null, runCol = null, runSurf = null;
   const flush = () => {
     if (!runD) return;
@@ -1128,23 +1108,108 @@ function layoutFrame() {
   cap.style.top = (cy + H * k / 2 + 12) + 'px';
   updateCamera();
 }
-function updateCamera(p) {
-  const dims = RES_DIMS[S.res];
-  if (!dims) {
-    sceneEl.setAttribute('viewBox', '0 0 1600 1000');
-    giantEl.removeAttribute('transform');
-    return;
-  }
-  p = p || pathPoint(sim.t * fullLen);
-  const w = dims[0] / RIDE_PX_PER_UNIT, h = dims[1] / RIDE_PX_PER_UNIT;
-  const cx = Math.max(w / 2, Math.min(1600 - w / 2, p.x));
-  const cy = Math.max(h / 2, Math.min(1000 - h / 2, p.y));
-  const vx = cx - w / 2, vy = cy - h / 2;
-  sceneEl.setAttribute('viewBox', `${vx.toFixed(1)} ${vy.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+// camK ≈ scene-units-per-screen-pixel × 900: keeps HUD-ish marks (position arrow,
+// crumbs, giant arrow) visually constant across camera zooms — like the real app,
+// where they're screen-space, not map-space
+let camK = 1;
+const LBL_TEXTS = () => document.querySelectorAll('#gLabels text');
+function scaleLabels() {
+  LBL_TEXTS().forEach(t => {
+    const px = +t.dataset.px * camK;
+    t.style.fontSize = px.toFixed(1) + 'px';
+    t.setAttribute('stroke-width', (px / 5.5).toFixed(2));
+    // way labels ride a textPath: hide them when the zoomed-out text outgrows its
+    // path, else SVG silently drops the overflow glyphs (garbled half-names)
+    const tp = t.firstElementChild;
+    if (tp && tp.tagName === 'textPath') {
+      if (!t.dataset.plen) {
+        const ref = document.querySelector(tp.getAttribute('href'));
+        t.dataset.plen = ref ? ref.getTotalLength() : 0;
+      }
+      const need = tp.textContent.length * px * 0.72;
+      t.style.display = +t.dataset.plen > need ? '' : 'none';
+    }
+  });
+}
+function placeGiant(vx, vy, w, h) {
+  const k = w / 900;
+  const kChanged = Math.abs(k - camK) > camK * 0.02;
+  camK = k;
+  if (kChanged) scaleLabels();
+  sceneEl.style.setProperty('--crumb-r', (2.6 * camK).toFixed(2) + 'px');
   const s = 0.24 * Math.min(w, h) / GIANT_BB.max;
   const tx = (vx + w * 0.16) - s * GIANT_BB.cx, ty = (vy + h * 0.56) - s * GIANT_BB.cy;
   giantEl.setAttribute('transform', `translate(${tx.toFixed(1)},${ty.toFixed(1)}) scale(${s.toFixed(3)})`);
 }
+function updateCamera(p) {
+  const dims = RES_DIMS[S.res];
+  if (!dims) {
+    const v = fullView;
+    sceneEl.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${v.h.toFixed(1)}`);
+    placeGiant(v.x, v.y, v.w, v.h);
+    return;
+  }
+  p = p || pathPoint(sim.t * fullLen);
+  const w = dims[0] / RIDE_PX_PER_UNIT, h = dims[1] / RIDE_PX_PER_UNIT;
+  const cx = Math.max(w / 2, Math.min(SCENE_W - w / 2, p.x));
+  const cy = Math.max(h / 2, Math.min(SCENE_H - h / 2, p.y));
+  const vx = cx - w / 2, vy = cy - h / 2;
+  sceneEl.setAttribute('viewBox', `${vx.toFixed(1)} ${vy.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+  placeGiant(vx, vy, w, h);
+}
+
+/* full-window mode is a free camera over the real scene: drag pans, wheel zooms,
+   double-click resets to the whole ride */
+let fullView = null;
+function resetFullView() {
+  const vw = Math.max(200, window.innerWidth - 372), vh = Math.max(200, window.innerHeight);
+  const scale = Math.min(vw / SCENE_W, vh / SCENE_H); // fit whole scene beside the inspector
+  const w = vw / scale, h = vh / scale;
+  fullView = { x: (SCENE_W - w) / 2, y: (SCENE_H - h) / 2, w, h };
+}
+resetFullView();
+function clampFullView() {
+  const v = fullView, m = 0.35; // keep at least a third of the scene in view
+  v.w = Math.max(SCENE_W / 40, Math.min(v.w, SCENE_W * 3));
+  v.h = Math.max(SCENE_H / 40, Math.min(v.h, SCENE_H * 3));
+  v.x = Math.max(-v.w * m, Math.min(SCENE_W - v.w * (1 - m), v.x));
+  v.y = Math.max(-v.h * m, Math.min(SCENE_H - v.h * (1 - m), v.y));
+}
+sceneEl.addEventListener('wheel', e => {
+  if (RES_DIMS[S.res]) return;
+  e.preventDefault();
+  const r = sceneEl.getBoundingClientRect();
+  const v = fullView;
+  const scale = Math.max(r.width / v.w, r.height / v.h);
+  const visW = r.width / scale, visH = r.height / scale;
+  const visX = v.x + (v.w - visW) / 2, visY = v.y + (v.h - visH) / 2;
+  const cx = visX + (e.clientX - r.left) / scale, cy = visY + (e.clientY - r.top) / scale;
+  const f = e.deltaY > 0 ? 1.18 : 1 / 1.18;
+  fullView = { x: cx - (cx - visX) * f, y: cy - (cy - visY) * f, w: visW * f, h: visH * f };
+  clampFullView(); updateCamera();
+}, { passive: false });
+let pan = null;
+sceneEl.addEventListener('pointerdown', e => {
+  if (RES_DIMS[S.res]) return;
+  pan = { x: e.clientX, y: e.clientY };
+  sceneEl.classList.add('panning');
+  sceneEl.setPointerCapture(e.pointerId);
+});
+sceneEl.addEventListener('pointermove', e => {
+  if (!pan) return;
+  const r = sceneEl.getBoundingClientRect();
+  const v = fullView;
+  const scale = Math.max(r.width / v.w, r.height / v.h);
+  v.x -= (e.clientX - pan.x) / scale;
+  v.y -= (e.clientY - pan.y) / scale;
+  pan = { x: e.clientX, y: e.clientY };
+  clampFullView(); updateCamera();
+});
+sceneEl.addEventListener('pointerup', () => { pan = null; sceneEl.classList.remove('panning'); });
+sceneEl.addEventListener('dblclick', () => {
+  if (RES_DIMS[S.res]) return;
+  resetFullView(); updateCamera();
+});
 function setRes(id) {
   S.res = id;
   document.body.classList.toggle('framed', id !== 'full');
@@ -1163,16 +1228,19 @@ function syncResSeg() {
 window.addEventListener('resize', layoutFrame);
 
 /* ============================ ride simulation ============================ */
-// idle just short of the hairpin so the static frame shows the approach cue + giant arrow story
-const sim = { t: 0.335, playing: false, speed: 1, last: 0, crumbAt: 0 };
+// idle just short of the first real hairpin so the static frame shows the approach story
+const sim = { t: PALM.route.idleF, playing: false, speed: 1, last: 0, crumbAt: 0 };
+const SIM_MS = 75000; // full lap at 1× (it's a real 50 km loop — 3× for skimming)
 function pathPoint(len) { return fullPath.getPointAtLength(Math.max(0, Math.min(fullLen, len))); }
 function placeArrow() {
   const d = sim.t * fullLen;
-  const p = pathPoint(d), q = pathPoint(Math.min(fullLen, d + 7));
+  const look = Math.max(7, fullLen * 0.0006);
+  const p = pathPoint(d), q = pathPoint(Math.min(fullLen, d + look));
   const ang = Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI + 90;
+  updateCamera(p); // camera first: the arrow's screen-constant scale needs camK
   $('posArrow').setAttribute('transform',
-    `translate(${p.x.toFixed(1)},${p.y.toFixed(1)}) rotate(${ang.toFixed(1)}) scale(${eff('posSize')})`);
-  updateCamera(p); // letterboxed frames track the rider
+    `translate(${p.x.toFixed(1)},${p.y.toFixed(1)}) rotate(${ang.toFixed(1)})` +
+    ` scale(${(eff('posSize') * camK).toFixed(3)})`);
 }
 function updateRidden() {
   $('riddenOv').setAttribute('stroke-dasharray', `${sim.t.toFixed(4)} 2`);
@@ -1183,7 +1251,7 @@ function addCrumb(len) {
   const ns = 'http://www.w3.org/2000/svg';
   const c = document.createElementNS(ns, 'circle');
   c.setAttribute('cx', p.x.toFixed(1)); c.setAttribute('cy', p.y.toFixed(1));
-  c.setAttribute('r', 3);
+  c.setAttribute('r', 3); // overridden by the screen-constant CSS r below
   c.setAttribute('fill', eff('crumbCol'));
   c.setAttribute('opacity', 0.85);
   $('gCrumbs').appendChild(c);
@@ -1198,21 +1266,21 @@ function dropCrumbs() {
   const gap = crumbGapPx();
   while (sim.crumbAt + gap < sim.t * fullLen - 10) { sim.crumbAt += gap; addCrumb(sim.crumbAt); }
 }
-const CUES = [
-  { f: () => F_HAIRPIN, icon: '↰', label: 'Hairpin left' },
-  { f: () => F_VALLEY, icon: '⤵', label: 'Valley drop' },
-  { f: () => 0.999, icon: '⚑', label: 'Finish' },
-];
+// real cues: the route's sharpest turns, found from the geometry at bake time
+const CUES = PALM.route.cues.map(c => ({ f: () => c.f, icon: c.icon, label: c.label }))
+  .concat([{ f: () => 0.999, icon: '⚑', label: 'Finish' }]);
+const HAIRPIN_FS = PALM.route.cues.filter(c => c.label.startsWith('Hairpin')).map(c => c.f);
 function updateTurnUI() {
-  const M_PER_PX = 2; // pretend scale: full staged route ≈ 4 km
+  const M_PER_PX = PALM.mPerUnit; // real scale
   const cue = CUES.find(c => c.f() > sim.t) || CUES[CUES.length - 1];
   const dist = Math.max(0, (cue.f() - sim.t) * fullLen * M_PER_PX);
   $('tsIcon').textContent = cue.icon;
-  $('tsDist').textContent = dist < 15 ? 'NOW' : Math.round(dist / 10) * 10 + ' m';
+  $('tsDist').textContent = dist < 15 ? 'NOW' :
+    dist >= 1000 ? (dist / 1000).toFixed(1) + ' km' : Math.round(dist / 10) * 10 + ' m';
   $('tsLabel').textContent = ' · ' + cue.label;
   const APPR = 600;
   $('tsBarFill').style.width = (dist < APPR ? (1 - dist / APPR) * 100 : 0).toFixed(1) + '%';
-  const nearHp = Math.abs(sim.t - F_HAIRPIN) * fullLen < 90;
+  const nearHp = HAIRPIN_FS.some(f => Math.abs(sim.t - f) * fullLen * M_PER_PX < 180);
   $('gGiant').classList.toggle('flash', sim.playing && nearHp);
   $('battPct').textContent = Math.floor(63 - sim.t * 3);
 }
@@ -1220,7 +1288,7 @@ function tick(ts) {
   if (!sim.playing) return;
   const dt = sim.last ? ts - sim.last : 16;
   sim.last = ts;
-  sim.t += dt / 20000 * sim.speed;
+  sim.t += dt / SIM_MS * sim.speed;
   if (sim.t >= 1) { sim.t = 0; $('gCrumbs').innerHTML = ''; sim.crumbAt = 0; }
   placeArrow(); updateRidden(); dropCrumbs(); updateTurnUI();
   requestAnimationFrame(tick);
