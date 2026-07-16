@@ -483,6 +483,7 @@
   <symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/></symbol>
 </svg>
@@ -586,8 +587,7 @@
     <button id="navBtn" disabled>START</button>
     <div class="ctl" id="revBtn" title="reverse direction" style="display:none"><svg class="ic"><use href="#i-arrow-left-right"/></svg></div>
   </div>
-  <div class="row" id="styleRow"><label>Map layers</label><span class="seg" id="styleSeg">
-    <button data-s="daylight">Day</button><button data-s="contrast">Trail</button><button data-s="dark">Dark</button><button data-s="satellite">Sat</button></span></div>
+  <div data-reg="style"></div>
 
   <div id="setTabs">
     <button data-t="Account">Account</button>
@@ -600,10 +600,9 @@
   </div>
 
   <div class="tabSec" id="tabAccount">
-    <div class="row"><label>Your name</label><input type="text" id="myName" maxlength="12" placeholder="Grant"></div>
-    <div class="row"><label>Email</label><input type="text" id="myEmail" maxlength="60" placeholder="you@example.com"></div>
+    <div data-reg="account"></div>
     <h3>Group ride (needs signal)</h3>
-    <div class="row"><label>Ride name</label><input type="text" id="rideCode" maxlength="24" placeholder="e.g. watagans-42"></div>
+    <div data-reg="ride"></div>
     <div id="friendStatus">off — enter a shared ride name to see friends</div>
     <div class="hint">Everyone with the same ride name sees each other's position (updates ~20 s via ntfy.sh when online; silently off without signal). It defaults to the bundle name when you load a .dingonav — use one others can't guess.</div>
   </div>
@@ -630,14 +629,9 @@
     <div id="hillStatus">no terrain shading loaded</div>
     <div class="btnRow"><button class="btn" id="hillBtn">Load .pmtiles terrain…</button></div>
     <div class="hint">Optional elevation extract adds hillshade relief under the trails — gullies and ridges readable at a glance, still flat north-up 2D. Cut one with <b>make_hillshade.py</b> (see README).</div>
-    <div class="row"><label>Terrain shading</label><span class="sw"><input type="checkbox" id="setHill" checked><span></span></span></div>
-
-    <div class="row"><label>Strava heatmap overlay</label><span class="sw"><input type="checkbox" id="setStrava"><span></span></span></div>
+    <div data-reg="map"></div>
     <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
-    <div class="row"><label>Keep screen on while navigating</label><span class="sw"><input type="checkbox" id="setWake" checked><span></span></span></div>
-    <div class="row"><label>Ride controls button on the right</label><span class="sw"><input type="checkbox" id="setGloveRight"><span></span></span></div>
-    <div class="row"><label>Control buttons on</label><span class="seg" id="edgesSeg">
-      <button data-e="sides">Left &amp; right</button><button data-e="tb">Top &amp; bottom</button></span></div>
+    <div data-reg="ui"></div>
     <div class="btnRow"><button class="btn" id="layoutEditBtn"><svg class="ic"><use href="#i-move"/></svg> Edit screen layout</button></div>
     <div class="hint">Drag buttons and readouts anywhere; drag the cyan corner dot on a readout to
       resize it; drop a button on the bottom tray to dock it in this menu. Saved separately for
@@ -646,34 +640,26 @@
     <div class="btnRow"><button class="btn" id="fsBtn"><svg class="ic"><use href="#i-maximize"/></svg> Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
 
-    <div class="row"><label>Show advanced tab</label><span class="sw"><input type="checkbox" id="setShowAdv"><span></span></span></div>
+    <h3>Config</h3>
+    <div class="btnRow"><button class="btn" id="cfgExportBtn"><svg class="ic"><use href="#i-upload"/></svg> Export config</button><button class="btn" id="cfgImportBtn"><svg class="ic"><use href="#i-download"/></svg> Import config…</button></div>
+    <div class="btnRow"><button class="btn" id="cfgPasteBtn">Paste config from clipboard</button></div>
+    <div class="hint">The complete setup in one JSON file — settings, tuning overrides, zoom presets, screen layouts, controller keys. Export downloads the file and copies it to the clipboard; bench-tune on a desktop browser, export there, import here.</div>
+
+    <div data-reg="misc"></div>
   </div>
 
   <div class="tabSec" id="tabNav">
-    <div class="row"><label>Turn beeps</label><span class="sw"><input type="checkbox" id="setSound" checked><span></span></span></div>
-    <div class="row"><label>Turn confirmation chirp</label><span class="sw"><input type="checkbox" id="setConfirm" checked><span></span></span></div>
-    <div class="row"><label>Vehicle (alerts + zoom)</label><span class="seg" id="vehSeg">
-      <button data-v="walk">Walk</button><button data-v="mtb">MTB</button><button data-v="enduro">Enduro</button><button data-v="adventure">ADV</button></span></div>
-    <div class="row"><label>Auto-zoom</label><span class="sw"><input type="checkbox" id="setAutoZoom" checked><span></span></span></div>
-    <div class="row"><label>Compass when zoomed in</label><span class="seg" id="compassSeg">
-      <button data-c="turns">Turns</button><button data-c="thresh">Zoom</button><button data-c="off">Off</button></span></div>
-    <div class="row"><label>Countdown units</label><span class="seg" id="cdSeg">
-      <button data-u="m">Metres</button><button data-u="s">Seconds</button></span></div>
-    <div class="row"><label>Steepness colouring</label><span class="sw"><input type="checkbox" id="setSteep"><span></span></span></div>
-    <div class="row"><label>Road-surface patterns</label><span class="sw"><input type="checkbox" id="setSurf"><span></span></span></div>
-    <div class="row"><label>Backtrack trail</label><span class="sw"><input type="checkbox" id="setTrail"><span></span></span></div>
+    <div data-reg="nav"></div>
     <div class="btnRow"><button class="btn" id="demoBtn"><svg class="ic"><use href="#i-circle-play"/></svg> Demo ride (simulate GPS)</button><button class="btn" id="testBeep"><svg class="ic"><use href="#i-volume-2"/></svg> Test beep</button></div>
     <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
   </div>
 
   <div class="tabSec" id="tabStark">
-    <div class="row"><label>Bike telemetry</label><span class="sw"><input type="checkbox" id="setVarg"><span></span></span></div>
-    <div class="row"><label>Source</label><span class="seg" id="vargSrcSeg">
-      <button data-src="vp">VargPilot</button><button data-src="ble">Direct BLE</button></span></div>
+    <div data-reg="stark"></div>
     <div class="hint" id="vargStatus"></div>
 
     <h3>VargPilot server</h3>
-    <div class="row"><label>Server URL</label><input type="text" id="vpUrl" maxlength="80" placeholder="http://127.0.0.1:8080"></div>
+    <div data-reg="vp"></div>
     <div class="btnRow" id="vpRow" style="display:none"><button class="btn" id="vpBtn">Connect</button><button class="btn" id="vpProbeBtn">Probe API → console</button></div>
     <div class="hint">VargPilot holds the bike's Bluetooth and re-serves telemetry from its built-in webserver.
       Running VP on this phone → <b>http://127.0.0.1:8080</b>; on another device use the URL VP displays (same Wi-Fi).</div>
@@ -706,6 +692,7 @@
 
 <input type="file" id="fileInput" multiple accept=".gpx,.geojson,.json,.dingonav,.zip,application/zip,application/octet-stream" hidden>
 <input type="file" id="baseInput" accept=".pmtiles" hidden>
+<input type="file" id="cfgInput" accept=".json,application/json" hidden>
 <input type="file" id="hillInput" accept=".pmtiles" hidden>
 
 <script src="vendor/maplibre-gl.js"></script>
@@ -1428,7 +1415,7 @@ async function buildStyle() {
 }
 async function setMapStyle(name) {
   S.set.mapStyle = name; saveSet();
-  for (const b of document.querySelectorAll('#styleSeg button')) b.classList.toggle('active', b.dataset.s === name);
+  for (const b of document.querySelectorAll('#styleSeg button')) b.classList.toggle('active', b.dataset.v === name);
   if (!map || !mapReady) return;
   const canSat = name === 'satellite' && satMeta && satMeta.count > 0;
   if (!hasBasemap && !canSat) return; // nothing to render a base from
@@ -3254,6 +3241,15 @@ async function addFile(name, text, ctx) {
       // pack-carried turn edits: replay other riders' contributions on this download
       // (idempotent — the seen-id set skips anything this device already has)
       if (Array.isArray(obj.turnEdits)) for (const e of obj.turnEdits) applyRemoteEdit(e, true);
+      // pack-carried config (down only): OFFER it, never silently apply — and
+      // only once per distinct config, so pack refreshes don't nag re-offers
+      if (obj.config && typeof obj.config === 'object' && !Array.isArray(obj.config)) {
+        const sig = textHash(JSON.stringify(obj.config));
+        if (S.set._packCfg !== sig &&
+            offerConfig(obj.config, `pack "${obj.bundleName || obj.name || slug || name}"`, true)) {
+          S.set._packCfg = sig; saveSet();
+        }
+      }
       // v2 meta: the pack's display name + free-text notes (surfaced on load)
       const bundleName = obj.bundleName || obj.name || '';
       if (slug) {
@@ -3656,39 +3652,8 @@ function toast(msg) {
   console.log('[dingonav]', msg);
 }
 
-/* settings wiring */
-function bindSet(id, key, cb) {
-  const el = document.getElementById(id);
-  el.checked = S.set[key];
-  el.onchange = () => { S.set[key] = el.checked; saveSet(); if (cb) cb(); };
-}
-// one active segment button per group, persisted to a settings key
-function bindSeg(segId, dataKey, setKey, cb) {
-  for (const b of document.querySelectorAll('#' + segId + ' button')) {
-    b.classList.toggle('active', b.dataset[dataKey] === S.set[setKey]);
-    b.onclick = () => {
-      S.set[setKey] = b.dataset[dataKey]; saveSet();
-      for (const b2 of document.querySelectorAll('#' + segId + ' button')) b2.classList.toggle('active', b2 === b);
-      if (cb) cb();
-    };
-  }
-}
-bindSet('setSound', 'sound', () => setSound(S.set.sound));
-setSound(S.set.sound); // sync the mute button face at boot
-bindSet('setConfirm', 'confirm');
-bindSet('setAutoZoom', 'autoZoom');
-bindSet('setStrava', 'strava', applyStrava);
-bindSet('setSteep', 'steep', () => { refreshMapData(); drawProgress(true); });
-bindSet('setSurf', 'surf', () => refreshMapData());
-bindSet('setTrail', 'trail', () => { if (mapReady) map.setLayoutProperty('trail-dots', 'visibility', S.set.trail ? 'visible' : 'none'); });
-bindSet('setHill', 'hillshade', applyHill);
-bindSeg('vehSeg', 'v', 'vehicle', () => { refreshPresets(); buildAdv(); }); // presets + adv overrides are per-vehicle
-bindSeg('compassSeg', 'c', 'compassAuto');
-bindSeg('cdSeg', 'u', 'countUnit');
-for (const b of document.querySelectorAll('#styleSeg button')) {
-  b.classList.toggle('active', b.dataset.s === (S.set.mapStyle || 'daylight'));
-  b.onclick = () => setMapStyle(b.dataset.s);
-}
+/* settings wiring: every toggle/segment/slider row is GENERATED from the
+   SETTINGS registry further down — only the Keys capture flow is hand-wired */
 for (const b of document.querySelectorAll('.keyBtn'))
   b.onclick = () => { keyCapture = b.dataset.k; b.textContent = 'press…'; };
 refreshKeyBtns(); refreshPresets();
@@ -3698,14 +3663,13 @@ for (const b of document.querySelectorAll('#setTabs button'))
   b.onclick = () => {
     for (const b2 of document.querySelectorAll('#setTabs button')) b2.classList.toggle('active', b2 === b);
     for (const s of document.querySelectorAll('.tabSec')) s.classList.toggle('on', s.id === 'tab' + b.dataset.t);
-    if (b.dataset.t === 'Adv') buildAdv();
+    if (b.dataset.t === 'Adv') renderSettings('adv');
   };
 function applyShowAdv() {
   document.getElementById('advTabBtn').style.display = S.set.showAdv ? '' : 'none';
   if (!S.set.showAdv && document.getElementById('tabAdv').classList.contains('on'))
     document.querySelector('#setTabs button[data-t="Tracks"]').click();
 }
-bindSet('setShowAdv', 'showAdv', applyShowAdv);
 applyShowAdv();
 
 /* ---------------- Stark Varg telemetry (Web Bluetooth) ----------------
@@ -4098,11 +4062,6 @@ function applyVarg() { // off, or a source flip: quiesce BOTH sources, then star
   if (S.set.varg) { if (S.set.vargSrc === 'vp') vpConnect(); else vargBoot(); }
   vargUI();
 }
-bindSet('setVarg', 'varg', applyVarg);
-bindSeg('vargSrcSeg', 'src', 'vargSrc', applyVarg);
-const vpUrlEl = document.getElementById('vpUrl');
-vpUrlEl.value = S.set.vpUrl || '';
-vpUrlEl.onchange = () => { S.set.vpUrl = vpUrlEl.value.trim(); saveSet(); applyVarg(); };
 document.getElementById('vpBtn').onclick = () => { audio(); vpConnect(); }; // tap doubles as WebAudio unlock
 document.getElementById('vpProbeBtn').onclick = vpProbe;
 setInterval(() => { // a % that quietly stopped updating lies — dim it after 20 s of silence
@@ -4110,50 +4069,105 @@ setInterval(() => { // a % that quietly stopped updating lies — dim it after 2
 }, 5000);
 applyVarg();
 
-/* ---------------- advanced tab: live tuning console ----------------
-   Sliders over the ADV_D defaults (plus current-vehicle alert distances).
+/* ---------------- settings registry ----------------
+   ONE table defines every user-tweakable: key, label, control type, range,
+   and exposure. The settings screens are GENERATED from it (renderSettings) —
+   add a row here, never hand-wire a control in the HTML.
+
+   Fields: k storage key · t 'toggle'|'seg'|'text'|'range'|'color' · l label ·
+   sec which [data-reg] mount (tab/section) the row renders into ·
+   lv exposure level — 'a' forces the Adv tab (visible only with "Show
+   advanced tab" on), 'n' forces the normal `sec` mount; unset, adv-stored
+   rows (adv/veh/h) default to the Adv tab and the rest to their `sec`, so
+   promoting/demoting a setting is a one-flag change ·
+   opts [[value,label],…] for segs · min/max/step for ranges · max/ph for text.
+
+   Storage: plain rows persist S.set[k] (defaults in the S.set literal, top of
+   file); adv:1 rows store an OVERRIDE in S.set.adv over the ADV_D shipping
+   default, with an ↺ reset; veh:1 overrides per-vehicle (alert distances).
+   get/put remap non-boolean storage onto a control; apply is the side-effect
+   fired on every change (adv rows instead route through advApply(k)).
    Values apply immediately; "Copy tuning" exports the overrides so a good
    setup can be promoted to new shipped defaults. */
-const ADV_UI = [
+const SETTINGS = [
+  // map style — the seg above the tab strip
+  { sec: 'style', k: 'mapStyle', t: 'seg', l: 'Map layers', segId: 'styleSeg',
+    opts: [['daylight', 'Day'], ['contrast', 'Trail'], ['dark', 'Dark'], ['satellite', 'Sat']],
+    put: v => setMapStyle(v) }, // setMapStyle persists + repaints the seg itself
+  // Account
+  { sec: 'account', k: 'name', t: 'text', l: 'Your name', id: 'myName', max: 12, ph: 'Grant' },
+  { sec: 'account', k: 'email', t: 'text', l: 'Email', id: 'myEmail', max: 60, ph: 'you@example.com' },
+  { sec: 'ride', k: 'code', t: 'text', l: 'Ride name', id: 'rideCode', max: 24, ph: 'e.g. watagans-42', apply: () => startFriends() },
+  // General
+  { sec: 'map', k: 'hillshade', t: 'toggle', l: 'Terrain shading', id: 'setHill', apply: applyHill },
+  { sec: 'map', k: 'strava', t: 'toggle', l: 'Strava heatmap overlay', id: 'setStrava', apply: applyStrava },
+  { sec: 'ui', k: 'wake', t: 'toggle', l: 'Keep screen on while navigating', id: 'setWake',
+    apply: () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); } },
+  { sec: 'ui', k: 'gloveSide', t: 'toggle', l: 'Ride controls button on the right', id: 'setGloveRight',
+    get: () => S.set.gloveSide === 'right', put: v => { S.set.gloveSide = v ? 'right' : 'left'; }, apply: () => applyGloveSide() },
+  { sec: 'ui', k: 'ctlEdges', t: 'seg', l: 'Control buttons on', segId: 'edgesSeg',
+    opts: [['sides', 'Left & right'], ['tb', 'Top & bottom']], apply: () => applyEdges() },
+  { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tab', id: 'setShowAdv', apply: applyShowAdv },
+  // Nav
+  { sec: 'nav', k: 'sound', t: 'toggle', l: 'Turn beeps', id: 'setSound', put: v => setSound(v) }, // setSound persists + syncs every mute face
+  { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Turn confirmation chirp', id: 'setConfirm' },
+  { sec: 'nav', k: 'vehicle', t: 'seg', l: 'Vehicle (alerts + zoom)', segId: 'vehSeg',
+    opts: [['walk', 'Walk'], ['mtb', 'MTB'], ['enduro', 'Enduro'], ['adventure', 'ADV']],
+    apply: () => { refreshPresets(); renderSettings('adv'); } }, // presets + adv overrides are per-vehicle
+  { sec: 'nav', k: 'autoZoom', t: 'toggle', l: 'Auto-zoom', id: 'setAutoZoom' },
+  { sec: 'nav', k: 'compassAuto', t: 'seg', l: 'Compass when zoomed in', segId: 'compassSeg',
+    opts: [['turns', 'Turns'], ['thresh', 'Zoom'], ['off', 'Off']] },
+  { sec: 'nav', k: 'countUnit', t: 'seg', l: 'Countdown units', segId: 'cdSeg',
+    opts: [['m', 'Metres'], ['s', 'Seconds']] },
+  { sec: 'nav', k: 'steep', t: 'toggle', l: 'Steepness colouring', id: 'setSteep', apply: () => { refreshMapData(); drawProgress(true); } },
+  { sec: 'nav', k: 'surf', t: 'toggle', l: 'Road-surface patterns', id: 'setSurf', apply: () => refreshMapData() },
+  { sec: 'nav', k: 'trail', t: 'toggle', l: 'Backtrack trail', id: 'setTrail',
+    apply: () => { if (mapReady) map.setLayoutProperty('trail-dots', 'visibility', S.set.trail ? 'visible' : 'none'); } },
+  // Stark
+  { sec: 'stark', k: 'varg', t: 'toggle', l: 'Bike telemetry', id: 'setVarg', apply: () => applyVarg() },
+  { sec: 'stark', k: 'vargSrc', t: 'seg', l: 'Source', segId: 'vargSrcSeg',
+    opts: [['vp', 'VargPilot'], ['ble', 'Direct BLE']], apply: () => applyVarg() },
+  { sec: 'vp', k: 'vpUrl', t: 'text', l: 'Server URL', id: 'vpUrl', max: 80, ph: 'http://127.0.0.1:8080', apply: () => applyVarg() },
+  // Advanced: live tuning console — sliders over the ADV_D defaults
   { h: 'Compass & camera' },
-  { k: 'headDamp', l: 'Heading damping', min: 0.02, max: 0.5, step: 0.01 },
-  { k: 'headDead', l: 'Heading dead-band (°)', min: 0, max: 8, step: 0.5 },
-  { k: 'rotHz', l: 'Map rotation rate (Hz)', min: 1, max: 20, step: 1 },
-  { k: 'easeMs', l: 'Follow ease (ms)', min: 200, max: 2000, step: 50 },
-  { k: 'zoomThresh', l: 'Compass zoom threshold', min: 10, max: 18, step: 0.5 },
+  { k: 'headDamp', t: 'range', adv: 1, l: 'Heading damping', min: 0.02, max: 0.5, step: 0.01 },
+  { k: 'headDead', t: 'range', adv: 1, l: 'Heading dead-band (°)', min: 0, max: 8, step: 0.5 },
+  { k: 'rotHz', t: 'range', adv: 1, l: 'Map rotation rate (Hz)', min: 1, max: 20, step: 1 },
+  { k: 'easeMs', t: 'range', adv: 1, l: 'Follow ease (ms)', min: 200, max: 2000, step: 50 },
+  { k: 'zoomThresh', t: 'range', adv: 1, l: 'Compass zoom threshold', min: 10, max: 18, step: 0.5 },
   { h: 'Alerts & cues (current vehicle)' },
-  { k: 'farMin', veh: 1, l: 'Far warn min (m)', min: 10, max: 300, step: 5 },
-  { k: 'farMax', veh: 1, l: 'Far warn max (m)', min: 40, max: 800, step: 10 },
-  { k: 'nearMin', veh: 1, l: 'Near warn min (m)', min: 5, max: 150, step: 5 },
-  { k: 'nearMax', veh: 1, l: 'Near warn max (m)', min: 15, max: 300, step: 5 },
-  { k: 'apprMul', l: 'Approach window ×far', min: 1, max: 4, step: 0.1 },
-  { k: 'apprFloor', l: 'Approach floor (m)', min: 100, max: 600, step: 25 },
-  { k: 'offM', l: 'Off-track beyond (m)', min: 20, max: 200, step: 5 },
-  { k: 'onM', l: 'Back on within (m)', min: 10, max: 150, step: 5 },
-  { k: 'beepVol', l: 'Beep volume', min: 0, max: 1, step: 0.05 },
+  { k: 'farMin', t: 'range', veh: 1, l: 'Far warn min (m)', min: 10, max: 300, step: 5 },
+  { k: 'farMax', t: 'range', veh: 1, l: 'Far warn max (m)', min: 40, max: 800, step: 10 },
+  { k: 'nearMin', t: 'range', veh: 1, l: 'Near warn min (m)', min: 5, max: 150, step: 5 },
+  { k: 'nearMax', t: 'range', veh: 1, l: 'Near warn max (m)', min: 15, max: 300, step: 5 },
+  { k: 'apprMul', t: 'range', adv: 1, l: 'Approach window ×far', min: 1, max: 4, step: 0.1 },
+  { k: 'apprFloor', t: 'range', adv: 1, l: 'Approach floor (m)', min: 100, max: 600, step: 25 },
+  { k: 'offM', t: 'range', adv: 1, l: 'Off-track beyond (m)', min: 20, max: 200, step: 5 },
+  { k: 'onM', t: 'range', adv: 1, l: 'Back on within (m)', min: 10, max: 150, step: 5 },
+  { k: 'beepVol', t: 'range', adv: 1, l: 'Beep volume', min: 0, max: 1, step: 0.05 },
   { h: 'Zoom & countdown' },
-  { k: 'cdDist', l: 'Countdown from (m)', min: 100, max: 1000, step: 25 },
+  { k: 'cdDist', t: 'range', adv: 1, l: 'Countdown from (m)', min: 100, max: 1000, step: 25 },
   { h: 'Rendering & misc' },
-  { k: 'btnOp', l: 'Riding button opacity', min: 0.1, max: 1, step: 0.05 },
-  { k: 'trailGap', l: 'Trail dot spacing (m)', min: 5, max: 100, step: 5 },
-  { k: 'heatMask', l: 'Heatmap knockout along route (m, 0 = off)', min: 0, max: 60, step: 2 },
-  { k: 'heatUnderOp', l: 'Heatmap under route opacity', min: 0, max: 0.5, step: 0.02 },
-  { k: 'dirtDash', l: 'Dirt dash length (×width)', min: 0.5, max: 8, step: 0.1 },
-  { k: 'dirtGap', l: 'Dirt gap length (×width)', min: 0.2, max: 8, step: 0.1 },
-  { k: 'singleDash', l: 'Singletrack dot length (×width)', min: 0.05, max: 4, step: 0.05 },
-  { k: 'singleGap', l: 'Singletrack gap length (×width)', min: 0.2, max: 8, step: 0.1 },
-  { k: 'haloOp', l: 'Route halo opacity', min: 0, max: 1, step: 0.05 },
-  { k: 'haloMul', l: 'Route halo width ×', min: 1.2, max: 4, step: 0.1 },
-  { k: 'chevSize', l: 'Direction arrow size (0 off)', min: 0, max: 30, step: 1 },
-  { k: 'chevGap', l: 'Direction arrow spacing', min: 30, max: 300, step: 10 },
-  { k: 'chevCol', l: 'Direction arrow colour', col: 1 },
-  { k: 'colRoute', l: 'Route colour', col: 1 },
-  { k: 'colOwn', l: 'Heatmap: own rides', col: 1 },
-  { k: 'colOther', l: 'Heatmap: other riders', col: 1 },
-  { k: 'colPlan', l: 'Heatmap: planned', col: 1 },
-  { k: 'colTrail', l: 'Basemap minor trails (Trail style)', col: 1 },
-  { k: 'trailProm', l: 'Basemap trail width ×', min: 0.3, max: 3, step: 0.1 },
-  { k: 'gpsAcc', l: 'GPS accuracy floor (m, 0 = off)', min: 0, max: 100, step: 5 },
+  { k: 'btnOp', t: 'range', adv: 1, l: 'Riding button opacity', min: 0.1, max: 1, step: 0.05 },
+  { k: 'trailGap', t: 'range', adv: 1, l: 'Trail dot spacing (m)', min: 5, max: 100, step: 5 },
+  { k: 'heatMask', t: 'range', adv: 1, l: 'Heatmap knockout along route (m, 0 = off)', min: 0, max: 60, step: 2 },
+  { k: 'heatUnderOp', t: 'range', adv: 1, l: 'Heatmap under route opacity', min: 0, max: 0.5, step: 0.02 },
+  { k: 'dirtDash', t: 'range', adv: 1, l: 'Dirt dash length (×width)', min: 0.5, max: 8, step: 0.1 },
+  { k: 'dirtGap', t: 'range', adv: 1, l: 'Dirt gap length (×width)', min: 0.2, max: 8, step: 0.1 },
+  { k: 'singleDash', t: 'range', adv: 1, l: 'Singletrack dot length (×width)', min: 0.05, max: 4, step: 0.05 },
+  { k: 'singleGap', t: 'range', adv: 1, l: 'Singletrack gap length (×width)', min: 0.2, max: 8, step: 0.1 },
+  { k: 'haloOp', t: 'range', adv: 1, l: 'Route halo opacity', min: 0, max: 1, step: 0.05 },
+  { k: 'haloMul', t: 'range', adv: 1, l: 'Route halo width ×', min: 1.2, max: 4, step: 0.1 },
+  { k: 'chevSize', t: 'range', adv: 1, l: 'Direction arrow size (0 off)', min: 0, max: 30, step: 1 },
+  { k: 'chevGap', t: 'range', adv: 1, l: 'Direction arrow spacing', min: 30, max: 300, step: 10 },
+  { k: 'chevCol', t: 'color', adv: 1, l: 'Direction arrow colour' },
+  { k: 'colRoute', t: 'color', adv: 1, l: 'Route colour' },
+  { k: 'colOwn', t: 'color', adv: 1, l: 'Heatmap: own rides' },
+  { k: 'colOther', t: 'color', adv: 1, l: 'Heatmap: other riders' },
+  { k: 'colPlan', t: 'color', adv: 1, l: 'Heatmap: planned' },
+  { k: 'colTrail', t: 'color', adv: 1, l: 'Basemap minor trails (Trail style)' },
+  { k: 'trailProm', t: 'range', adv: 1, l: 'Basemap trail width ×', min: 0.3, max: 3, step: 0.1 },
+  { k: 'gpsAcc', t: 'range', adv: 1, l: 'GPS accuracy floor (m, 0 = off)', min: 0, max: 100, step: 5 },
 ];
 function advGet(r) { return r.veh ? vehVal(r.k) : ADV(r.k); }
 function advSet(r, v) {
@@ -4164,7 +4178,7 @@ function advSet(r, v) {
 function advReset(r) {
   if (r.veh) { const o = S.set.adv.veh && S.set.adv.veh[S.set.vehicle]; if (o) delete o[r.k]; }
   else delete S.set.adv[r.k];
-  saveSet(); advApply(r.k); buildAdv();
+  saveSet(); advApply(r.k); renderSettings('adv');
 }
 let restyleT = null;
 function advApply(k) {
@@ -4201,55 +4215,95 @@ function applyAdvPaint() {
   for (const l of ['heat-halo', 'heat-core']) map.setPaintProperty(l, 'line-color', clsMatch());
   map.setLayoutProperty('trail-dots', 'visibility', S.set.trail !== false ? 'visible' : 'none');
 }
-function buildAdv() {
-  const el = document.getElementById('advList');
-  el.innerHTML = '';
-  for (const r of ADV_UI) {
-    if (r.h) {
-      const h = document.createElement('h3');
-      h.textContent = r.h + (r.h.includes('vehicle') ? ' — ' + S.set.vehicle : '');
-      el.appendChild(h); continue;
+/* ---------------- one renderer generates every settings row ---------------- */
+function regGet(r) { return r.get ? r.get() : (r.adv || r.veh) ? advGet(r) : S.set[r.k]; }
+function regSet(r, v) {
+  if (r.adv || r.veh) { advSet(r, v); return; } // advSet persists + fires advApply
+  if (r.put) r.put(v); else S.set[r.k] = v;
+  saveSet(); if (r.apply) r.apply();
+}
+function regRow(r) {
+  if (r.h) { // Adv section header; the vehicle group names the current vehicle
+    const h = document.createElement('h3');
+    h.textContent = r.h + (r.h.includes('vehicle') ? ' — ' + S.set.vehicle : '');
+    return h;
+  }
+  const row = document.createElement('div');
+  row.className = 'row';
+  const idAttr = r.id ? ` id="${r.id}"` : '';
+  const rstHtml = (r.adv || r.veh) ? '<span class="advRst" title="reset"><svg class="ic"><use href="#i-rotate-ccw"/></svg></span>' : '';
+  if (r.t === 'toggle') {
+    row.innerHTML = `<label>${r.l}</label><span class="sw"><input type="checkbox"${idAttr}><span></span></span>`;
+    const inp = row.querySelector('input');
+    inp.checked = !!regGet(r);
+    inp.onchange = () => regSet(r, inp.checked);
+  } else if (r.t === 'seg') {
+    row.innerHTML = `<label>${r.l}</label><span class="seg"${r.segId ? ` id="${r.segId}"` : ''}></span>`;
+    const seg = row.querySelector('.seg');
+    for (const [v, l] of r.opts) {
+      const b = document.createElement('button');
+      b.dataset.v = v; b.textContent = l;
+      b.classList.toggle('active', v === regGet(r));
+      b.onclick = () => {
+        regSet(r, v);
+        for (const b2 of seg.children) b2.classList.toggle('active', b2 === b);
+      };
+      seg.appendChild(b);
     }
-    const row = document.createElement('div');
-    row.className = 'row';
-    const v = advGet(r);
-    if (r.col) {
-      row.innerHTML = `<label>${r.l}</label><input type="color" value="${v}"><span class="advRst" title="reset"><svg class="ic"><use href="#i-rotate-ccw"/></svg></span>`;
-      const inp = row.querySelector('input');
-      inp.oninput = () => advSet(r, inp.value);
-    } else {
-      row.innerHTML = `<label>${r.l}</label><input type="range" min="${r.min}" max="${r.max}" step="${r.step}" value="${v}">
-        <span class="advVal">${v}</span><span class="advRst" title="reset"><svg class="ic"><use href="#i-rotate-ccw"/></svg></span>`;
-      const inp = row.querySelector('input'), val = row.querySelector('.advVal');
-      inp.oninput = () => { const n = +inp.value; val.textContent = n; advSet(r, n); };
-    }
-    row.querySelector('.advRst').onclick = () => advReset(r);
-    el.appendChild(row);
+  } else if (r.t === 'text') {
+    row.innerHTML = `<label>${r.l}</label><input type="text"${idAttr} maxlength="${r.max}" placeholder="${r.ph || ''}">`;
+    const inp = row.querySelector('input');
+    inp.value = regGet(r) || '';
+    inp.onchange = () => regSet(r, inp.value.trim());
+  } else if (r.t === 'color') {
+    row.innerHTML = `<label>${r.l}</label><input type="color" value="${regGet(r)}">${rstHtml}`;
+    const inp = row.querySelector('input');
+    inp.oninput = () => regSet(r, inp.value);
+  } else { // range
+    const v = regGet(r);
+    row.innerHTML = `<label>${r.l}</label><input type="range" min="${r.min}" max="${r.max}" step="${r.step}" value="${v}">
+      <span class="advVal">${v}</span>${rstHtml}`;
+    const inp = row.querySelector('input'), val = row.querySelector('.advVal');
+    inp.oninput = () => { const n = +inp.value; val.textContent = n; regSet(r, n); };
+  }
+  const rst = row.querySelector('.advRst');
+  if (rst) rst.onclick = () => advReset(r);
+  return row;
+}
+/* placement: lv 'a'/'n' forces the Adv tab / the row's normal `sec` mount;
+   unset, adv-stored rows default to Adv and the rest to their `sec` */
+function regSec(r) {
+  if (r.lv) return r.lv === 'a' ? 'adv' : r.sec;
+  return (r.adv || r.veh || r.h) ? 'adv' : r.sec;
+}
+function renderSettings(only) {
+  const mounts = { adv: document.getElementById('advList') };
+  for (const m of document.querySelectorAll('[data-reg]')) mounts[m.dataset.reg] = m;
+  for (const sec in mounts) if (!only || sec === only) mounts[sec].innerHTML = '';
+  for (const r of SETTINGS) {
+    const sec = regSec(r);
+    if (only && sec !== only) continue;
+    const m = mounts[sec];
+    if (m) m.appendChild(regRow(r));
   }
 }
+renderSettings();
+setSound(S.set.sound); // sync every mute face (incl. the generated checkbox) at boot
 document.getElementById('advCopy').onclick = async () => {
   const txt = JSON.stringify({ adv: S.set.adv, zoomPresets: S.set.zoomPresets }, null, 1);
   try { await navigator.clipboard.writeText(txt); toast('Tuning JSON copied to clipboard'); }
   catch (e) { console.log('[tuning]', txt); toast('Clipboard blocked — tuning logged to console'); }
 };
 document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
-bindSet('setWake', 'wake', () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); });
-const gloveRightEl = document.getElementById('setGloveRight');
-gloveRightEl.checked = S.set.gloveSide === 'right';
-gloveRightEl.onchange = () => { S.set.gloveSide = gloveRightEl.checked ? 'right' : 'left'; saveSet(); applyGloveSide(); };
 applyGloveSide();
 // control-button edges: left/right columns (default) or top/bottom rows
 function applyEdges() {
   const tb = S.set.ctlEdges === 'tb';
   document.body.classList.toggle('edges-tb', tb);
-  for (const b of document.querySelectorAll('#edgesSeg button')) b.classList.toggle('active', b.dataset.e === (tb ? 'tb' : 'sides'));
+  for (const b of document.querySelectorAll('#edgesSeg button')) b.classList.toggle('active', b.dataset.v === (tb ? 'tb' : 'sides'));
   placeProgress();
 }
-for (const b of document.querySelectorAll('#edgesSeg button'))
-  b.onclick = () => { S.set.ctlEdges = b.dataset.e; saveSet(); applyEdges(); };
 applyEdges();
-const nameEl = document.getElementById('myName'), codeEl = document.getElementById('rideCode'), emailEl = document.getElementById('myEmail');
-nameEl.value = S.set.name; codeEl.value = S.set.code; emailEl.value = S.set.email || '';
 /* turn-point contribution export: the whole outbox as JSON — paste into Dingo to bake
    the edits into the pack, so every future download carries them */
 document.getElementById('turnExportBtn').onclick = async () => {
@@ -4260,9 +4314,79 @@ document.getElementById('turnExportBtn').onclick = async () => {
   catch (e) { toast('Clipboard blocked — turn edits logged to the console'); }
 };
 turnSyncInfo();
-nameEl.onchange = () => { S.set.name = nameEl.value.trim(); saveSet(); };
-emailEl.onchange = () => { S.set.email = emailEl.value.trim(); saveSet(); };
-codeEl.onchange = () => { S.set.code = codeEl.value.trim(); saveSet(); startFriends(); };
+
+/* ---------------- config: export / import / pack ingest ----------------
+   The whole setup as one JSON blob — S.set carries everything user-tweakable
+   (settings, adv overrides, zoom presets, screen layouts, controller keys).
+   Bench-tune on a desktop browser with live preview, export, ingest on the
+   bike. Packs can carry a config too (down only, always behind a confirm). */
+function configBlob() { return JSON.stringify({ dingonavConfig: 1, set: S.set }, null, 1); }
+
+/* re-fire every side-effect after wholesale S.set replacement (config import) */
+function applyAllSettings() {
+  S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
+  S.set.layout = S.set.layout || {}; S.set.keys = S.set.keys || {};
+  saveSet();
+  renderSettings();
+  setSound(S.set.sound);
+  refreshKeyBtns(); refreshPresets(); applyShowAdv(); applyGloveSide(); applyEdges(); applyLayout();
+  applyOrient(); applyStrava(); applyHill(); applyVarg();
+  document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
+  if (S.nav) S.set.wake ? requestWake() : releaseWake();
+  heatMaskCache.key = ''; // heatMask may have changed — force a re-clip
+  if (mapReady) setMapStyle(S.set.mapStyle).then(() => { applyAdvPaint(); refreshMapData(); drawProgress(true); });
+  startFriends();
+}
+
+/* Apply a config over S.set — always behind a confirm, never silently.
+   fromPack strips identity + device-specific keys: a pack may carry the trip
+   leader's tuning, never their name/ride code or controller bindings. */
+function offerConfig(cfg, src, fromPack) {
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) { toast('No usable config in ' + src); return false; }
+  cfg = { ...cfg };
+  if (fromPack) for (const k of ['name', 'email', 'code', 'keys']) delete cfg[k];
+  const n = Object.keys(cfg).length;
+  if (!n) { toast('No usable config in ' + src); return false; }
+  if (!confirm(`Apply ${n} setting${n === 1 ? '' : 's'} from ${src}?\nThis overwrites your current setup (tracks and maps are untouched).`)) return false;
+  Object.assign(S.set, cfg);
+  applyAllSettings();
+  toast('Config applied from ' + src);
+  return true;
+}
+function importConfigText(txt, src) {
+  const obj = JSON.parse(txt);
+  const cfg = obj.dingonavConfig && obj.set ? obj.set
+    : (obj.adv || obj.zoomPresets) && !obj.tracks ? obj // old "Copy tuning" blobs still ingest
+    : null;
+  if (!cfg) throw new Error('not a DingoNav config');
+  offerConfig(cfg, src, false);
+}
+document.getElementById('cfgExportBtn').onclick = async () => {
+  const txt = configBlob();
+  let copied = false;
+  try { await navigator.clipboard.writeText(txt); copied = true; } catch (e) { console.log('[config]', txt); }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], { type: 'application/json' }));
+  a.download = 'dingonav-config.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('Config exported' + (copied ? ' — file downloaded + copied to clipboard' : ' — file downloaded (clipboard blocked, logged to console)'));
+};
+document.getElementById('cfgImportBtn').onclick = () => document.getElementById('cfgInput').click();
+document.getElementById('cfgInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { importConfigText(await f.text(), '"' + f.name + '"'); }
+  catch (err) { toast('Config import failed: ' + err.message); }
+});
+document.getElementById('cfgPasteBtn').onclick = async () => {
+  let txt = '';
+  try { txt = await navigator.clipboard.readText(); } catch (e) {}
+  if (!txt || !txt.trim().startsWith('{')) txt = prompt('Paste config JSON') || '';
+  if (!txt.trim()) return;
+  try { importConfigText(txt, 'pasted config'); }
+  catch (err) { toast('Config import failed: ' + err.message); }
+};
 
 /* ---------------- editable screen layout (edit mode) ----------------
    Design tool (Settings → General → Edit screen layout): the floating chrome
