@@ -3,7 +3,9 @@
      Standalone style mock-up (design: docs/plans/2026-07-16-map-appearance-mockup-design.md).
      One file, zero dependencies, fully offline — double-click to open. Never ships in the PWA.
      One hand-authored SVG scene, four skins (Day/Trail/Dark/Sat) via CSS variables; a Mac-style
-     inspector tunes route/heat/basemap/chrome; themes round-trip as JSON via Copy/Paste. -->
+     inspector tunes route/heat/basemap/chrome; themes round-trip as JSON via Copy/Paste.
+     A resolution switcher letterboxes the preview to the dash panel (1440×720 / 720×1440 /
+     720×720) at ride zoom, camera tracking the position arrow. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -53,6 +55,14 @@
 
   /* ================= map stage ================= */
   #stage{position:fixed; inset:0}
+  #frame{position:absolute; inset:0; overflow:hidden}
+  body.framed #stage{background:radial-gradient(1200px 700px at 40% 42%, #17191d, #0a0b0d)}
+  body.framed #frame{border-radius:14px; background:#111;
+       box-shadow:0 0 0 1px rgba(255,255,255,.09), 0 34px 90px rgba(0,0,0,.6)}
+  #frameCap{position:absolute; display:none; transform:translateX(-50%); white-space:nowrap;
+       color:rgba(255,255,255,.42); font-size:11.5px; font-weight:600; letter-spacing:.05em;
+       pointer-events:none}
+  body.framed #frameCap{display:block}
   #scene{width:100%; height:100%; display:block}
   #gSat{display:var(--sat-show)}
   #gGround{filter:brightness(var(--bri-ground))}
@@ -67,17 +77,19 @@
   .lbl-peak{font-size:12.5px; font-weight:600}
 
   /* ================= floating chrome ================= */
-  #seg{position:fixed; top:14px; left:50%; transform:translateX(calc(-50% - 178px)); z-index:30;
-       display:flex; padding:3px; gap:2px; border-radius:9px;
+  #topBar{position:fixed; top:14px; left:0; right:360px; z-index:30; display:flex;
+       justify-content:center; gap:8px; pointer-events:none}
+  .pillSeg{display:flex; padding:3px; gap:2px; border-radius:9px; pointer-events:auto;
        background:rgba(28,30,34,.62); backdrop-filter:blur(20px) saturate(1.4);
        -webkit-backdrop-filter:blur(20px) saturate(1.4);
        box-shadow:0 6px 24px rgba(0,0,0,.35), inset 0 0 0 .5px rgba(255,255,255,.14)}
-  #seg button{border:0; background:transparent; color:rgba(255,255,255,.78); font:600 12.5px/1 inherit;
+  .pillSeg button{border:0; background:transparent; color:rgba(255,255,255,.78); font:600 12.5px/1 inherit;
        font-family:inherit; padding:6px 16px; border-radius:7px; cursor:pointer}
-  #seg button.on{background:#fff; color:#1c1e22; box-shadow:0 1px 4px rgba(0,0,0,.35)}
+  .pillSeg button.on{background:#fff; color:#1c1e22; box-shadow:0 1px 4px rgba(0,0,0,.35)}
+  #resSeg button{font-size:11px; padding:6px 10px; font-variant-numeric:tabular-nums}
 
   /* ride chrome — always overlaid; legibility is judged map+chrome together */
-  #turnStrip{position:fixed; top:62px; left:50%; transform:translateX(calc(-50% - 178px)); z-index:24;
+  #turnStrip{position:absolute; top:62px; left:50%; transform:translateX(calc(-50% - 178px)); z-index:24;
        min-width:230px; padding:9px 16px 12px; border-radius:13px; text-align:center;
        background:var(--chrome-plate); color:var(--chrome-text);
        backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
@@ -87,8 +99,12 @@
   #tsBar{position:absolute; left:14px; right:14px; bottom:5px; height:3.5px; border-radius:2px;
        background:rgba(255,255,255,.18); overflow:hidden}
   #tsBarFill{height:100%; width:0%; background:var(--turn-accent); border-radius:2px}
+  /* letterboxed to a dash frame: chrome hugs the frame edges, not the window */
+  body.framed #turnStrip{top:16px; transform:translateX(-50%)}
+  body.framed #readouts{right:16px; top:14px}
+  body.framed #ctls{right:16px; bottom:16px}
 
-  #readouts{position:fixed; top:14px; right:376px; z-index:24; display:flex; flex-direction:column;
+  #readouts{position:absolute; top:14px; right:376px; z-index:24; display:flex; flex-direction:column;
        align-items:flex-end; gap:8px; pointer-events:none}
   .rdo{background:var(--chrome-plate); color:var(--chrome-text); border-radius:11px; padding:6px 12px;
        font-weight:800; font-size:calc(16px * var(--readout-size));
@@ -110,7 +126,7 @@
   body.noplate #modeChip{background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none;
        text-shadow:0 0 3px rgba(0,0,0,.9), 0 0 8px rgba(0,0,0,.7)}
 
-  #ctls{position:fixed; right:376px; bottom:24px; z-index:24; display:flex; flex-direction:column; gap:10px}
+  #ctls{position:absolute; right:376px; bottom:24px; z-index:24; display:flex; flex-direction:column; gap:10px}
   #ctls button{width:calc(44px * var(--btn-size)); height:calc(44px * var(--btn-size));
        border-radius:50%; border:1.5px solid rgba(255,255,255,.35);
        background:var(--chrome-plate); color:var(--chrome-text); opacity:var(--btn-op);
@@ -273,6 +289,7 @@
 <body data-style="day">
 
 <div id="stage">
+<div id="frame">
 <svg id="scene" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-label="Map preview">
   <defs>
     <filter id="fHill" x="-30%" y="-30%" width="160%" height="160%">
@@ -442,10 +459,7 @@
     <path d="M 60,576 L 148,576 L 104,652 Z" stroke="none"/>
   </g>
 </svg>
-</div>
-
-<!-- floating chrome -->
-<div id="seg"></div>
+<!-- ride chrome lives inside the frame so it letterboxes with the dash panel -->
 <div id="turnStrip"><span class="ic" id="tsIcon">↰</span><span id="tsDist">250 m</span>
   <small id="tsLabel"> · Hairpin left</small><div id="tsBar"><div id="tsBarFill"></div></div></div>
 <div id="readouts">
@@ -453,6 +467,15 @@
   <div id="modeChip">3</div>
 </div>
 <div id="ctls"><button>+</button><button>−</button><button style="font-size:calc(13px * var(--btn-size))">◉</button></div>
+</div>
+<div id="frameCap"></div>
+</div>
+
+<!-- floating chrome -->
+<div id="topBar">
+  <div id="seg" class="pillSeg"></div>
+  <div id="resSeg" class="pillSeg" title="Letterbox the preview to the dash panel at ride zoom"></div>
+</div>
 <div id="rideBar">
   <button id="btnPlay" title="Ride simulation">▶</button>
   <button class="spd" data-s="1">1×</button>
@@ -526,6 +549,15 @@ const DEFAULTS = {
 };
 const STYLE_IDS = ['day', 'trail', 'dark', 'sat'];
 const STYLE_LABELS = { day: 'Day', trail: 'Trail', dark: 'Dark', sat: 'Sat' };
+// dash panel resolutions (landscape / portrait / half-screen); null = fill the window
+const RES_MODES = [
+  ['full', 'Full', null],
+  ['1440x720', '1440×720', [1440, 720]],
+  ['720x1440', '720×1440', [720, 1440]],
+  ['720x720', '720×720', [720, 720]],
+];
+const RES_DIMS = Object.fromEntries(RES_MODES.map(([id, , d]) => [id, d]));
+const RIDE_PX_PER_UNIT = 2; // ride zoom: 1 scene unit ≈ 2 dash pixels
 // mirror of the CSS skin grounds — the collision guard needs numbers, CSS vars aren't parseable
 const GROUND_HEX = { day: '#f2efe7', trail: '#efece4', dark: '#0e1216', sat: '#46503c' };
 
@@ -565,7 +597,8 @@ function themeFromPreset(p) {
 }
 function seedState() {
   const t = themeFromPreset(PRESETS[0]);
-  return { global: t.global, pins: t.pins, style: 'day', preset: 'app', ab: { A: null, B: null, showing: null } };
+  return { global: t.global, pins: t.pins, style: 'day', preset: 'app', res: 'full',
+    ab: { A: null, B: null, showing: null } };
 }
 let S = seedState();
 try {
@@ -576,13 +609,14 @@ try {
     S.pins = Object.assign(emptyPins(), saved.pins || {});
     for (const s of STYLE_IDS) S.pins[s] = Object.assign({}, S.pins[s]);
     if (STYLE_IDS.includes(saved.style)) S.style = saved.style;
+    if (saved.res && saved.res in RES_DIMS) S.res = saved.res;
     if (saved.preset) S.preset = saved.preset;
     if (saved.ab) S.ab = Object.assign({ A: null, B: null, showing: null }, saved.ab);
   }
 } catch (e) { /* file:// with storage blocked — run stateless */ }
 
 function save() {
-  try { localStorage.setItem(LS_KEY, JSON.stringify({ global: S.global, pins: S.pins, style: S.style, preset: S.preset, ab: S.ab })); }
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ global: S.global, pins: S.pins, style: S.style, preset: S.preset, res: S.res, ab: S.ab })); }
   catch (e) { }
 }
 function eff(k) { const p = S.pins[S.style]; return (k in p) ? p[k] : S.global[k]; }
@@ -1070,6 +1104,64 @@ function rebuildSteep() {
   flush();
 }
 
+/* ============== resolution frames — letterbox to the dash at ride zoom ============== */
+const frameEl = $('frame'), sceneEl = $('scene'), giantEl = $('gGiant');
+// the giant turn arrow is HUD, not map — remember its authored footprint so it can be
+// re-anchored into whatever crop the camera shows
+const GIANT_BB = (() => {
+  const b = giantEl.getBBox();
+  return { cx: b.x + b.width / 2, cy: b.y + b.height / 2, max: Math.max(b.width, b.height) + 24 };
+})();
+function layoutFrame() {
+  const dims = RES_DIMS[S.res];
+  if (!dims) { frameEl.style.cssText = ''; updateCamera(); return; }
+  const [W, H] = dims;
+  const x0 = 18, x1 = window.innerWidth - 360 - 18;  // dodge the inspector
+  const y0 = 62, y1 = window.innerHeight - 84;       // clear the top pills + ride bar
+  const k = Math.min(1, (x1 - x0) / W, (y1 - y0) / H);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  frameEl.style.cssText = `left:${cx.toFixed(1)}px; top:${cy.toFixed(1)}px; right:auto; bottom:auto;` +
+    ` width:${W}px; height:${H}px; transform:translate(-50%,-50%) scale(${k.toFixed(4)})`;
+  const cap = $('frameCap');
+  cap.textContent = `${W} × ${H} — ride zoom · shown at ${Math.round(k * 100)}%`;
+  cap.style.left = cx + 'px';
+  cap.style.top = (cy + H * k / 2 + 12) + 'px';
+  updateCamera();
+}
+function updateCamera(p) {
+  const dims = RES_DIMS[S.res];
+  if (!dims) {
+    sceneEl.setAttribute('viewBox', '0 0 1600 1000');
+    giantEl.removeAttribute('transform');
+    return;
+  }
+  p = p || pathPoint(sim.t * fullLen);
+  const w = dims[0] / RIDE_PX_PER_UNIT, h = dims[1] / RIDE_PX_PER_UNIT;
+  const cx = Math.max(w / 2, Math.min(1600 - w / 2, p.x));
+  const cy = Math.max(h / 2, Math.min(1000 - h / 2, p.y));
+  const vx = cx - w / 2, vy = cy - h / 2;
+  sceneEl.setAttribute('viewBox', `${vx.toFixed(1)} ${vy.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+  const s = 0.24 * Math.min(w, h) / GIANT_BB.max;
+  const tx = (vx + w * 0.16) - s * GIANT_BB.cx, ty = (vy + h * 0.56) - s * GIANT_BB.cy;
+  giantEl.setAttribute('transform', `translate(${tx.toFixed(1)},${ty.toFixed(1)}) scale(${s.toFixed(3)})`);
+}
+function setRes(id) {
+  S.res = id;
+  document.body.classList.toggle('framed', id !== 'full');
+  syncResSeg(); layoutFrame(); save();
+}
+const resEl = $('resSeg');
+for (const [id, label] of RES_MODES) {
+  const b = document.createElement('button'); b.textContent = label; b.dataset.r = id;
+  b.title = id === 'full' ? 'Fill the window' : 'Letterbox to the dash panel at ride zoom';
+  b.addEventListener('click', () => setRes(id));
+  resEl.appendChild(b);
+}
+function syncResSeg() {
+  resEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === S.res));
+}
+window.addEventListener('resize', layoutFrame);
+
 /* ============================ ride simulation ============================ */
 // idle just short of the hairpin so the static frame shows the approach cue + giant arrow story
 const sim = { t: 0.335, playing: false, speed: 1, last: 0, crumbAt: 0 };
@@ -1080,6 +1172,7 @@ function placeArrow() {
   const ang = Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI + 90;
   $('posArrow').setAttribute('transform',
     `translate(${p.x.toFixed(1)},${p.y.toFixed(1)}) rotate(${ang.toFixed(1)}) scale(${eff('posSize')})`);
+  updateCamera(p); // letterboxed frames track the rider
 }
 function updateRidden() {
   $('riddenOv').setAttribute('stroke-dasharray', `${sim.t.toFixed(4)} 2`);
@@ -1189,8 +1282,8 @@ $('btnAbB').addEventListener('click', () => { if (S.ab.B) { applyTheme(S.ab.B); 
 
 $('btnReset').addEventListener('click', () => {
   if (!confirm('Reset everything to the app’s shipping values? Snapshots A/B are kept.')) return;
-  const ab = S.ab;
-  S = seedState(); S.ab = ab;
+  const ab = S.ab, res = S.res; // A/B and the viewing frame survive a theme reset
+  S = seedState(); S.ab = ab; S.res = res;
   document.body.dataset.style = S.style;
   syncSeg(); refresh(); toast('Reset to Current App');
 });
@@ -1275,6 +1368,7 @@ document.addEventListener('keydown', e => {
 buildInspector();
 document.body.dataset.style = S.style;
 syncSeg();
+setRes(S.res);
 refresh();
 </script>
 </body>
