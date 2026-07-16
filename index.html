@@ -16,8 +16,8 @@
   }
   *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
   /* Lucide icons: sized by the parent's font-size, coloured by currentColor */
-  svg.ic{width:1em; height:1em; fill:none; stroke:currentColor; stroke-width:2;
-    stroke-linecap:round; stroke-linejoin:round; display:inline-block; vertical-align:-0.12em; flex:none}
+  svg.ic{width:1.12em; height:1.12em; fill:none; stroke:currentColor; stroke-width:2;
+    stroke-linecap:round; stroke-linejoin:round; display:inline-block; vertical-align:-0.16em; flex:none}
   html,body{height:100%; overflow:hidden; background:var(--bg); color:var(--fg);
     font-family:-apple-system,'Segoe UI',Roboto,sans-serif; user-select:none; -webkit-user-select:none}
   #map{position:fixed; inset:0; background:var(--bg)}
@@ -46,8 +46,11 @@
   #hudDist{font-size:60px; font-weight:800; font-variant-numeric:tabular-nums; margin-left:auto;
     position:relative; white-space:nowrap; flex:none}
   #hudDist small{font-size:30px; font-weight:600; color:var(--dim)}
-  #hudType{font-size:28px; color:var(--fg); text-transform:uppercase; letter-spacing:.06em; position:relative;
+  #hudType{font-size:28px; color:var(--fg); letter-spacing:.02em; position:relative;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0}
+  /* tap the strip → the instruction briefly expands ("Left on to Arcadia Rd") */
+  #hudBox{pointer-events:auto; cursor:pointer}
+  #hudBox.expand #hudType{font-size:36px; font-weight:800; white-space:normal; line-height:1.15}
   /* main number: one edge readout (speed or battery, by ride profile), never centred —
      top-centre is the direction of travel. The turn countdown borrows this slot (amber). */
   #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:12px; z-index:10;
@@ -114,9 +117,10 @@
   /* sized and centred to the free band between the big numbers (top) and the bottom
      bar / MARK TURN chrome — the arrow never overlaps a readout */
   .bigArrow{position:fixed; top:60%; transform:translateY(-50%); z-index:9; display:none;
-    font-size:min(70vw,44vh); line-height:1; color:rgba(255,176,32,.55);
+    font-size:min(70vw,44vh); line-height:1; color:var(--arrowFill,#ffb020); opacity:var(--arrowOp,.55);
     filter:drop-shadow(0 4px 20px rgba(0,0,0,.5)); pointer-events:none}
-  .bigArrow svg.ic{display:block; fill:currentColor; stroke-width:1.2; vertical-align:0}
+  .bigArrow svg.ic{display:block; fill:currentColor; vertical-align:0;
+    stroke:var(--arrowEdge,#101820); stroke-width:var(--arrowEdgeW,0)}
   #bigArrowL{left:2vw} #bigArrowR{right:2vw}
   .bigArrow.on{display:block}
   .bigArrow.blink{display:block; animation:vgPulse .8s ease-in-out infinite}
@@ -247,16 +251,17 @@
     background:rgba(14,18,22,.96); border-top:1px solid #232d38;
     padding:10px 12px calc(env(safe-area-inset-bottom) + 10px) 58px; display:flex; gap:10px; align-items:center}
   body.navving #bottom{display:none} /* riding: bar removed — ☰ opens the ride-controls panel instead */
-  /* ☰ menu: floating, transparent, bottom-left; opens Settings when idle, ride controls while riding.
-     progress strip starts just to its right (see #progress left) */
+  /* ☰ menu: dark-grey plate so it reads on any map, bottom-left; opens Settings when
+     idle, ride controls while riding. Progress strip starts just to its right.
+     Exempt from the routing transparency fade — a visibility fix that fades is no fix. */
   #menuBtn{position:fixed; left:8px; bottom:8px; z-index:26; width:44px; height:44px; font-size:26px;
-    display:flex; align-items:center; justify-content:center; background:transparent; border:none;
+    display:flex; align-items:center; justify-content:center; background:rgba(34,41,48,.85);
+    border:1px solid #2a3540; border-radius:12px;
     color:var(--fg); text-shadow:0 1px 6px rgba(0,0,0,.8); cursor:pointer}
-  #menuBtn:active{background:rgba(22,28,34,.5); border-radius:12px}
+  #menuBtn:active{background:rgba(52,62,72,.9)}
   /* riding: ☰ is one of the three interactive elements — glove-sized, lifted above the
      full-width progress strip (placeProgress sets its bottom offset) */
-  body.navving #menuBtn{width:88px; height:88px; font-size:44px; opacity:var(--navOp,.4)}
-  body.navving #menuBtn:active{opacity:1}
+  body.navving #menuBtn{width:88px; height:88px; font-size:44px; border-radius:20px}
   body.navving #progress{left:0}
   #trackInfo{flex:1; min-width:0; line-height:1.25}
   #trackName{font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -294,7 +299,12 @@
     background:var(--panel); border-radius:20px 20px 0 0; padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
     transform:translateY(105%); transition:transform .22s ease}
   #panel.on{transform:translateY(0)}
-  #panel h3{font-size:13px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); margin:18px 0 8px}
+  #panel h3{font-size:13px; letter-spacing:.06em; color:var(--dim); margin:18px 0 8px}
+  /* day scheme (2026-07-17): bottom bar + slide-up panel go white/light-grey on day
+     map styles — the CSS vars re-skin everything inside; ☰ grid & toasts stay dark */
+  body.daymode #bottom, body.daymode #panel{--fg:#15202b; --dim:#5a6a78; --panel:#eef1f4; color:var(--fg)}
+  body.daymode #bottom{background:rgba(245,247,249,.96); border-top-color:#ccd5dd}
+  body.daymode #panel{background:#eef1f4}
   #panelNav{display:flex; gap:10px; margin-bottom:6px}
   #panelNav #navBtn{flex:1}
   #panelNav .ctl{width:56px; height:56px; flex:none}
@@ -584,7 +594,7 @@
 <div id="shade"></div>
 <div id="panel">
   <div id="panelNav">
-    <button id="navBtn" disabled>START</button>
+    <button id="navBtn" disabled>Start</button>
     <div class="ctl" id="revBtn" title="reverse direction" style="display:none"><svg class="ic"><use href="#i-arrow-left-right"/></svg></div>
   </div>
   <div data-reg="style"></div>
@@ -642,6 +652,7 @@
 
     <h3>Config</h3>
     <div class="btnRow"><button class="btn" id="cfgExportBtn"><svg class="ic"><use href="#i-upload"/></svg> Export config</button><button class="btn" id="cfgImportBtn"><svg class="ic"><use href="#i-download"/></svg> Import config…</button></div>
+    <div class="btnRow"><button class="btn" id="ridesExportBtn"><svg class="ic"><use href="#i-upload"/></svg> Export rides (GPX)</button></div>
     <div class="btnRow"><button class="btn" id="cfgPasteBtn">Paste config from clipboard</button></div>
     <div class="hint">The complete setup in one JSON file — settings, tuning overrides, zoom presets, screen layouts, controller keys. Export downloads the file and copies it to the clipboard; bench-tune on a desktop browser, export there, import here.</div>
 
@@ -747,7 +758,7 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
-  trail: [], trailTrack: null, prog: null, autoOrient: false, autoBlock: false,
+  trail: [], trailTrack: null, prog: null, rides: [], autoOrient: false, autoBlock: false,
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, gloveSide: 'left', ctlEdges: 'sides', vehicle: 'enduro', surf: true, trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
@@ -779,11 +790,15 @@ if (!S.set._v3) {
 const ADV_D = {
   headDamp: 0.12, headDead: 2, rotHz: 4, easeMs: 900, zoomThresh: 15,
   apprMul: 1.5, apprFloor: 250, offM: 60, onM: 40, beepVol: 0.5, cdDist: 300,
+  deepHz: 460, highHz: 990, // pitch = phase: deep approaching, high at the turn
+  arrowFill: '#ffb020', arrowOp: 0.55, arrowEdge: '#101820', arrowEdgeW: 0, // giant turn arrow: fill + optional surround (0 = off, the as-is look)
+  apprUnit: 's', apprS: 15, apprM: 250, departUnit: 'm', departM: 30, departS: 4,
   btnOp: 0.4, trailGap: 20,
   routeWOut: 6, routeWIn: 11, coreFrac: 0.67, caseMode: 'auto', // route width px at overview/nav zoom; core share; casing auto = dark day / white night
   colDone: '#7F8791', colDoneCase: '#1A1E24', progDoneOp: 0.5, progMissOp: 0.5, // travelled grey + reduced case; missed = half-strength colour, no case
   progContM: 150, // max route-metres between on-track fixes that still count as riding the stretch
   recentM: 75, progRecentOp: 0.8, // just-ridden tail: route colour at strength, linking marker to the grey history
+  rideSimpM: 10, // ride-archive simplification tolerance (Douglas-Peucker, m)
   chevSize: 15, chevGap: 90, // direction Vs — drawn in the casing colour, so they dim with the travelled case
   slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
   colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
@@ -1332,12 +1347,18 @@ function tone(freq, dur, when, vol) {
   g.gain.setValueAtTime(vol, t + dur - 0.03); g.gain.linearRampToValueAtTime(0, t + dur);
   o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + dur + 0.02);
 }
+/* the audio grammar (2026-07-17 design): count = direction (one beep right, two
+   beeps left), pitch = phase (deep = approaching, high = turn here). The old
+   direction-less 660 Hz far beep is gone — the approach already tells you which way. */
 const BEEP = {
-  far()      { if (!S.set.sound) return; tone(660, .22, 0); vib([120]); console.log('[beep] far'); },
-  // the audio channel encodes the direction: one beep = right, two beeps = left
-  right()    { if (!S.set.sound) return; tone(990, .18, 0); vib([100]); console.log('[beep] right'); },
-  left()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .24); vib([80, 60, 80]); console.log('[beep] left'); },
-  turn()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
+  appr(ty)   { if (!S.set.sound) return; const f = ADV('deepHz');
+    tone(f, .2, 0); if (ty === 'left') tone(f, .2, .3);
+    vib(ty === 'left' ? [120, 80, 120] : [120]); console.log('[beep] approach ' + ty); },
+  now(ty)    { if (!S.set.sound) return; const f = ADV('highHz');
+    tone(f, .16, 0); if (ty === 'left') tone(f, .16, .24);
+    vib(ty === 'left' ? [90, 60, 90] : [100]); console.log('[beep] turn ' + ty); },
+  turn()     { if (!S.set.sound) return; const f = ADV('highHz'); tone(f, .15, 0); tone(f, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
+  done()     { if (!S.set.sound) return; tone(700, .09, 0); tone(1050, .12, .12); console.log('[beep] turn done'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
 };
@@ -1429,6 +1450,7 @@ async function buildStyle() {
 }
 async function setMapStyle(name) {
   S.set.mapStyle = name; saveSet();
+  document.body.classList.toggle('daymode', !isNightStyle()); // bar + panel follow the map's day/night
   for (const b of document.querySelectorAll('#styleSeg button')) b.classList.toggle('active', b.dataset.v === name);
   if (!map || !mapReady) return;
   const canSat = name === 'satellite' && satMeta && satMeta.count > 0;
@@ -1842,7 +1864,10 @@ function maskedHeatData() {
 function refreshMapData() {
   if (!mapReady) return;
   const heat = maskedHeatData();
-  map.getSource('heat').setData(heat.keep);
+  // archived local rides join the bundle heat as 'own' class — ridden trails accumulate on-device
+  map.getSource('heat').setData(!S.rides.length ? heat.keep : { type: 'FeatureCollection',
+    features: heat.keep.features.concat(S.rides.map(r => ({ type: 'Feature', properties: { class: 'own' },
+      geometry: { type: 'LineString', coordinates: r.pts } }))) });
   map.getSource('heatU').setData(heat.under);
   map.getSource('tracksOther').setData({ type: 'FeatureCollection',
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
@@ -2436,10 +2461,17 @@ function vehVal(k) {
   if (o && o[k] != null) return o[k];
   return (VEHICLES[S.set.vehicle] || VEHICLES.enduro)[k];
 }
+/* approach chime by seconds (speed-scaled, clamped to the vehicle's far window)
+   or a fixed distance; departure chime likewise (2026-07-17 design) */
 function warnDists(ns) {
   const spd = (ns && ns.avgSpd) || vehVal('defSpd');
-  return { far: Math.min(vehVal('farMax'), Math.max(vehVal('farMin'), spd * 15)),
-    near: Math.min(vehVal('nearMax'), Math.max(vehVal('nearMin'), spd * 5)) };
+  const far = ADV('apprUnit') === 'm' ? ADV('apprM')
+    : Math.min(vehVal('farMax'), Math.max(vehVal('farMin'), spd * ADV('apprS')));
+  return { far, near: Math.min(vehVal('nearMax'), Math.max(vehVal('nearMin'), spd * 5)) };
+}
+function departDist(ns) {
+  if (ADV('departUnit') !== 's') return ADV('departM');
+  return Math.max(10, ((ns && ns.avgSpd) || vehVal('defSpd')) * ADV('departS'));
 }
 function startNav() {
   const trk = S.tracks[S.sel]; // undefined → free-ride: live position, speed & compass, no cues/off-track/progress
@@ -2449,7 +2481,7 @@ function startNav() {
   if (S.set.orient === 'oriented' || (S.set.compassAuto || 'turns') !== 'off') enableCompass(true);
   // a new route (or a free ride) starts a fresh backtrack trail; re-starting the same one keeps the thread
   const trailKey = trk ? trk.id : '__free__';
-  if (S.trailTrack !== trailKey) { S.trail = []; trailLast = null; trailDirty = true; refreshTrail(); }
+  if (S.trailTrack !== trailKey) { S.trail = []; trailLast = null; trailDirty = true; refreshTrail(); rideSessionId = null; }
   S.trailTrack = trailKey;
   // progress spans share the breadcrumb lifecycle: re-starting the same track resumes
   // the ride; anything else starts fresh
@@ -2478,7 +2510,7 @@ function startNav() {
   document.getElementById('gloveBtn').classList.add('on');
   setHold(null);
   placeProgress(); drawProgress(true);
-  const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop'); nb.disabled = false;
+  const nb = document.getElementById('navBtn'); nb.textContent = 'Stop'; nb.classList.add('stop'); nb.disabled = false;
   if (S.set.wake) requestWake();
   if (fsOK && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
   if (!S.demo) startGPS();
@@ -2500,12 +2532,13 @@ function stopNav() {
   setHold(null); setLock(false);
   closeGlove();
   placeProgress();
-  const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
+  const nb = document.getElementById('navBtn'); nb.textContent = 'Start'; nb.classList.remove('stop');
   updateBottomBar(); // refresh name/hint (esp. after a free ride)
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   // leave GPS running so the location dot stays on the map after navigation ends
   releaseWake(); stopDemo();
   flushProg(); // travelled/missed spans stay on the map for post-ride review
+  archiveRide(); // the ridden path joins the own-rides heat + GPX archive
 }
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
 // START/STOP is one plain-tap tile in the ☰ grid — the two-tap path (☰ → tile) is the
@@ -2549,7 +2582,7 @@ function onFix(lat, lon, acc, speed, heading) {
   if (near.d < ADV('onM') && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); }
   if (ns.off) {
     const bn = document.getElementById('banner');
-    bn.textContent = 'OFF TRACK · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
+    bn.textContent = 'Off track · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
     if (t - ns.lastOffBeep > 30e3) { BEEP.off(); ns.lastOffBeep = t; }
     prog.classList.add('offtrack'); // strip dims, labels freeze — no fake ETA off-route
     if (S.prog) S.prog.prevIdx = null; // the sequence index freezes — the skipped span will read as missed
@@ -2576,12 +2609,13 @@ function onFix(lat, lon, acc, speed, heading) {
     // if it actually alerted (re-armed / never-approached cues stay quiet)
     const p = ns.lastNext, st = ns.alertStates.get(p);
     // st.done = confirmed this arming — direction-vote wobble at a hairpin apex must not re-confirm
-    if (st && !st.near && !st.done) { st.done = true; ns.confirmAt = ns.dir > 0 ? p.at + 30 : p.at - 30; }
+    if (st && !st.near && !st.done) { st.done = true;
+      const dd = departDist(ns); ns.confirmAt = ns.dir > 0 ? p.at + dd : p.at - dd; }
   }
   ns.lastNext = next;
   if (ns.confirmAt != null && (ns.dir > 0 ? s >= ns.confirmAt : s <= ns.confirmAt)) {
     ns.confirmAt = null; flashCommit();
-    if (S.set.confirm) BEEP.back();
+    if (S.set.confirm) BEEP.done(); // departure chime: turn completed, carry on
   }
   ns.approach = !!next && dTo <= Math.max(farM * ADV('apprMul'), ADV('apprFloor')); // cruiseZoom: frame the turn, release any hold
   autoCompass();
@@ -2593,12 +2627,10 @@ function onFix(lat, lon, acc, speed, heading) {
   if (next) {
     let st = ns.alertStates.get(next); if (!st) ns.alertStates.set(next, st = { far: true, near: true });
     if (dTo > farM + 80) { st.far = true; st.near = true; st.done = false; } // re-arm on repeat laps
-    if (dTo <= farM && dTo > nearM && st.far) { st.far = false; BEEP.far(); }
-    if (dTo <= nearM && st.near) {
-      st.near = false; st.far = false;
-      let ty = next.type; if (ns.dir < 0) ty = ty === 'left' ? 'right' : 'left';
-      ty === 'left' ? BEEP.left() : BEEP.right(); // one beep right, two beeps left
-    }
+    let ty = next.type; if (ns.dir < 0) ty = ty === 'left' ? 'right' : 'left';
+    // deep tone(s) on approach, high tone(s) at the turn — count carries the direction
+    if (dTo <= farM && dTo > nearM && st.far) { st.far = false; BEEP.appr(ty); }
+    if (dTo <= nearM && st.near) { st.near = false; st.far = false; BEEP.now(ty); }
   }
 }
 let commitT = null;
@@ -2614,15 +2646,16 @@ function setHud(alert, dTo, dir, farM) {
   const win = Math.max((farM || 160) * ADV('apprMul'), ADV('apprFloor'));
   const show = !!alert && dTo <= win;
   box.style.visibility = show || box.classList.contains('commit') ? '' : 'hidden';
-  if (!show) { fill.style.width = '0'; S._turnCue = null; updateBigArrows(); renderMain(); return; }
+  if (!show) { fill.style.width = '0'; S._turnCue = null; S._hudInfo = null; updateBigArrows(); renderMain(); return; }
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
   S._turnCue = type; updateBigArrows(); renderMain(); // giant side arrow + countdown in the main slot
   const icons = { left: 'corner-up-left', right: 'corner-up-right' };
-  const labels = { left: 'turn left', right: 'turn right' };
+  const labels = { left: 'Turn left', right: 'Turn right' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
   const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
   const ontoTxt = onto && onto !== from ? ' · onto ' + ((dir > 0 && alert.name) || onto) : '';
+  S._hudInfo = { alert, type, dir };
   // north-up: rotate the arrow to the turn's actual exit bearing; course-up: flat left/right
   if (S.set.orient === 'north' && alert.outBrg != null) {
     const exit = dir > 0 ? alert.outBrg : (alert.inBrg + 180) % 360;
@@ -2631,9 +2664,31 @@ function setHud(alert, dTo, dir, farM) {
     setIc(arrow, icons[type] || 'arrow-up'); arrow.className = type; arrow.style.transform = '';
   }
   distEl.innerHTML = (dTo >= 995 ? (dTo / 1000).toFixed(1) + ' <small>km</small>' : Math.round(dTo / 5) * 5 + ' <small>m</small>');
-  typeEl.textContent = (labels[type] || 'turn') + ontoTxt;
+  typeEl.textContent = Date.now() < hudExpandT ? instrText(alert, type, dir)
+    : (labels[type] || 'turn') + ontoTxt;
   fill.style.width = Math.max(0, Math.min(100, dTo / win * 100)) + '%'; // drains to zero at the turn
 }
+/* full spoken-style instruction, mixed case: named road wins, else the surface you
+   turn onto ("Left on to dirt" when leaving sealed), else just the direction */
+const SURF_WORD = { road: 'sealed road', 'fire trail': 'dirt', singletrack: 'Single Track' };
+function instrText(alert, type, dir) {
+  const dirW = type === 'left' ? 'Left' : 'Right';
+  const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
+  const name = dir > 0 && alert.name;
+  if (name) return dirW + ' on to ' + name;
+  if (onto && onto !== from) return dirW + ' on to ' + (SURF_WORD[onto] || onto);
+  return dirW;
+}
+// tap the turn strip → the instruction expands for ~4 s, then back to compact
+let hudExpandT = 0;
+document.getElementById('hudBox').onclick = () => {
+  if (!S._hudInfo) return;
+  hudExpandT = Date.now() + 4000;
+  const box = document.getElementById('hudBox');
+  box.classList.add('expand');
+  document.getElementById('hudType').textContent = instrText(S._hudInfo.alert, S._hudInfo.type, S._hudInfo.dir);
+  setTimeout(() => { if (Date.now() >= hudExpandT) box.classList.remove('expand'); }, 4100);
+};
 
 /* ---------------- progress strip ---------------- */
 const prog = document.getElementById('progress'), progCanvas = document.getElementById('progCanvas');
@@ -2805,6 +2860,11 @@ function renderMain() {
   }
 }
 /* giant side arrows: solid = upcoming turn on that side; flashing = that indicator is on */
+function applyArrowStyle() { // giant-arrow fill/surround from the registry, via CSS vars
+  const r = document.documentElement.style;
+  r.setProperty('--arrowFill', ADV('arrowFill')); r.setProperty('--arrowOp', ADV('arrowOp'));
+  r.setProperty('--arrowEdge', ADV('arrowEdge')); r.setProperty('--arrowEdgeW', ADV('arrowEdgeW'));
+}
 function updateBigArrows() {
   const L = document.getElementById('bigArrowL'), R = document.getElementById('bigArrowR');
   const live = S.set.varg && varg.state === 'on';
@@ -2849,7 +2909,7 @@ function applyMoveGestures() {
 const markTurnBtn = document.getElementById('markTurn');
 function setMarkArm(on) {
   if (S.turn) S.turn.arming = on;
-  markTurnBtn.textContent = on ? 'TAP MAP TO PLACE' : 'MARK TURN';
+  markTurnBtn.textContent = on ? 'Tap map to place' : 'Mark turn';
   markTurnBtn.classList.toggle('armed', on);
 }
 function enterTurnMode() {
@@ -3143,6 +3203,54 @@ function flushProg() {
 }
 setInterval(() => { if (progDirty) flushProg(); }, 60000);
 
+/* ---------------- ride archive: STOP → simplified breadcrumb → own-rides heat ----------------
+   Every finished ride joins the local rides store and paints through the existing
+   heat layers as 'own' orange — trails you've actually ridden accumulate on the
+   device with no Dingo round-trip. One record per ride session: re-stopping the
+   same continuing trail updates the same record instead of duplicating it. */
+let rideSessionId = null;
+function simplifyLL(pts, tolM) { // Douglas-Peucker on the local-metres projection
+  const xy = pts.map(p => toXY(p[1], p[0]));
+  const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    const [ax, ay] = xy[a], [bx, by] = xy[b];
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1;
+    let mi = -1, md = tolM;
+    for (let i = a + 1; i < b; i++) {
+      const t = Math.max(0, Math.min(1, ((xy[i][0] - ax) * dx + (xy[i][1] - ay) * dy) / L2));
+      const d = Math.hypot(xy[i][0] - (ax + t * dx), xy[i][1] - (ay + t * dy));
+      if (d > md) { md = d; mi = i; }
+    }
+    if (mi > 0) { keep[mi] = 1; stack.push([a, mi], [mi, b]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+function archiveRide() {
+  if (!S.trail || S.trail.length < 10) return;
+  const pts = simplifyLL(S.trail, ADV('rideSimpM'));
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) { const [ax, ay] = toXY(pts[i - 1][1], pts[i - 1][0]), [bx, by] = toXY(pts[i][1], pts[i][0]); len += Math.hypot(bx - ax, by - ay); }
+  if (len < 300) return; // parking-lot shuffles don't make the map
+  if (!rideSessionId) rideSessionId = 'ride-' + Date.now();
+  const trk = S.tracks[S.sel];
+  const rec = { id: rideSessionId, kind: 'ride', ts: Date.now(), pts,
+    name: (trk ? trk.name : 'Free ride') + ' — ' + new Date().toLocaleDateString('en-CA') }; // local YYYY-MM-DD
+  const at = S.rides.findIndex(r => r.id === rec.id);
+  at >= 0 ? S.rides[at] = rec : S.rides.push(rec);
+  while (S.rides.length > 50) { const old = S.rides.shift(); idb.del(old.id).catch(() => {}); } // cap the archive
+  idb.put(rec).catch(() => {});
+  refreshMapData(); // the new line joins the own-rides heat immediately
+}
+function ridesGPX() {
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const trks = S.rides.map(r => '<trk><name>' + esc(r.name) + '</name><trkseg>'
+    + r.pts.map(p => '<trkpt lat="' + p[1].toFixed(6) + '" lon="' + p[0].toFixed(6) + '"></trkpt>').join('')
+    + '</trkseg></trk>').join('\n');
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="DingoNav" xmlns="http://www.topografix.com/GPX/1/1">\n' + trks + '\n</gpx>';
+}
+
 /* ---------------- glove button + overlay (huge tiles for gloved hands) ---------------- */
 const gloveBtn = document.getElementById('gloveBtn'), gloveOverlay = document.getElementById('gloveOverlay');
 let gloveT = null;
@@ -3238,11 +3346,14 @@ function startDemo() {
   const trk = S.tracks[S.sel]; if (!trk) { toast('Select a track first'); return; }
   stopDemo();
   stopGPS(); // real GPS would fight the simulated fixes
-  let d = 0;
+  let d = 0, tick = 0;
   const SPEED = 8.5; // m/s ≈ 30 km/h
   S.demo = setInterval(() => {
     if (window.__demoJump != null) { d = window.__demoJump; window.__demoJump = null; } // dev: jump along the route
     d += SPEED;
+    // simulate Stark mode changes so the digit, flash card and tap-to-replay work off the bike
+    if (++tick % 25 === 1) { const m = 1 + (((tick / 25) | 0) % 5);
+      vargApplyState({ mode: m, hp: 20 + m * 12, regen: Math.max(0, 100 - m * 18), tc: Math.max(0, 100 - m * 15) }); }
     if (d >= trk.lengthM) { toast('Demo finished'); stopNav(); return; }
     const i = idxAt(trk, d);
     const jitter = () => (Math.random() - 0.5) * 6;
@@ -3878,6 +3989,8 @@ function vargFlashCard() { // new mode + its curve settings, ~4 s, on every mode
   clearTimeout(varg.flashT); varg.flashT = setTimeout(() => f.classList.remove('on'), 4000);
 }
 
+// tapping the resident mode digit replays the HP/Regen/TC card — same card as a mode change
+document.getElementById('vargModeBig').onclick = () => { if (varg.mode != null) vargFlashCard(); };
 function vargApplyState(st) { // single entry point for the future mode/config decoder
   for (const k of ['hp', 'regen', 'tc']) if (st[k] != null) varg[k] = st[k];
   if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; vargFlashCard(); modePing(); }
@@ -4230,7 +4343,7 @@ const SETTINGS = [
   { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tab', id: 'setShowAdv', apply: applyShowAdv },
   // Nav
   { sec: 'nav', k: 'sound', t: 'toggle', l: 'Turn beeps', id: 'setSound', put: v => setSound(v) }, // setSound persists + syncs every mute face
-  { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Turn confirmation chirp', id: 'setConfirm' },
+  { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Departure chime (turn done)', id: 'setConfirm' },
   { sec: 'nav', k: 'vehicle', t: 'seg', l: 'Vehicle (alerts + zoom)', segId: 'vehSeg',
     opts: [['walk', 'Walk'], ['mtb', 'MTB'], ['enduro', 'Enduro'], ['adventure', 'ADV']],
     apply: () => { refreshPresets(); renderSettings('adv'); } }, // presets + adv overrides are per-vehicle
@@ -4264,6 +4377,14 @@ const SETTINGS = [
   { k: 'offM', t: 'range', adv: 1, l: 'Off-track beyond (m)', min: 20, max: 200, step: 5 },
   { k: 'onM', t: 'range', adv: 1, l: 'Back on within (m)', min: 10, max: 150, step: 5 },
   { k: 'beepVol', t: 'range', adv: 1, l: 'Beep volume', min: 0, max: 1, step: 0.05 },
+  { k: 'deepHz', t: 'range', adv: 1, l: 'Approach tone (Hz)', min: 200, max: 800, step: 10 },
+  { k: 'highHz', t: 'range', adv: 1, l: 'Turn tone (Hz)', min: 600, max: 1600, step: 10 },
+  { k: 'apprUnit', t: 'seg', adv: 1, l: 'Approach chime by', opts: [['s', 'Seconds'], ['m', 'Metres']] },
+  { k: 'apprS', t: 'range', adv: 1, l: 'Approach seconds before turn', min: 5, max: 40, step: 1 },
+  { k: 'apprM', t: 'range', adv: 1, l: 'Approach metres before turn', min: 50, max: 800, step: 10 },
+  { k: 'departUnit', t: 'seg', adv: 1, l: 'Departure chime by', opts: [['m', 'Metres'], ['s', 'Seconds']] },
+  { k: 'departM', t: 'range', adv: 1, l: 'Departure metres past turn', min: 10, max: 200, step: 5 },
+  { k: 'departS', t: 'range', adv: 1, l: 'Departure seconds past turn', min: 1, max: 20, step: 1 },
   { h: 'Zoom & countdown' },
   { k: 'cdDist', t: 'range', adv: 1, l: 'Countdown from (m)', min: 100, max: 1000, step: 25 },
   { h: 'Rendering & misc' },
@@ -4286,6 +4407,7 @@ const SETTINGS = [
   { k: 'progContM', t: 'range', adv: 1, l: 'Progress continuity gap (m)', min: 50, max: 400, step: 10 },
   { k: 'recentM', t: 'range', adv: 1, l: 'Recent band length (m)', min: 0, max: 300, step: 5 },
   { k: 'progRecentOp', t: 'range', adv: 1, l: 'Recent band opacity', min: 0.1, max: 1, step: 0.05 },
+  { k: 'rideSimpM', t: 'range', adv: 1, l: 'Ride archive simplify (m)', min: 2, max: 40, step: 1 },
   { k: 'chevSize', t: 'range', adv: 1, l: 'Direction V size (0 off)', min: 0, max: 30, step: 1 },
   { k: 'chevGap', t: 'range', adv: 1, l: 'Direction V spacing', min: 30, max: 300, step: 10 },
   { k: 'slopeSize', t: 'range', adv: 1, l: 'Slope chevron size (0 off)', min: 0, max: 30, step: 1 },
@@ -4299,6 +4421,10 @@ const SETTINGS = [
   { k: 'colTrail', t: 'color', adv: 1, l: 'Basemap minor trails (Trail style)' },
   { k: 'trailProm', t: 'range', adv: 1, l: 'Basemap trail width ×', min: 0.3, max: 3, step: 0.1 },
   { k: 'gpsAcc', t: 'range', adv: 1, l: 'GPS accuracy floor (m, 0 = off)', min: 0, max: 100, step: 5 },
+  { k: 'arrowFill', t: 'color', adv: 1, l: 'Turn arrow fill' },
+  { k: 'arrowOp', t: 'range', adv: 1, l: 'Turn arrow opacity', min: 0.2, max: 1, step: 0.05 },
+  { k: 'arrowEdge', t: 'color', adv: 1, l: 'Turn arrow surround' },
+  { k: 'arrowEdgeW', t: 'range', adv: 1, l: 'Turn arrow surround width (0 off)', min: 0, max: 4, step: 0.2 },
 ];
 function advGet(r) { return r.veh ? vehVal(r.k) : ADV(r.k); }
 function advSet(r, v) {
@@ -4314,6 +4440,7 @@ function advReset(r) {
 let restyleT = null;
 function advApply(k) {
   if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
+  else if (k.startsWith('arrow')) applyArrowStyle();
   else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // surface features bake the colour in
   else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM') refreshRouteFeatures(); // baked into features
   else if (k === 'heatMask') { heatMaskCache.key = ''; refreshMapData(); } // re-clip with the new radius
@@ -4442,6 +4569,8 @@ document.getElementById('advCopy').onclick = async () => {
   catch (e) { console.log('[tuning]', txt); toast('Clipboard blocked — tuning logged to console'); }
 };
 document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
+document.body.classList.toggle('daymode', !isNightStyle()); // boot: bar/panel scheme follows the saved map style
+applyArrowStyle();
 applyGloveSide();
 // control-button edges: left/right columns (default) or top/bottom rows
 function applyEdges() {
@@ -4520,6 +4649,15 @@ document.getElementById('cfgExportBtn').onclick = async () => {
   toast('Config exported' + (copied ? ' — file downloaded + copied to clipboard' : ' — file downloaded (clipboard blocked, logged to console)'));
 };
 document.getElementById('cfgImportBtn').onclick = () => document.getElementById('cfgInput').click();
+document.getElementById('ridesExportBtn').onclick = () => {
+  if (!S.rides.length) { toast('No archived rides yet — finish a ride first'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ridesGPX()], { type: 'application/gpx+xml' }));
+  a.download = 'dingonav-rides.gpx';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(S.rides.length + ' ride' + (S.rides.length === 1 ? '' : 's') + ' exported as GPX');
+};
 document.getElementById('cfgInput').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
@@ -4960,6 +5098,7 @@ async function boot() {
   // backtrack trail from the last ride survives an app restart
   try { const tr = await idb.get('trail'); if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; } } catch (e) {}
   try { const pr = await idb.get('prog'); if (pr && pr.spans) S.prog = { track: pr.track || null, spans: pr.spans, prevIdx: null }; } catch (e) {}
+  try { S.rides = (await idb.all()).filter(r => r.kind === 'ride').sort((a, b) => a.ts - b.ts); } catch (e) {}
   if (S.tracks.length && S.sel < 0) S.sel = 0;
   refreshTrackList(); refreshEmpty(); updateBottomBar();
   await initMap(); // cue analysis needs basePM, so it runs after the map boots
