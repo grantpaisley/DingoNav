@@ -1,0 +1,1281 @@
+<!doctype html>
+<!-- DingoNav — Map Appearance Lab
+     Standalone style mock-up (design: docs/plans/2026-07-16-map-appearance-mockup-design.md).
+     One file, zero dependencies, fully offline — double-click to open. Never ships in the PWA.
+     One hand-authored SVG scene, four skins (Day/Trail/Dark/Sat) via CSS variables; a Mac-style
+     inspector tunes route/heat/basemap/chrome; themes round-trip as JSON via Copy/Paste. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DingoNav — Map Appearance Lab</title>
+<style>
+  :root{
+    --acc:#0a84ff; --pin:#ff9f0a; --warn:#ff9500;
+    /* chrome knobs (JS-driven) */
+    --btn-op:.4; --btn-size:1; --readout-size:1; --turn-accent:#ffb020;
+    --bri-ground:1; --bri-road:1;
+    /* ---- skin: Day (light paper bushland) ---- */
+    --m-ground:#f2efe7; --m-park:#dae6c4; --m-bush:#c8dcb0; --m-clear:#ece3cc;
+    --m-water:#a8cbd9; --m-water-line:#8fb9cc; --m-bldg:#ddd6c8;
+    --m-road-cas:#c9c2b4; --m-road:#ffffff; --m-road-minor:#faf6ec;
+    --m-label:#6b6357; --m-label-halo:rgba(255,255,255,.85);
+    --hill-op:.16; --sat-show:none;
+    --chrome-plate:rgba(20,26,32,.62); --chrome-text:#fff;
+  }
+  body[data-style="trail"]{
+    --m-ground:#f7f4ea; --m-park:#c6dda6; --m-bush:#aacb87; --m-clear:#eadfc0;
+    --m-water:#9cc3d4; --m-water-line:#84b2c8; --m-bldg:#d8d3ca;
+    --m-road-cas:#a89f8c; --m-road:#ffffff; --m-road-minor:#fffdf6;
+    --m-label:#4e4738; --hill-op:.1;
+  }
+  body[data-style="dark"]{
+    /* deliberately murky — the Basemap knobs exist to fix exactly this */
+    --m-ground:#0e1216; --m-park:#101a12; --m-bush:#0d1710; --m-clear:#14181c;
+    --m-water:#0c1e2a; --m-water-line:#163243; --m-bldg:#1a2027;
+    --m-road-cas:#1c242e; --m-road:#29323d; --m-road-minor:#202932;
+    --m-label:#3a4754; --m-label-halo:rgba(0,0,0,.6);
+    --hill-op:0;
+  }
+  body[data-style="sat"]{
+    --m-ground:#46503c; --m-park:#35452e; --m-bush:#2c3a26; --m-clear:#857a58;
+    --m-water:#16303f; --m-water-line:#1d4256; --m-bldg:#6a6353;
+    --m-road-cas:rgba(0,0,0,.35); --m-road:#d8d2c2; --m-road-minor:#b8b1a0;
+    --m-label:#ffffff; --m-label-halo:rgba(0,0,0,.75);
+    --hill-op:.22; --sat-show:block;
+  }
+
+  *{box-sizing:border-box; margin:0}
+  html,body{height:100%; overflow:hidden}
+  body{font:13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+       "Segoe UI", system-ui, sans-serif; background:#111; -webkit-font-smoothing:antialiased;
+       user-select:none}
+
+  /* ================= map stage ================= */
+  #stage{position:fixed; inset:0}
+  #scene{width:100%; height:100%; display:block}
+  #gSat{display:var(--sat-show)}
+  #gGround{filter:brightness(var(--bri-ground))}
+  #gWays{filter:brightness(var(--bri-road))}
+  .lbl{font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+       fill:var(--m-label); paint-order:stroke; stroke:var(--m-label-halo); stroke-width:3px;
+       stroke-linejoin:round}
+  .lbl-area{font-size:21px; font-weight:600; letter-spacing:.55em; opacity:.75}
+  .lbl-road{font-size:13px; font-weight:600; letter-spacing:.12em}
+  .lbl-water{font-size:13.5px; font-style:italic; fill:var(--m-water-line); font-weight:500}
+  .lbl-town{font-size:17px; font-weight:700; letter-spacing:.08em}
+  .lbl-peak{font-size:12.5px; font-weight:600}
+
+  /* ================= floating chrome ================= */
+  #seg{position:fixed; top:14px; left:50%; transform:translateX(calc(-50% - 178px)); z-index:30;
+       display:flex; padding:3px; gap:2px; border-radius:9px;
+       background:rgba(28,30,34,.62); backdrop-filter:blur(20px) saturate(1.4);
+       -webkit-backdrop-filter:blur(20px) saturate(1.4);
+       box-shadow:0 6px 24px rgba(0,0,0,.35), inset 0 0 0 .5px rgba(255,255,255,.14)}
+  #seg button{border:0; background:transparent; color:rgba(255,255,255,.78); font:600 12.5px/1 inherit;
+       font-family:inherit; padding:6px 16px; border-radius:7px; cursor:pointer}
+  #seg button.on{background:#fff; color:#1c1e22; box-shadow:0 1px 4px rgba(0,0,0,.35)}
+
+  /* ride chrome — always overlaid; legibility is judged map+chrome together */
+  #turnStrip{position:fixed; top:62px; left:50%; transform:translateX(calc(-50% - 178px)); z-index:24;
+       min-width:230px; padding:9px 16px 12px; border-radius:13px; text-align:center;
+       background:var(--chrome-plate); color:var(--chrome-text);
+       backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+       font-size:calc(15px * var(--readout-size)); font-weight:700; pointer-events:none}
+  #turnStrip .ic{color:var(--turn-accent); font-size:1.5em; vertical-align:-3px; margin-right:8px}
+  #turnStrip small{opacity:.75; font-weight:600}
+  #tsBar{position:absolute; left:14px; right:14px; bottom:5px; height:3.5px; border-radius:2px;
+       background:rgba(255,255,255,.18); overflow:hidden}
+  #tsBarFill{height:100%; width:0%; background:var(--turn-accent); border-radius:2px}
+
+  #readouts{position:fixed; top:14px; right:376px; z-index:24; display:flex; flex-direction:column;
+       align-items:flex-end; gap:8px; pointer-events:none}
+  .rdo{background:var(--chrome-plate); color:var(--chrome-text); border-radius:11px; padding:6px 12px;
+       font-weight:800; font-size:calc(16px * var(--readout-size));
+       backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); letter-spacing:.02em;
+       display:flex; align-items:center; gap:7px}
+  .rdo small{font-size:.62em; font-weight:700; opacity:.8}
+  body.noplate .rdo{background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none;
+       text-shadow:0 0 3px rgba(0,0,0,.9), 0 0 8px rgba(0,0,0,.7)}
+  .batt{display:inline-block; width:1.35em; height:.72em; border:1.5px solid currentColor;
+       border-radius:2.5px; position:relative; opacity:.9}
+  .batt::after{content:""; position:absolute; right:-4px; top:22%; width:2.5px; height:56%;
+       background:currentColor; border-radius:1px}
+  .batt i{position:absolute; inset:1.5px; width:60%; background:currentColor; border-radius:1px}
+  #modeChip{background:var(--chrome-plate); color:var(--turn-accent); border-radius:50%;
+       width:calc(34px * var(--readout-size)); height:calc(34px * var(--readout-size));
+       display:flex; align-items:center; justify-content:center; font-weight:900;
+       font-size:calc(17px * var(--readout-size));
+       backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px)}
+  body.noplate #modeChip{background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none;
+       text-shadow:0 0 3px rgba(0,0,0,.9), 0 0 8px rgba(0,0,0,.7)}
+
+  #ctls{position:fixed; right:376px; bottom:24px; z-index:24; display:flex; flex-direction:column; gap:10px}
+  #ctls button{width:calc(44px * var(--btn-size)); height:calc(44px * var(--btn-size));
+       border-radius:50%; border:1.5px solid rgba(255,255,255,.35);
+       background:var(--chrome-plate); color:var(--chrome-text); opacity:var(--btn-op);
+       font-size:calc(20px * var(--btn-size)); font-weight:600; cursor:pointer;
+       backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px)}
+  #ctls button:hover{opacity:1}
+
+  #rideBar{position:fixed; left:18px; bottom:22px; z-index:30; display:flex; align-items:center; gap:8px}
+  #rideBar button{border:0; cursor:pointer; color:#fff; font-family:inherit;
+       background:rgba(28,30,34,.72); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+       box-shadow:0 6px 20px rgba(0,0,0,.35), inset 0 0 0 .5px rgba(255,255,255,.16)}
+  #btnPlay{width:46px; height:46px; border-radius:50%; font-size:17px}
+  .spd{display:none; padding:7px 13px; border-radius:9px; font:700 12.5px/1 inherit; font-family:inherit;
+       color:rgba(255,255,255,.8)}
+  body.simming .spd{display:block}
+  #rideBar button.spd.on{background:#fff; color:#1c1e22}
+  #simHint{display:none; color:rgba(255,255,255,.55); font-size:11.5px; margin-left:4px;
+       text-shadow:0 1px 3px rgba(0,0,0,.8)}
+  body.simming #simHint{display:block}
+
+  #gGiant{opacity:.14; transition:opacity .25s}
+  #gGiant.flash{opacity:.92; animation:gpulse 1.05s ease-in-out infinite}
+  @keyframes gpulse{50%{opacity:.45}}
+
+  /* ================= inspector ================= */
+  #insp{position:fixed; top:12px; right:12px; bottom:12px; width:348px; z-index:40;
+       display:flex; flex-direction:column; border-radius:14px; overflow:hidden;
+       background:rgba(243,243,246,.76); backdrop-filter:blur(34px) saturate(1.7);
+       -webkit-backdrop-filter:blur(34px) saturate(1.7);
+       box-shadow:0 18px 50px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.18),
+                  inset 0 0 0 .5px rgba(255,255,255,.55);
+       color:#1d1d1f}
+  #inspHead{padding:14px 16px 12px; border-bottom:.5px solid rgba(0,0,0,.14); flex:none}
+  #inspHead h1{font-size:15px; font-weight:700; letter-spacing:-.01em}
+  #inspHead .sub{font-size:11.5px; color:#71717a; margin-top:1px}
+  .themeRow{display:flex; gap:6px; margin-top:11px; align-items:center}
+  select#selPreset{flex:1; min-width:0; font:600 12px/1.2 inherit; font-family:inherit; padding:5px 7px;
+       border-radius:7px; border:.5px solid rgba(0,0,0,.22); background:rgba(255,255,255,.85);
+       color:#1d1d1f; outline:none}
+  #presetNote{font-size:11px; color:#71717a; margin-top:7px; min-height:14px; font-style:italic}
+  .tbtn{border:.5px solid rgba(0,0,0,.22); background:rgba(255,255,255,.85); color:#1d1d1f;
+       border-radius:7px; font:600 11.5px/1 inherit; font-family:inherit; padding:6px 9px; cursor:pointer;
+       white-space:nowrap}
+  .tbtn:hover{background:#fff}
+  .tbtn:active{background:#e8e8ec}
+  .tbtn:disabled{opacity:.4; cursor:default}
+  .tbtn.on{background:var(--acc); border-color:var(--acc); color:#fff}
+  .tbtn.danger:hover{color:#d70015}
+  #editHint{font-size:11px; color:#71717a; margin-top:9px; display:flex; align-items:center; gap:6px}
+  #editHint b{color:#1d1d1f}
+  #editHint .pinEg{width:8px; height:8px; border-radius:50%; background:var(--pin); flex:none;
+       box-shadow:0 0 0 2.5px rgba(255,159,10,.25)}
+
+  #inspBody{flex:1; overflow-y:auto; overscroll-behavior:contain; padding:2px 0 14px}
+  #inspBody::-webkit-scrollbar{width:8px}
+  #inspBody::-webkit-scrollbar-thumb{background:rgba(0,0,0,.22); border-radius:4px;
+       border:2px solid transparent; background-clip:content-box}
+
+  details.grp{border-bottom:.5px solid rgba(0,0,0,.12)}
+  details.grp>summary{list-style:none; cursor:pointer; padding:10px 16px;
+       font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+       color:#48484e; display:flex; align-items:center; gap:7px}
+  details.grp>summary::-webkit-details-marker{display:none}
+  details.grp>summary::before{content:"›"; font-size:14px; color:#8e8e93;
+       transition:transform .22s cubic-bezier(.3,1.4,.6,1); transform:rotate(0deg); width:9px}
+  details.grp[open]>summary::before{transform:rotate(90deg)}
+  .grpBody{padding:1px 16px 12px; animation:gslide .22s ease}
+  @keyframes gslide{from{opacity:0; transform:translateY(-5px)}}
+
+  .row{display:grid; grid-template-columns:118px 1fr 26px; align-items:center; min-height:27px;
+       gap:8px; border-radius:7px; padding:2px 2px 2px 6px; margin-left:-6px}
+  .row.pinned{background:rgba(255,159,10,.1)}
+  .row>label{font-size:12.5px; color:#2c2c30; white-space:nowrap; overflow:hidden;
+       text-overflow:ellipsis; display:flex; align-items:center; gap:5px}
+  .rowCtl{display:flex; align-items:center; gap:7px; min-width:0; justify-content:flex-end}
+  .sub{font-size:11px; font-weight:700; color:#8e8e93; margin:9px 0 2px; letter-spacing:.03em}
+
+  .warnB{display:none; color:var(--warn); font-size:12px; cursor:help; flex:none}
+  .warnB.on{display:inline}
+
+  /* macOS switch */
+  .sw{position:relative; width:36px; height:21px; flex:none}
+  .sw input{position:absolute; inset:0; opacity:0; cursor:pointer; margin:0}
+  .sw i{position:absolute; inset:0; border-radius:11px; background:rgba(120,120,128,.32);
+       transition:background .18s}
+  .sw i::after{content:""; position:absolute; top:1.5px; left:1.5px; width:18px; height:18px;
+       border-radius:50%; background:#fff; box-shadow:0 2px 5px rgba(0,0,0,.3), 0 0 0 .5px rgba(0,0,0,.06);
+       transition:left .18s cubic-bezier(.3,1.2,.6,1)}
+  .sw input:checked+i{background:#34c759}
+  .sw input:checked+i::after{left:16.5px}
+
+  /* colour well */
+  .well{position:relative; width:36px; height:21px; border-radius:6px; flex:none; cursor:pointer;
+       box-shadow:inset 0 0 0 .5px rgba(0,0,0,.3), inset 0 0 0 2px #fff, 0 1px 2px rgba(0,0,0,.12)}
+  .well input{position:absolute; inset:0; opacity:0; cursor:pointer; margin:0; padding:0}
+
+  /* slider */
+  input[type=range]{-webkit-appearance:none; appearance:none; width:112px; height:3.5px; flex:none;
+       border-radius:2px; background:rgba(0,0,0,.16); outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:15px; height:15px;
+       border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.12);
+       cursor:pointer}
+  .val{font-size:11px; color:#71717a; width:34px; text-align:right; font-variant-numeric:tabular-nums;
+       flex:none}
+
+  /* mini segmented + select */
+  .mseg{display:flex; background:rgba(120,120,128,.16); border-radius:6.5px; padding:1.5px; flex:none}
+  .mseg button{border:0; background:transparent; font:600 11px/1 inherit; font-family:inherit;
+       padding:4px 9px; border-radius:5.5px; color:#3c3c40; cursor:pointer}
+  .mseg button.on{background:#fff; box-shadow:0 .5px 2.5px rgba(0,0,0,.25)}
+  select.mini{font:600 11.5px/1.2 inherit; font-family:inherit; padding:3.5px 6px; border-radius:6px;
+       border:.5px solid rgba(0,0,0,.2); background:rgba(255,255,255,.85); color:#1d1d1f; outline:none}
+
+  /* pin dot */
+  .pinD{width:20px; height:20px; border:0; background:transparent; cursor:pointer; position:relative;
+       flex:none; padding:0}
+  .pinD::after{content:""; position:absolute; top:6px; left:6px; width:8px; height:8px;
+       border-radius:50%; border:1.5px solid #b6b6bc; transition:all .15s}
+  .pinD:hover::after{border-color:var(--pin); transform:scale(1.2)}
+  .pinD.on::after{background:var(--pin); border-color:var(--pin);
+       box-shadow:0 0 0 3px rgba(255,159,10,.22)}
+
+  /* route pair chip */
+  #pairChip{height:22px; border-radius:6px; flex:1; min-width:0;
+       box-shadow:inset 0 0 0 .5px rgba(0,0,0,.25), inset 0 0 0 2px #fff}
+  /* steepness ramp strip */
+  .rampWrap{display:flex; flex:1; height:21px; border-radius:6px; overflow:hidden;
+       box-shadow:inset 0 0 0 .5px rgba(0,0,0,.3), inset 0 0 0 2px #fff}
+  .rampWrap span{flex:1; position:relative; cursor:pointer}
+  .rampWrap input{position:absolute; inset:0; opacity:0; cursor:pointer; margin:0}
+
+  #inspFoot{flex:none; padding:9px 16px 11px; border-top:.5px solid rgba(0,0,0,.14);
+       font-size:10.5px; color:#8e8e93; line-height:1.5}
+
+  /* modal (copy / paste theme) */
+  #modalBg{position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
+       background:rgba(0,0,0,.35)}
+  #modalBg.on{display:flex}
+  #modal{width:520px; max-width:92vw; border-radius:13px; padding:16px;
+       background:rgba(246,246,248,.97); box-shadow:0 24px 70px rgba(0,0,0,.5);
+       color:#1d1d1f}
+  #modal h2{font-size:14px; font-weight:700; margin-bottom:3px}
+  #modal .mSub{font-size:11.5px; color:#71717a; margin-bottom:10px}
+  #modalTa{width:100%; height:250px; resize:vertical; font:11px/1.5 ui-monospace, SFMono-Regular,
+       Menlo, Consolas, monospace; border-radius:8px; border:.5px solid rgba(0,0,0,.25);
+       padding:9px; background:#fff; color:#1d1d1f; outline:none; user-select:text}
+  #modalErr{font-size:11.5px; color:#d70015; min-height:16px; margin-top:6px}
+  #modalBtns{display:flex; gap:8px; justify-content:flex-end; margin-top:6px}
+  .mbtn{border:0; border-radius:7px; font:600 12.5px/1 inherit; font-family:inherit;
+       padding:8px 16px; cursor:pointer; background:rgba(120,120,128,.16); color:#1d1d1f}
+  .mbtn.primary{background:var(--acc); color:#fff}
+
+  #toast{position:fixed; bottom:26px; left:50%; transform:translateX(calc(-50% - 178px)); z-index:70;
+       background:rgba(28,30,34,.9); color:#fff; font-size:12.5px; font-weight:600;
+       padding:9px 18px; border-radius:10px; opacity:0; transition:opacity .25s; pointer-events:none;
+       backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px)}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body data-style="day">
+
+<div id="stage">
+<svg id="scene" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-label="Map preview">
+  <defs>
+    <filter id="fHill" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <filter id="fSatNoise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.006 0.009" numOctaves="4" seed="7" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 0.15  0 0 0 0 0.19  0 0 0 0 0.10  0 0 0 0.85 0"/>
+    </filter>
+    <filter id="fSatGrain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="31" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 0.85  0 0 0 0 0.82  0 0 0 0 0.68  0 0 0 0.16 0"/>
+    </filter>
+    <!-- the route, once — measured for sim/chevrons, referenced by knockout masks -->
+    <path id="pFull" fill="none" d="M 150,880 C 240,861 335,845 430,824 C 472,806 506,772 521,722
+      C 536,672 562,618 600,560 C 630,552 652,546 655,532 C 658,518 592,520 589,505
+      C 586,490 660,492 663,477 C 666,462 594,464 591,449 C 588,434 662,436 668,420
+      C 675,396 689,348 700,300 C 758,272 858,258 958,258 C 1058,258 1122,262 1170,272
+      C 1262,292 1332,340 1352,420 C 1369,485 1332,560 1290,612"/>
+    <!-- heat geometry, once; styled here, drawn twice via <use> (under-route + knocked-out) -->
+    <g id="heatGeom" fill="none" stroke-linecap="round">
+      <!-- own: rode the fork trail AND the fire road (shares the route corridor) -->
+      <path class="h-own" d="M 600,560 C 668,566 738,548 806,552 C 884,557 946,542 1016,562
+        C 1076,578 1120,600 1160,632"/>
+      <path class="h-own" d="M 700,300 C 758,272 858,258 958,258 C 1058,258 1122,262 1170,272
+        C 1230,286 1262,220 1302,182"/>
+      <path class="h-own" d="M 560,600 C 580,585 588,572 600,560 C 612,548 632,542 650,536"/>
+      <!-- others: the highway, a crossing, and a strand into the junction -->
+      <path class="h-other" d="M 40,940 C 240,905 420,912 610,930 C 800,948 1010,918 1200,940
+        C 1320,953 1450,940 1580,955"/>
+      <path class="h-other" d="M 380,700 C 450,690 500,718 521,722 C 560,728 600,700 660,690
+        C 720,682 762,640 792,600"/>
+      <path class="h-other" d="M 478,612 C 518,590 560,574 600,560 C 640,548 662,540 688,520"/>
+      <!-- planned: heads NW from the junction + a wee loop south of it -->
+      <path class="h-plan" d="M 600,560 C 545,505 480,468 405,432 C 330,398 285,355 255,300
+        C 230,255 235,190 260,140"/>
+      <path class="h-plan" d="M 600,560 C 620,600 590,640 550,640 C 510,640 500,600 530,580
+        C 550,566 575,562 600,560"/>
+    </g>
+    <!-- road geometry lives here unstroked: a path's own stroke can't be overridden per
+         <use>, so casing + core are two <use> instances stroked individually -->
+    <path id="pHwy" fill="none"
+      d="M 40,940 C 240,905 420,912 610,930 C 800,948 1010,918 1200,940 C 1320,953 1450,940 1580,955"/>
+    <path id="pRdMinor" fill="none"
+      d="M 60,896 C 100,890 125,885 150,880 C 240,861 335,845 430,824 C 530,808 640,812 740,830
+      C 850,848 960,838 1060,856"/>
+    <mask id="mKnock" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1000">
+      <rect width="1600" height="1000" fill="#fff"/>
+      <use href="#pFull" id="knockStroke" stroke="#000" stroke-width="36" stroke-linecap="round"/>
+    </mask>
+    <mask id="mUnder" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1000">
+      <rect width="1600" height="1000" fill="#000"/>
+      <use href="#pFull" id="underStroke" stroke="#fff" stroke-width="36" stroke-linecap="round"/>
+    </mask>
+  </defs>
+
+  <!-- ground + landcover + water (Ground brightness knob) -->
+  <g id="gGround">
+    <rect width="1600" height="1000" fill="var(--m-ground)"/>
+    <g id="gSat">
+      <rect width="1600" height="1000" filter="url(#fSatNoise)"/>
+      <rect width="1600" height="1000" filter="url(#fSatGrain)"/>
+    </g>
+    <path fill="var(--m-park)" d="M -20,80 C 300,20 700,60 900,140 C 1050,210 1000,420 1120,520
+      C 1230,610 1180,760 1050,800 C 850,860 500,830 260,860 C 60,880 -20,760 -20,600 Z"/>
+    <path fill="var(--m-bush)" d="M 480,300 C 600,240 760,240 840,320 C 900,390 860,520 760,560
+      C 660,600 520,560 480,470 Z"/>
+    <path fill="var(--m-bush)" d="M 150,180 C 260,140 380,160 420,230 C 460,300 400,380 300,390
+      C 200,400 120,330 150,180 Z" opacity=".7"/>
+    <path fill="var(--m-clear)" d="M 1180,660 C 1300,640 1460,660 1540,720 C 1580,760 1560,860 1460,880
+      C 1340,900 1220,860 1180,780 Z"/>
+    <path fill="var(--m-clear)" d="M 1150,90 C 1260,60 1400,80 1470,140 C 1520,190 1480,280 1380,290
+      C 1270,300 1130,220 1150,90 Z" opacity=".8"/>
+    <path fill="none" stroke="var(--m-water-line)" stroke-width="5" stroke-linecap="round" id="pCreek"
+      d="M 240,40 C 262,120 232,200 282,270 C 332,340 408,360 452,430 C 488,486 470,556 430,610
+      C 400,650 350,680 310,730"/>
+    <ellipse cx="1315" cy="655" rx="52" ry="30" fill="var(--m-water)"
+      stroke="var(--m-water-line)" stroke-width="2"/>
+    <!-- Kulnura buildings -->
+    <g fill="var(--m-bldg)">
+      <rect x="1352" y="838" width="26" height="18" rx="2"/>
+      <rect x="1394" y="828" width="20" height="24" rx="2"/>
+      <rect x="1430" y="842" width="30" height="16" rx="2"/>
+      <rect x="1382" y="872" width="24" height="20" rx="2"/>
+      <rect x="1442" y="876" width="18" height="16" rx="2"/>
+      <rect x="1480" y="850" width="22" height="20" rx="2"/>
+    </g>
+  </g>
+
+  <!-- hillshade (NW light) -->
+  <g id="gHill" filter="url(#fHill)" opacity="var(--hill-op)">
+    <path fill="#3a3325" d="M 700,560 C 780,480 800,380 762,300 C 830,340 872,460 822,560
+      C 782,622 722,600 700,560 Z"/>
+    <path fill="#fffbe8" d="M 640,520 C 600,440 620,340 690,290 C 640,360 650,470 690,540 Z" opacity=".8"/>
+    <path fill="#3a3325" d="M 1300,470 C 1360,500 1390,560 1370,630 C 1330,580 1290,530 1280,490 Z"/>
+    <path fill="#3a3325" d="M 300,260 C 380,240 420,280 430,340 C 370,320 320,300 300,260 Z" opacity=".7"/>
+  </g>
+
+  <!-- roads + basemap trails (Roads & trails brightness knob) -->
+  <g id="gWays" fill="none">
+    <g id="gRoads">
+      <use href="#pHwy" stroke="var(--m-road-cas)" stroke-width="11" stroke-linecap="round"/>
+      <use href="#pHwy" stroke="var(--m-road)" stroke-width="7" stroke-linecap="round"/>
+      <use href="#pRdMinor" stroke="var(--m-road-cas)" stroke-width="8" stroke-linecap="round"/>
+      <use href="#pRdMinor" stroke="var(--m-road-minor)" stroke-width="5" stroke-linecap="round"/>
+      <path stroke="var(--m-road-minor)" stroke-width="4" stroke-linecap="round"
+        d="M 1340,930 C 1380,880 1420,860 1470,850 M 1400,940 C 1420,900 1440,880 1480,860"/>
+    </g>
+    <!-- minor trails; the first shares the route's approach then forks off at the junction -->
+    <g id="gTrails" stroke-linecap="round" stroke-dasharray="7 5">
+      <path class="trailln" data-w="3" d="M 552,648 C 570,618 584,588 600,560 C 668,566 738,548 806,552
+        C 884,557 946,542 1016,562 C 1076,578 1120,600 1160,632"/>
+      <path class="trailln" data-w="2.4" d="M 90,540 C 180,520 260,540 330,510 C 410,475 470,500 540,470"/>
+      <path class="trailln" data-w="2.4" d="M 980,70 C 985,150 1000,220 1035,280 C 1070,340 1140,370 1210,385"/>
+      <path class="trailln" data-w="2" d="M 1230,760 C 1280,720 1310,680 1320,640"/>
+    </g>
+  </g>
+
+  <!-- heatmap: dim copy visible only in the knocked corridor, full copy everywhere else -->
+  <g id="gHeatUnder" mask="url(#mUnder)" opacity="0"><use href="#heatGeom"/></g>
+  <g id="gHeatMain" mask="url(#mKnock)"><use href="#heatGeom"/></g>
+
+  <!-- labels (Label intensity knob) -->
+  <g id="gLabels">
+    <text class="lbl lbl-area" x="185" y="470" transform="rotate(-9 185 470)">OURIMBAH STATE FOREST</text>
+    <text class="lbl lbl-town" x="1388" y="812">Kulnura</text>
+    <g class="lbl lbl-peak">
+      <path d="M 742,218 l 7,12 h -14 Z" fill="var(--m-label)" stroke="none"/>
+      <text x="754" y="230">Bumble Hill · 348 m</text>
+    </g>
+    <text class="lbl lbl-road"><textPath href="#pRdMinor" startOffset="56%">GRETA RD</textPath></text>
+    <text class="lbl lbl-road"><textPath href="#pHwy" startOffset="70%">GEORGE DOWNES DR</textPath></text>
+    <text class="lbl lbl-water"><textPath href="#pCreek" startOffset="42%">Cedar Brush Creek</textPath></text>
+    <text class="lbl lbl-water" x="1290" y="700" font-size="11">Boondah Dam</text>
+  </g>
+
+  <!-- route: continuous casing under per-surface cores; chevrons; ridden overlay on top -->
+  <g id="gRoute" fill="none">
+    <use href="#pFull" id="rteCasing" stroke-linecap="round" stroke-linejoin="round"/>
+    <g id="gCores" stroke-linejoin="round">
+      <path id="coreSealed" stroke-linecap="round" d="M 150,880 C 240,861 335,845 430,824"/>
+      <path id="coreDirt" d="M 430,824 C 472,806 506,772 521,722 C 536,672 562,618 600,560
+        M 700,300 C 758,272 858,258 958,258 C 1058,258 1122,262 1170,272"/>
+      <path id="coreSingle" stroke-linecap="round" d="M 600,560 C 630,552 652,546 655,532
+        C 658,518 592,520 589,505 C 586,490 660,492 663,477 C 666,462 594,464 591,449
+        C 588,434 662,436 668,420 C 675,396 689,348 700,300"/>
+      <path id="coreUnmapped" stroke-linecap="round" d="M 1170,272 C 1262,292 1332,340 1352,420
+        C 1369,485 1332,560 1290,612"/>
+    </g>
+    <g id="gSteep" stroke-linejoin="round" style="display:none"></g>
+    <text id="chevText" style="pointer-events:none"><textPath id="chevTP" href="#pFull"></textPath></text>
+    <use href="#pFull" id="riddenOv" pathLength="1" stroke-linecap="round" stroke-linejoin="round"
+      stroke-dasharray="0.4 2"/>
+  </g>
+
+  <!-- ride chrome in the scene: breadcrumbs, position arrow, giant turn arrow -->
+  <g id="gCrumbs"></g>
+  <g id="posArrow">
+    <path d="M 0,-16 L 11,12 L 0,5 L -11,12 Z" fill="#00e5ff" stroke="#fff" stroke-width="3"
+      stroke-linejoin="round" paint-order="stroke"/>
+  </g>
+  <g id="gGiant">
+    <path d="M 218,660 L 218,545 A 57,57 0 0 0 104,545 L 104,586" fill="none" stroke-width="36"
+      stroke-linecap="round"/>
+    <path d="M 60,576 L 148,576 L 104,652 Z" stroke="none"/>
+  </g>
+</svg>
+</div>
+
+<!-- floating chrome -->
+<div id="seg"></div>
+<div id="turnStrip"><span class="ic" id="tsIcon">↰</span><span id="tsDist">250 m</span>
+  <small id="tsLabel"> · Hairpin left</small><div id="tsBar"><div id="tsBarFill"></div></div></div>
+<div id="readouts">
+  <div class="rdo"><span class="batt"><i id="battFill"></i></span><span id="battPct">63</span><small>%</small></div>
+  <div id="modeChip">3</div>
+</div>
+<div id="ctls"><button>+</button><button>−</button><button style="font-size:calc(13px * var(--btn-size))">◉</button></div>
+<div id="rideBar">
+  <button id="btnPlay" title="Ride simulation">▶</button>
+  <button class="spd" data-s="1">1×</button>
+  <button class="spd" data-s="3">3×</button>
+  <span id="simHint">controls apply mid-flight</span>
+</div>
+
+<!-- inspector -->
+<aside id="insp">
+  <div id="inspHead">
+    <h1>Map Appearance</h1>
+    <div class="sub">DingoNav style lab — nothing here ships; winners get folded into the app.</div>
+    <div class="themeRow">
+      <select id="selPreset"></select>
+      <button class="tbtn" id="btnCopy" title="Export the current theme as JSON">Copy</button>
+      <button class="tbtn" id="btnPaste" title="Paste a theme JSON from Claude">Paste</button>
+    </div>
+    <div id="presetNote"></div>
+    <div class="themeRow">
+      <button class="tbtn" id="btnSetA" title="Snapshot the current theme into slot A">→A</button>
+      <button class="tbtn" id="btnSetB" title="Snapshot the current theme into slot B">→B</button>
+      <button class="tbtn" id="btnAbA" disabled title="Show snapshot A">A</button>
+      <button class="tbtn" id="btnAbB" disabled title="Show snapshot B">B</button>
+      <span style="flex:1"></span>
+      <button class="tbtn danger" id="btnReset" title="Back to the app's shipping values">Reset</button>
+    </div>
+    <div id="editHint"></div>
+  </div>
+  <div id="inspBody"></div>
+  <div id="inspFoot">Every control edits the <b>global</b> theme; the dot pins it for the style you're
+    viewing only. ⚠ marks colour pairs too close to tell apart — a warning, never a block.
+    Copy → ask Claude for variants → Paste.</div>
+</aside>
+
+<div id="modalBg"><div id="modal">
+  <h2 id="modalTitle">Theme JSON</h2>
+  <div class="mSub" id="modalSub"></div>
+  <textarea id="modalTa" spellcheck="false"></textarea>
+  <div id="modalErr"></div>
+  <div id="modalBtns">
+    <button class="mbtn" id="modalCancel">Close</button>
+    <button class="mbtn primary" id="modalOk">Copy</button>
+  </div>
+</div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ============================ settings model ============================ */
+/* Defaults mirror the app's shipping values (ADV_D in index.html) so the lab
+   starts exactly where the app is. */
+const DEFAULTS = {
+  // route — two-part line: casing + core
+  casingOn: true, casingStyle: 'glow', casingCol: '#00e5ff', casingEdge: 2.4, casingOp: 0.3,
+  coreCol: '#00e5ff', coreW: 4,
+  dirtDash: 2.4, dirtGap: 1.4, singleDash: 0.1, singleGap: 1.7, unmappedStyle: 'ghost',
+  riddenMode: 'dim', riddenDim: 0.55, riddenCol: '#5f6d78',
+  chevSize: 14, chevGap: 90, chevCol: '#003a44', steepCore: false,
+  // heatmap trio
+  heatOwnCol: '#ff7a00', heatOwnW: 3, heatOwnOp: 0.85,
+  heatOtherCol: '#ff2d2d', heatOtherW: 2.5, heatOtherOp: 0.6,
+  heatPlanCol: '#3390ff', heatPlanW: 3, heatPlanOp: 0.7,
+  knockR: 18, underOp: 0,
+  // basemap loudness
+  groundBri: 1, roadBri: 1, labelInt: 1, trailCol: '#8a7355', trailW: 1,
+  // ride chrome
+  btnOp: 0.4, btnSize: 1, readoutSize: 1, sunPlate: true, turnAccent: '#ffb020',
+  posCol: '#00e5ff', posSize: 1, crumbCol: '#9fb4c6', crumbGap: 20,
+  // steepness ramp (grade bands 0–4%, 4–8, 8–14, 14–22, 22+)
+  grade0: '#2ecc71', grade1: '#f1c40f', grade2: '#ff8c00', grade3: '#ff3b30', grade4: '#e040fb',
+};
+const STYLE_IDS = ['day', 'trail', 'dark', 'sat'];
+const STYLE_LABELS = { day: 'Day', trail: 'Trail', dark: 'Dark', sat: 'Sat' };
+// mirror of the CSS skin grounds — the collision guard needs numbers, CSS vars aren't parseable
+const GROUND_HEX = { day: '#f2efe7', trail: '#efece4', dark: '#0e1216', sat: '#46503c' };
+
+const PRESETS = [
+  { id: 'app', name: 'Current App', note: 'Where the app is today — cyan glow route, orange own-heat; Trail and Dark pin their own trail grey.',
+    g: {}, p: { trail: { trailCol: '#909090' }, dark: { trailCol: '#3d4b5a' } } },
+  { id: 'jacket', name: 'Cyan, White Jacket', note: 'Leading candidate — a hard white casing lets the cyan core survive any ground, heat or imagery.',
+    g: { casingStyle: 'hard', casingCol: '#ffffff', casingOp: 0.95, casingEdge: 2.2 }, p: {} },
+  { id: 'brightday', name: 'Bright Day', note: 'Full-sun kit — deep blue core in a fat white jacket, chrome turned up loud.',
+    g: { coreCol: '#0a4bdc', casingStyle: 'hard', casingCol: '#ffffff', casingEdge: 2.6, casingOp: 1,
+      coreW: 4.5, chevCol: '#ffffff', btnOp: 0.85, turnAccent: '#ff5d00', heatOwnOp: 0.95, heatOtherOp: 0.75 }, p: {} },
+  { id: 'night', name: 'Night, Not a Cave', note: 'Dark lifted ~55% with an amber route — readable at 2 am without torching night vision.',
+    g: {}, p: { dark: { groundBri: 1.55, roadBri: 1.6, labelInt: 1.35, trailCol: '#55606c',
+      coreCol: '#ffb020', casingCol: '#140d02', casingStyle: 'hard', casingOp: 0.85,
+      chevCol: '#402d00', crumbCol: '#8a7a5a', posCol: '#ffb020' } } },
+  { id: 'satproof', name: 'Sat-Proof', note: 'Imagery-proof pair — hard white casing over a near-black core; no terrain can eat both at once.',
+    g: {}, p: { sat: { casingStyle: 'hard', casingCol: '#ffffff', casingOp: 1, casingEdge: 2.6,
+      coreCol: '#101c3a', chevCol: '#ffffff', labelInt: 1.25, heatOwnOp: 0.95 } } },
+  { id: 'earth', name: 'Muted Earth', note: 'For neon-haters — olive core in a cream jacket, heat in rust and slate; the casing does the legibility work.',
+    g: { coreCol: '#4a5d23', casingCol: '#f3ead6', casingStyle: 'hard', casingEdge: 2.2, casingOp: 0.9,
+      heatOwnCol: '#b0653a', heatOtherCol: '#8a4a52', heatPlanCol: '#4a6d8c', turnAccent: '#c77b3d',
+      posCol: '#4a5d23', chevCol: '#f3ead6', crumbCol: '#a89878' }, p: {} },
+  { id: 'steep', name: 'Steepness First', note: 'Grade colours own the core; the white casing keeps the track silhouette mid-gradient.',
+    g: { steepCore: true, casingStyle: 'hard', casingCol: '#ffffff', casingOp: 0.95, casingEdge: 2.4,
+      chevCol: '#1a1a1a' }, p: {} },
+  { id: 'highviz', name: 'High-Viz Chrome', note: 'Glare, dust, old eyes — line, chevrons and chrome all one size louder.',
+    g: { coreW: 5.5, casingEdge: 3, casingStyle: 'hard', casingCol: '#ffffff', casingOp: 1,
+      chevSize: 19, btnOp: 0.9, btnSize: 1.25, readoutSize: 1.3, heatOwnW: 4, turnAccent: '#ff3b30' }, p: {} },
+];
+
+const LS_KEY = 'dingonav.mapAppearance.v1';
+function emptyPins() { return { day: {}, trail: {}, dark: {}, sat: {} }; }
+function themeFromPreset(p) {
+  const pins = emptyPins();
+  for (const s of STYLE_IDS) Object.assign(pins[s], (p.p || {})[s] || {});
+  return { global: Object.assign({}, DEFAULTS, p.g || {}), pins };
+}
+function seedState() {
+  const t = themeFromPreset(PRESETS[0]);
+  return { global: t.global, pins: t.pins, style: 'day', preset: 'app', ab: { A: null, B: null, showing: null } };
+}
+let S = seedState();
+try {
+  const raw = localStorage.getItem(LS_KEY);
+  if (raw) {
+    const saved = JSON.parse(raw);
+    S.global = Object.assign({}, DEFAULTS, saved.global || {});
+    S.pins = Object.assign(emptyPins(), saved.pins || {});
+    for (const s of STYLE_IDS) S.pins[s] = Object.assign({}, S.pins[s]);
+    if (STYLE_IDS.includes(saved.style)) S.style = saved.style;
+    if (saved.preset) S.preset = saved.preset;
+    if (saved.ab) S.ab = Object.assign({ A: null, B: null, showing: null }, saved.ab);
+  }
+} catch (e) { /* file:// with storage blocked — run stateless */ }
+
+function save() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ global: S.global, pins: S.pins, style: S.style, preset: S.preset, ab: S.ab })); }
+  catch (e) { }
+}
+function eff(k) { const p = S.pins[S.style]; return (k in p) ? p[k] : S.global[k]; }
+function effFor(style, k) { const p = S.pins[style]; return (k in p) ? p[k] : S.global[k]; }
+function isPinned(k) { return k in S.pins[S.style]; }
+function setVal(k, v) { if (isPinned(k)) S.pins[S.style][k] = v; else S.global[k] = v; }
+
+/* ============================ inspector registry ============================ */
+const fmtN = d => v => (+v).toFixed(d).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+const fmtPct = v => Math.round(v * 100) + '%';
+const fmtPx = v => fmtN(2)(v) + '';
+const fmtX = v => fmtN(2)(v) + '×';
+const GROUPS = [
+  { id: 'route', title: 'Route', open: true, rows: [
+    { type: 'pairChip' },
+    { type: 'sub', label: 'Casing' },
+    { k: 'casingOn', label: 'Casing', type: 'switch' },
+    { k: 'casingStyle', label: 'Style', type: 'seg', opts: [['hard', 'Hard'], ['glow', 'Glow']] },
+    { k: 'casingCol', label: 'Colour', type: 'color' },
+    { k: 'casingEdge', label: 'Edge width', type: 'range', min: 0.5, max: 6, step: 0.1, fmt: fmtPx },
+    { k: 'casingOp', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.05, fmt: fmtPct },
+    { type: 'sub', label: 'Core' },
+    { k: 'coreCol', label: 'Colour', type: 'color' },
+    { k: 'coreW', label: 'Width', type: 'range', min: 1.5, max: 8, step: 0.25, fmt: fmtPx },
+    { k: 'dirtDash', label: 'Dirt dash', type: 'range', min: 0.5, max: 6, step: 0.1, fmt: fmtPx },
+    { k: 'dirtGap', label: 'Dirt gap', type: 'range', min: 0.2, max: 4, step: 0.1, fmt: fmtPx },
+    { k: 'singleDash', label: 'Single dot', type: 'range', min: 0.05, max: 2, step: 0.05, fmt: fmtPx },
+    { k: 'singleGap', label: 'Single gap', type: 'range', min: 0.4, max: 4, step: 0.1, fmt: fmtPx },
+    { k: 'unmappedStyle', label: 'Unmapped', type: 'seg', opts: [['ghost', 'Ghost'], ['dots', 'Dots'], ['solid', 'Solid']] },
+    { k: 'steepCore', label: 'Steepness core', type: 'switch' },
+    { type: 'sub', label: 'Ridden vs ahead' },
+    { k: 'riddenMode', label: 'Treatment', type: 'seg', opts: [['dim', 'Dim'], ['recolour', 'Recolour']] },
+    { k: 'riddenDim', label: 'Dim strength', type: 'range', min: 0, max: 0.9, step: 0.05, fmt: fmtPct },
+    { k: 'riddenCol', label: 'Ridden colour', type: 'color' },
+    { type: 'sub', label: 'Direction chevrons' },
+    { k: 'chevSize', label: 'Size (0 = off)', type: 'range', min: 0, max: 26, step: 1, fmt: fmtN(0) },
+    { k: 'chevGap', label: 'Spacing', type: 'range', min: 30, max: 220, step: 5, fmt: fmtN(0) },
+    { k: 'chevCol', label: 'Colour', type: 'color' },
+  ]},
+  { id: 'heat', title: 'Heatmap', open: true, rows: [
+    { type: 'sub', label: 'Own rides' },
+    { k: 'heatOwnCol', label: 'Colour', type: 'color' },
+    { k: 'heatOwnW', label: 'Width', type: 'range', min: 1, max: 8, step: 0.25, fmt: fmtPx },
+    { k: 'heatOwnOp', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.05, fmt: fmtPct },
+    { type: 'sub', label: 'Others' },
+    { k: 'heatOtherCol', label: 'Colour', type: 'color' },
+    { k: 'heatOtherW', label: 'Width', type: 'range', min: 1, max: 8, step: 0.25, fmt: fmtPx },
+    { k: 'heatOtherOp', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.05, fmt: fmtPct },
+    { type: 'sub', label: 'Planned' },
+    { k: 'heatPlanCol', label: 'Colour', type: 'color' },
+    { k: 'heatPlanW', label: 'Width', type: 'range', min: 1, max: 8, step: 0.25, fmt: fmtPx },
+    { k: 'heatPlanOp', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.05, fmt: fmtPct },
+    { type: 'sub', label: 'Along the route' },
+    { k: 'knockR', label: 'Knockout radius', type: 'range', min: 0, max: 34, step: 1, fmt: fmtN(0) },
+    { k: 'underOp', label: 'Under-route opacity', type: 'range', min: 0, max: 1, step: 0.05, fmt: fmtPct },
+  ]},
+  { id: 'base', title: 'Basemap', open: true, rows: [
+    { k: 'groundBri', label: 'Ground brightness', type: 'range', min: 0.5, max: 2, step: 0.05, fmt: fmtX },
+    { k: 'roadBri', label: 'Roads & trails', type: 'range', min: 0.5, max: 2, step: 0.05, fmt: fmtX },
+    { k: 'labelInt', label: 'Label intensity', type: 'range', min: 0.1, max: 1.8, step: 0.05, fmt: fmtX },
+    { k: 'trailCol', label: 'Minor-trail colour', type: 'color' },
+    { k: 'trailW', label: 'Trail width ×', type: 'range', min: 0.4, max: 3, step: 0.1, fmt: fmtX },
+  ]},
+  { id: 'chrome', title: 'Controls & Readouts', open: true, rows: [
+    { k: 'btnOp', label: 'Button opacity', type: 'range', min: 0.1, max: 1, step: 0.05, fmt: fmtPct },
+    { k: 'btnSize', label: 'Button size', type: 'range', min: 0.7, max: 1.5, step: 0.05, fmt: fmtX },
+    { k: 'readoutSize', label: 'Readout size', type: 'range', min: 0.7, max: 1.6, step: 0.05, fmt: fmtX },
+    { k: 'sunPlate', label: 'Sun plate', type: 'switch' },
+    { k: 'turnAccent', label: 'Turn accent', type: 'color' },
+    { k: 'posCol', label: 'Position arrow', type: 'color' },
+    { k: 'posSize', label: 'Arrow size', type: 'range', min: 0.6, max: 1.8, step: 0.05, fmt: fmtX },
+    { k: 'crumbCol', label: 'Breadcrumbs', type: 'color' },
+    { k: 'crumbGap', label: 'Crumb spacing', type: 'range', min: 8, max: 60, step: 1, fmt: fmtN(0) },
+    { type: 'ramp', label: 'Steepness ramp', keys: ['grade0', 'grade1', 'grade2', 'grade3', 'grade4'] },
+  ]},
+];
+
+const $ = id => document.getElementById(id);
+const CTRL = {};   // key -> {row, input(s), val, badge, pin, def}
+const PINROWS = []; // [{keys, rowEl, pinEl}]
+
+function buildInspector() {
+  const body = $('inspBody');
+  for (const grp of GROUPS) {
+    const det = document.createElement('details');
+    det.className = 'grp'; det.open = grp.open;
+    const sum = document.createElement('summary'); sum.textContent = grp.title;
+    det.appendChild(sum);
+    const gb = document.createElement('div'); gb.className = 'grpBody';
+    for (const row of grp.rows) gb.appendChild(buildRow(row));
+    det.appendChild(gb);
+    body.appendChild(det);
+  }
+}
+function pinBtn(keys, rowEl) {
+  const b = document.createElement('button');
+  b.className = 'pinD'; b.type = 'button';
+  b.addEventListener('click', () => {
+    const pinned = keys.every(k => isPinned(k));
+    for (const k of keys) {
+      if (pinned) delete S.pins[S.style][k];
+      else S.pins[S.style][k] = eff(k);
+    }
+    markCustom(); refresh();
+  });
+  PINROWS.push({ keys, rowEl, pinEl: b });
+  return b;
+}
+function buildRow(row) {
+  if (row.type === 'sub') {
+    const d = document.createElement('div'); d.className = 'sub'; d.textContent = row.label; return d;
+  }
+  const el = document.createElement('div'); el.className = 'row';
+  if (row.type === 'pairChip') {
+    el.style.gridTemplateColumns = '118px 1fr 26px';
+    const lab = document.createElement('label'); lab.textContent = 'Casing + core';
+    const ctl = document.createElement('div'); ctl.className = 'rowCtl';
+    const chip = document.createElement('div'); chip.id = 'pairChip';
+    ctl.appendChild(chip); el.appendChild(lab); el.appendChild(ctl);
+    el.appendChild(document.createElement('span'));
+    return el;
+  }
+  if (row.type === 'ramp') {
+    const lab = document.createElement('label'); lab.textContent = row.label;
+    const ctl = document.createElement('div'); ctl.className = 'rowCtl';
+    const wrap = document.createElement('div'); wrap.className = 'rampWrap'; wrap.id = 'rampStrip';
+    row.keys.forEach(k => {
+      const cell = document.createElement('span');
+      const inp = document.createElement('input'); inp.type = 'color';
+      inp.addEventListener('input', () => { setVal(k, inp.value); markCustom(); refresh(); });
+      cell.appendChild(inp); wrap.appendChild(cell);
+      CTRL[k] = { row: el, input: inp, cell };
+    });
+    ctl.appendChild(wrap);
+    el.appendChild(lab); el.appendChild(ctl); el.appendChild(pinBtn(row.keys, el));
+    return el;
+  }
+  const lab = document.createElement('label'); lab.textContent = row.label;
+  const badge = document.createElement('span'); badge.className = 'warnB'; badge.textContent = '⚠';
+  lab.appendChild(badge);
+  const ctl = document.createElement('div'); ctl.className = 'rowCtl';
+  const c = { row: el, badge };
+  if (row.type === 'switch') {
+    const sw = document.createElement('span'); sw.className = 'sw';
+    const inp = document.createElement('input'); inp.type = 'checkbox';
+    inp.addEventListener('change', () => { setVal(row.k, inp.checked); markCustom(); refresh(); });
+    const knob = document.createElement('i');
+    sw.appendChild(inp); sw.appendChild(knob); ctl.appendChild(sw); c.input = inp;
+  } else if (row.type === 'range') {
+    const inp = document.createElement('input'); inp.type = 'range';
+    inp.min = row.min; inp.max = row.max; inp.step = row.step;
+    const val = document.createElement('span'); val.className = 'val';
+    inp.addEventListener('input', () => { setVal(row.k, +inp.value); markCustom(); refresh(); });
+    ctl.appendChild(inp); ctl.appendChild(val); c.input = inp; c.val = val; c.fmt = row.fmt || fmtN(2);
+  } else if (row.type === 'color') {
+    const well = document.createElement('span'); well.className = 'well';
+    const inp = document.createElement('input'); inp.type = 'color';
+    inp.addEventListener('input', () => { setVal(row.k, inp.value); markCustom(); refresh(); });
+    well.appendChild(inp); ctl.appendChild(well); c.input = inp; c.well = well;
+  } else if (row.type === 'seg') {
+    const seg = document.createElement('div'); seg.className = 'mseg';
+    c.segBtns = row.opts.map(([v, l]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = l; b.dataset.v = v;
+      b.addEventListener('click', () => { setVal(row.k, v); markCustom(); refresh(); });
+      seg.appendChild(b); return b;
+    });
+    ctl.appendChild(seg);
+  }
+  CTRL[row.k] = c;
+  el.appendChild(lab); el.appendChild(ctl); el.appendChild(pinBtn([row.k], el));
+  return el;
+}
+
+function updateControls() {
+  for (const grp of GROUPS) for (const row of grp.rows) {
+    if (!row.k && row.type !== 'ramp') continue;
+    const keys = row.keys || [row.k];
+    for (const k of keys) {
+      const c = CTRL[k]; if (!c || !c.input) continue;
+      const v = eff(k);
+      if (c.input.type === 'checkbox') c.input.checked = !!v;
+      else c.input.value = v;
+      if (c.val) c.val.textContent = c.fmt(+v);
+      if (c.input.type === 'range') {
+        const p = (v - c.input.min) / (c.input.max - c.input.min) * 100;
+        c.input.style.background = `linear-gradient(to right, var(--acc) ${p}%, rgba(0,0,0,.16) ${p}%)`;
+      }
+      if (c.well) c.well.style.background = v;
+      if (c.cell) c.cell.style.background = v;
+      if (c.segBtns) c.segBtns.forEach(b => b.classList.toggle('on', b.dataset.v === v));
+    }
+  }
+  for (const pr of PINROWS) {
+    const pinned = pr.keys.every(k => isPinned(k));
+    pr.pinEl.classList.toggle('on', pinned);
+    pr.rowEl.classList.toggle('pinned', pinned);
+    pr.pinEl.title = pinned
+      ? `Pinned for ${STYLE_LABELS[S.style]} — click to unpin (revert to global)`
+      : `Pin for ${STYLE_LABELS[S.style]} only`;
+  }
+  // ramp strip gradient
+  const stops = ['grade0', 'grade1', 'grade2', 'grade3', 'grade4'].map(eff);
+  $('rampStrip').style.background = `linear-gradient(to right, ${stops.map((c, i) =>
+    `${c} ${i * 20}% ${(i + 1) * 20}%`).join(', ')})`;
+  // route pair chip: casing + core sample
+  const chip = $('pairChip');
+  const cw = eff('coreW') * 1.6, edge = eff('casingEdge') * 1.6;
+  const casOn = eff('casingOn');
+  chip.style.background = `linear-gradient(to bottom,
+    transparent calc(50% - ${cw / 2 + edge}px),
+    ${casOn ? hexA(eff('casingCol'), eff('casingOp')) : 'transparent'} calc(50% - ${cw / 2 + edge}px) calc(50% - ${cw / 2}px),
+    ${eff('coreCol')} calc(50% - ${cw / 2}px) calc(50% + ${cw / 2}px),
+    ${casOn ? hexA(eff('casingCol'), eff('casingOp')) : 'transparent'} calc(50% + ${cw / 2}px) calc(50% + ${cw / 2 + edge}px),
+    transparent calc(50% + ${cw / 2 + edge}px)), var(--m-ground)`;
+  // header bits
+  $('selPreset').value = S.preset;
+  const p = PRESETS.find(x => x.id === S.preset);
+  $('presetNote').textContent = p ? p.note : 'Custom — copy it out before it gets away.';
+  $('btnAbA').disabled = !S.ab.A; $('btnAbB').disabled = !S.ab.B;
+  $('btnAbA').classList.toggle('on', S.ab.showing === 'A');
+  $('btnAbB').classList.toggle('on', S.ab.showing === 'B');
+  const pinCount = Object.keys(S.pins[S.style]).length;
+  $('editHint').innerHTML = `<span class="pinEg"></span> Editing <b>${STYLE_LABELS[S.style]}</b>` +
+    (pinCount ? ` — ${pinCount} setting${pinCount > 1 ? 's' : ''} pinned here` : ' — no pins on this style');
+}
+
+/* ============================ colour math (guard) ============================ */
+function hexRgb(h) {
+  h = String(h).replace('#', '');
+  if (h.length === 3) h = h.replace(/./g, ch => ch + ch);
+  const n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function hexA(h, a) { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; }
+function lum(hex) {
+  const l = hexRgb(hex).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+}
+function hueSat(hex) {
+  const [r, g, b] = hexRgb(hex).map(v => v / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d) {
+    if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  const s = mx === 0 ? 0 : d / mx;
+  return [h, s];
+}
+function brightHex(hex, f) {
+  return '#' + hexRgb(hex).map(v => Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, '0')).join('');
+}
+function collides(c1, c2) {
+  const L1 = lum(c1), L2 = lum(c2);
+  const cr = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+  if (cr >= 1.5) return false;
+  const [h1, s1] = hueSat(c1), [h2, s2] = hueSat(c2);
+  const dh = Math.min(Math.abs(h1 - h2), 360 - Math.abs(h1 - h2));
+  return dh < 30 || Math.min(s1, s2) < 0.15;
+}
+// must-differ pairs: route vs each heat class, route vs basemap trails, heat classes
+// pairwise, each heat vs the (brightness-adjusted) ground. '@ground' is virtual — no swatch.
+const GUARD_PAIRS = [
+  ['coreCol', 'heatOwnCol', 'route core vs own heat'],
+  ['coreCol', 'heatOtherCol', 'route core vs others heat'],
+  ['coreCol', 'heatPlanCol', 'route core vs planned'],
+  ['coreCol', 'trailCol', 'route core vs basemap trails'],
+  ['heatOwnCol', 'heatOtherCol', 'own vs others heat'],
+  ['heatOwnCol', 'heatPlanCol', 'own vs planned heat'],
+  ['heatOtherCol', 'heatPlanCol', 'others vs planned heat'],
+  ['heatOwnCol', '@ground', 'own heat vs ground'],
+  ['heatOtherCol', '@ground', 'others heat vs ground'],
+  ['heatPlanCol', '@ground', 'planned heat vs ground'],
+];
+function runGuard() {
+  const msgs = {};
+  const ground = brightHex(GROUND_HEX[S.style], eff('groundBri'));
+  for (const [a, b, label] of GUARD_PAIRS) {
+    const ca = a === '@ground' ? ground : eff(a);
+    const cb = b === '@ground' ? ground : eff(b);
+    if (collides(ca, cb)) {
+      (msgs[a] = msgs[a] || []).push(label);
+      (msgs[b] = msgs[b] || []).push(label);
+    }
+  }
+  for (const k in CTRL) {
+    const c = CTRL[k]; if (!c.badge) continue;
+    const m = msgs[k];
+    c.badge.classList.toggle('on', !!m);
+    c.badge.title = m ? 'Too close to tell apart on ' + STYLE_LABELS[S.style] + ': ' + m.join('; ') : '';
+  }
+}
+
+/* ============================ scene wiring ============================ */
+const fullPath = $('pFull');
+const fullLen = fullPath.getTotalLength();
+// per-surface spans as fractions of the full route (measured, not hard-coded)
+const SEG_DS = [
+  ['sealed', 'M 150,880 C 240,861 335,845 430,824'],
+  ['dirt', 'M 430,824 C 472,806 506,772 521,722 C 536,672 562,618 600,560'],
+  ['single', 'M 600,560 C 630,552 652,546 655,532 C 658,518 592,520 589,505 C 586,490 660,492 663,477 C 666,462 594,464 591,449 C 588,434 662,436 668,420 C 675,396 689,348 700,300'],
+  ['dirt', 'M 700,300 C 758,272 858,258 958,258 C 1058,258 1122,262 1170,272'],
+  ['unmapped', 'M 1170,272 C 1262,292 1332,340 1352,420 C 1369,485 1332,560 1290,612'],
+];
+const SURF_SPANS = (() => {
+  const ns = 'http://www.w3.org/2000/svg';
+  const defs = document.querySelector('defs');
+  let acc = 0;
+  return SEG_DS.map(([s, d]) => {
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', d); defs.appendChild(p);
+    const len = p.getTotalLength(); defs.removeChild(p);
+    const span = { s, f0: acc / fullLen, f1: (acc + len) / fullLen };
+    acc += len; return span;
+  });
+})();
+const F_HAIRPIN = SURF_SPANS[2].f0 + (SURF_SPANS[2].f1 - SURF_SPANS[2].f0) * 0.22; // second hairpin
+const F_VALLEY = SURF_SPANS[4].f0;
+function surfAt(t) { for (const sp of SURF_SPANS) if (t <= sp.f1) return sp.s; return 'unmapped'; }
+function gradeAt(t) { // hand-authored profile: flat lead-in, building climb, brutal switchbacks, easy top, steep drop
+  for (const sp of SURF_SPANS) {
+    if (t > sp.f1) continue;
+    const u = (t - sp.f0) / (sp.f1 - sp.f0);
+    if (sp.s === 'sealed') return 2;
+    if (sp.s === 'single') return 16 + 8 * Math.sin(u * Math.PI);
+    if (sp.s === 'unmapped') return 9 + 8 * u;
+    return sp.f0 < 0.3 ? 5 + 9 * u : 4; // first dirt = the climb, second = fire road
+  }
+  return 4;
+}
+const GRADE_BOUNDS = [4, 8, 14, 22];
+function gradeColor(g) {
+  let i = 0; while (i < GRADE_BOUNDS.length && g >= GRADE_BOUNDS[i]) i++;
+  return eff('grade' + i);
+}
+
+function applyScene() {
+  const r = document.documentElement.style;
+  r.setProperty('--btn-op', eff('btnOp'));
+  r.setProperty('--btn-size', eff('btnSize'));
+  r.setProperty('--readout-size', eff('readoutSize'));
+  r.setProperty('--turn-accent', eff('turnAccent'));
+  r.setProperty('--bri-ground', eff('groundBri'));
+  r.setProperty('--bri-road', eff('roadBri'));
+  document.body.classList.toggle('noplate', !eff('sunPlate'));
+
+  // labels: opacity for ≤1, brightness for the lift past 1 (Dark wants it)
+  const li = eff('labelInt');
+  const gl = $('gLabels');
+  gl.style.opacity = Math.min(1, li);
+  gl.style.filter = li > 1 ? `brightness(${li})` : '';
+
+  // minor trails
+  document.querySelectorAll('.trailln').forEach(p => {
+    p.setAttribute('stroke', eff('trailCol'));
+    p.setAttribute('stroke-width', (+p.dataset.w * eff('trailW')).toFixed(2));
+  });
+
+  // route: casing
+  const coreW = eff('coreW'), edge = eff('casingEdge');
+  const cas = $('rteCasing');
+  cas.style.display = eff('casingOn') ? '' : 'none';
+  cas.setAttribute('stroke', eff('casingCol'));
+  cas.setAttribute('stroke-width', (coreW + 2 * edge).toFixed(2));
+  cas.setAttribute('stroke-opacity', eff('casingOp'));
+  cas.style.filter = eff('casingStyle') === 'glow' ? `blur(${Math.max(1, edge * 0.9).toFixed(1)}px)` : '';
+
+  // route: per-surface cores
+  const setCore = (id, dash, cap, op, w) => {
+    const p = $(id);
+    p.setAttribute('stroke', eff('coreCol'));
+    p.setAttribute('stroke-width', (w || coreW).toFixed(2));
+    p.setAttribute('stroke-opacity', op == null ? 1 : op);
+    if (dash) p.setAttribute('stroke-dasharray', dash); else p.removeAttribute('stroke-dasharray');
+    if (cap) p.setAttribute('stroke-linecap', cap);
+  };
+  setCore('coreSealed', null, 'round');
+  setCore('coreDirt', `${(eff('dirtDash') * coreW).toFixed(2)} ${(eff('dirtGap') * coreW).toFixed(2)}`, 'butt');
+  setCore('coreSingle', `${(eff('singleDash') * coreW).toFixed(2)} ${(eff('singleGap') * coreW).toFixed(2)}`, 'round');
+  const um = eff('unmappedStyle');
+  if (um === 'dots') setCore('coreUnmapped', `${(0.1 * coreW).toFixed(2)} ${(2 * coreW).toFixed(2)}`, 'round', 0.95);
+  else if (um === 'solid') setCore('coreUnmapped', null, 'round', 1);
+  else setCore('coreUnmapped', null, 'round', 0.45, coreW * 0.9); // ghost
+
+  // steepness core swaps in for the plain cores; the casing stays for silhouette
+  rebuildSteep();
+  $('gCores').style.display = eff('steepCore') ? 'none' : '';
+
+  // chevrons along the route
+  rebuildChevrons();
+
+  // ridden overlay (dim toward ground, or hard recolour)
+  const ov = $('riddenOv');
+  if (eff('riddenMode') === 'dim') {
+    ov.setAttribute('stroke', getComputedStyle(document.body).getPropertyValue('--m-ground').trim() || '#000');
+    ov.setAttribute('stroke-opacity', eff('riddenDim'));
+    ov.setAttribute('stroke-width', (coreW + 2 * edge + 1).toFixed(2));
+  } else {
+    ov.setAttribute('stroke', eff('riddenCol'));
+    ov.setAttribute('stroke-opacity', 0.92);
+    ov.setAttribute('stroke-width', coreW.toFixed(2));
+  }
+  updateRidden();
+
+  // heat trio (styles set on the defs geometry → both <use> copies inherit)
+  const setHeat = (cls, col, w, op) => document.querySelectorAll('.' + cls).forEach(p => {
+    p.setAttribute('stroke', eff(col));
+    p.setAttribute('stroke-width', eff(w));
+    p.setAttribute('stroke-opacity', eff(op));
+  });
+  setHeat('h-own', 'heatOwnCol', 'heatOwnW', 'heatOwnOp');
+  setHeat('h-other', 'heatOtherCol', 'heatOtherW', 'heatOtherOp');
+  setHeat('h-plan', 'heatPlanCol', 'heatPlanW', 'heatPlanOp');
+  const kr = eff('knockR');
+  const kw = kr <= 0 ? 0 : Math.max(coreW + 2 * edge, 2 * kr);
+  $('knockStroke').setAttribute('stroke-width', kw);
+  $('underStroke').setAttribute('stroke-width', kw);
+  $('gHeatUnder').setAttribute('opacity', eff('underOp'));
+
+  // chrome bits in the scene
+  const pa = $('posArrow').firstElementChild;
+  pa.setAttribute('fill', eff('posCol'));
+  $('gGiant').setAttribute('stroke', eff('turnAccent'));
+  $('gGiant').setAttribute('fill', eff('turnAccent'));
+  document.querySelectorAll('#gCrumbs circle').forEach(c => c.setAttribute('fill', eff('crumbCol')));
+  placeArrow();
+  if (!sim.playing) regenCrumbs();
+}
+
+function rebuildChevrons() {
+  const size = eff('chevSize');
+  const t = $('chevText'), tp = $('chevTP');
+  if (size <= 0) { t.style.display = 'none'; return; }
+  t.style.display = '';
+  const gap = eff('chevGap');
+  const n = Math.max(1, Math.min(200, Math.floor(fullLen / gap)));
+  tp.textContent = '›'.repeat(n);
+  t.setAttribute('font-size', size);
+  t.setAttribute('font-weight', '800');
+  t.setAttribute('fill', eff('chevCol'));
+  t.setAttribute('dy', size * 0.35);
+  t.style.letterSpacing = Math.max(4, gap - size * 0.45) + 'px';
+  t.setAttribute('stroke', 'rgba(255,255,255,.85)');
+  t.setAttribute('stroke-width', '1.2');
+  t.style.paintOrder = 'stroke';
+}
+
+function rebuildSteep() {
+  const g = $('gSteep');
+  if (!eff('steepCore')) { g.style.display = 'none'; g.innerHTML = ''; return; }
+  g.style.display = '';
+  g.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  const coreW = eff('coreW');
+  const DASH = {
+    dirt: `${(eff('dirtDash') * coreW).toFixed(2)} ${(eff('dirtGap') * coreW).toFixed(2)}`,
+    single: `${(eff('singleDash') * coreW).toFixed(2)} ${(eff('singleGap') * coreW).toFixed(2)}`,
+  };
+  const step = 11;
+  let runD = null, runCol = null, runSurf = null;
+  const flush = () => {
+    if (!runD) return;
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', runD);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', runCol);
+    p.setAttribute('stroke-width', runSurf === 'unmapped' ? (coreW * 0.9).toFixed(2) : coreW);
+    p.setAttribute('stroke-opacity', runSurf === 'unmapped' ? 0.55 : 1);
+    if (DASH[runSurf]) { p.setAttribute('stroke-dasharray', DASH[runSurf]); }
+    p.setAttribute('stroke-linecap', runSurf === 'single' ? 'round' : 'butt');
+    g.appendChild(p);
+  };
+  for (let d = 0; d <= fullLen; d += step) {
+    const pt = fullPath.getPointAtLength(d);
+    const t = d / fullLen;
+    const col = gradeColor(gradeAt(t)), surf = surfAt(t);
+    if (col !== runCol || surf !== runSurf) {
+      flush();
+      runD = `M ${pt.x.toFixed(1)},${pt.y.toFixed(1)}`;
+      runCol = col; runSurf = surf;
+    } else {
+      runD += ` L ${pt.x.toFixed(1)},${pt.y.toFixed(1)}`;
+    }
+  }
+  flush();
+}
+
+/* ============================ ride simulation ============================ */
+// idle just short of the hairpin so the static frame shows the approach cue + giant arrow story
+const sim = { t: 0.335, playing: false, speed: 1, last: 0, crumbAt: 0 };
+function pathPoint(len) { return fullPath.getPointAtLength(Math.max(0, Math.min(fullLen, len))); }
+function placeArrow() {
+  const d = sim.t * fullLen;
+  const p = pathPoint(d), q = pathPoint(Math.min(fullLen, d + 7));
+  const ang = Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI + 90;
+  $('posArrow').setAttribute('transform',
+    `translate(${p.x.toFixed(1)},${p.y.toFixed(1)}) rotate(${ang.toFixed(1)}) scale(${eff('posSize')})`);
+}
+function updateRidden() {
+  $('riddenOv').setAttribute('stroke-dasharray', `${sim.t.toFixed(4)} 2`);
+}
+function crumbGapPx() { return Math.max(6, eff('crumbGap') * 1.6); }
+function addCrumb(len) {
+  const p = pathPoint(len);
+  const ns = 'http://www.w3.org/2000/svg';
+  const c = document.createElementNS(ns, 'circle');
+  c.setAttribute('cx', p.x.toFixed(1)); c.setAttribute('cy', p.y.toFixed(1));
+  c.setAttribute('r', 3);
+  c.setAttribute('fill', eff('crumbCol'));
+  c.setAttribute('opacity', 0.85);
+  $('gCrumbs').appendChild(c);
+}
+function regenCrumbs() {
+  $('gCrumbs').innerHTML = '';
+  const gap = crumbGapPx();
+  sim.crumbAt = 0;
+  for (let d = gap; d < sim.t * fullLen - 10; d += gap) { addCrumb(d); sim.crumbAt = d; }
+}
+function dropCrumbs() {
+  const gap = crumbGapPx();
+  while (sim.crumbAt + gap < sim.t * fullLen - 10) { sim.crumbAt += gap; addCrumb(sim.crumbAt); }
+}
+const CUES = [
+  { f: () => F_HAIRPIN, icon: '↰', label: 'Hairpin left' },
+  { f: () => F_VALLEY, icon: '⤵', label: 'Valley drop' },
+  { f: () => 0.999, icon: '⚑', label: 'Finish' },
+];
+function updateTurnUI() {
+  const M_PER_PX = 2; // pretend scale: full staged route ≈ 4 km
+  const cue = CUES.find(c => c.f() > sim.t) || CUES[CUES.length - 1];
+  const dist = Math.max(0, (cue.f() - sim.t) * fullLen * M_PER_PX);
+  $('tsIcon').textContent = cue.icon;
+  $('tsDist').textContent = dist < 15 ? 'NOW' : Math.round(dist / 10) * 10 + ' m';
+  $('tsLabel').textContent = ' · ' + cue.label;
+  const APPR = 600;
+  $('tsBarFill').style.width = (dist < APPR ? (1 - dist / APPR) * 100 : 0).toFixed(1) + '%';
+  const nearHp = Math.abs(sim.t - F_HAIRPIN) * fullLen < 90;
+  $('gGiant').classList.toggle('flash', sim.playing && nearHp);
+  $('battPct').textContent = Math.floor(63 - sim.t * 3);
+}
+function tick(ts) {
+  if (!sim.playing) return;
+  const dt = sim.last ? ts - sim.last : 16;
+  sim.last = ts;
+  sim.t += dt / 20000 * sim.speed;
+  if (sim.t >= 1) { sim.t = 0; $('gCrumbs').innerHTML = ''; sim.crumbAt = 0; }
+  placeArrow(); updateRidden(); dropCrumbs(); updateTurnUI();
+  requestAnimationFrame(tick);
+}
+function setPlaying(on) {
+  sim.playing = on;
+  sim.last = 0;
+  document.body.classList.toggle('simming', on);
+  $('btnPlay').textContent = on ? '⏸' : '▶';
+  if (on) requestAnimationFrame(tick);
+  else { $('gGiant').classList.remove('flash'); }
+}
+$('btnPlay').addEventListener('click', () => setPlaying(!sim.playing));
+document.querySelectorAll('.spd').forEach(b => b.addEventListener('click', () => {
+  sim.speed = +b.dataset.s;
+  document.querySelectorAll('.spd').forEach(x => x.classList.toggle('on', x === b));
+}));
+document.querySelector('.spd[data-s="1"]').classList.add('on');
+
+/* ============================ theme JSON / A-B / presets ============================ */
+function currentTheme(name) {
+  return {
+    format: 'dingonav-map-theme', version: 1,
+    name: name || (PRESETS.find(p => p.id === S.preset) || { name: 'Custom' }).name,
+    _hint: 'Paste this back into mockups/map-appearance.html. global = every knob; pins.<style> overrides a knob for that map style only. Styles: day, trail, dark, sat.',
+    global: Object.assign({}, S.global),
+    pins: JSON.parse(JSON.stringify(S.pins)),
+  };
+}
+function applyTheme(t) {
+  const g = {};
+  for (const k in DEFAULTS) if (t.global && k in t.global) g[k] = t.global[k];
+  S.global = Object.assign({}, DEFAULTS, g);
+  S.pins = emptyPins();
+  if (t.pins) for (const s of STYLE_IDS) if (t.pins[s])
+    for (const k in t.pins[s]) if (k in DEFAULTS) S.pins[s][k] = t.pins[s][k];
+}
+function markCustom() { S.preset = 'custom'; S.ab.showing = null; }
+function refresh() { updateControls(); applyScene(); runGuard(); updateTurnUI(); save(); }
+
+const sel = $('selPreset');
+for (const p of PRESETS) {
+  const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o);
+}
+const oc = document.createElement('option'); oc.value = 'custom'; oc.textContent = 'Custom'; sel.appendChild(oc);
+sel.addEventListener('change', () => {
+  const p = PRESETS.find(x => x.id === sel.value);
+  if (!p) return;
+  applyTheme(Object.assign({ global: Object.assign({}, DEFAULTS, p.g) },
+    { pins: themeFromPreset(p).pins }));
+  S.preset = p.id; S.ab.showing = null;
+  refresh(); toast(`Preset “${p.name}”`);
+});
+
+$('btnSetA').addEventListener('click', () => { S.ab.A = currentTheme('A'); S.ab.showing = 'A'; refresh(); toast('Snapshot → A'); });
+$('btnSetB').addEventListener('click', () => { S.ab.B = currentTheme('B'); S.ab.showing = 'B'; refresh(); toast('Snapshot → B'); });
+$('btnAbA').addEventListener('click', () => { if (S.ab.A) { applyTheme(S.ab.A); S.preset = 'custom'; S.ab.showing = 'A'; refresh(); toast('Showing A'); } });
+$('btnAbB').addEventListener('click', () => { if (S.ab.B) { applyTheme(S.ab.B); S.preset = 'custom'; S.ab.showing = 'B'; refresh(); toast('Showing B'); } });
+
+$('btnReset').addEventListener('click', () => {
+  if (!confirm('Reset everything to the app’s shipping values? Snapshots A/B are kept.')) return;
+  const ab = S.ab;
+  S = seedState(); S.ab = ab;
+  document.body.dataset.style = S.style;
+  syncSeg(); refresh(); toast('Reset to Current App');
+});
+
+/* copy / paste modal */
+let modalMode = 'copy';
+function openModal(mode) {
+  modalMode = mode;
+  const ta = $('modalTa');
+  $('modalErr').textContent = '';
+  if (mode === 'copy') {
+    $('modalTitle').textContent = 'Copy theme';
+    $('modalSub').textContent = 'Paste this to Claude and ask for variants — then Paste the reply back here.';
+    $('modalOk').textContent = 'Copy';
+    ta.value = JSON.stringify(currentTheme(), null, 2);
+    ta.readOnly = true;
+  } else {
+    $('modalTitle').textContent = 'Paste theme';
+    $('modalSub').textContent = 'Paste a dingonav-map-theme JSON blob and apply it.';
+    $('modalOk').textContent = 'Apply';
+    ta.value = '';
+    ta.readOnly = false;
+  }
+  $('modalBg').classList.add('on');
+  setTimeout(() => { ta.focus(); if (mode === 'copy') ta.select(); }, 30);
+}
+$('btnCopy').addEventListener('click', () => openModal('copy'));
+$('btnPaste').addEventListener('click', () => openModal('paste'));
+$('modalCancel').addEventListener('click', () => $('modalBg').classList.remove('on'));
+$('modalBg').addEventListener('click', e => { if (e.target === $('modalBg')) $('modalBg').classList.remove('on'); });
+$('modalOk').addEventListener('click', () => {
+  if (modalMode === 'copy') {
+    const ta = $('modalTa'); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { }
+    if (navigator.clipboard) navigator.clipboard.writeText(ta.value).catch(() => { });
+    $('modalBg').classList.remove('on');
+    toast(ok || navigator.clipboard ? 'Theme copied' : 'Select + ⌘C to copy');
+  } else {
+    let t;
+    try { t = JSON.parse($('modalTa').value); }
+    catch (e) { $('modalErr').textContent = 'Not valid JSON: ' + e.message; return; }
+    if (!t || t.format !== 'dingonav-map-theme') {
+      $('modalErr').textContent = 'Expected {"format":"dingonav-map-theme", …}'; return;
+    }
+    applyTheme(t);
+    S.preset = 'custom'; S.ab.showing = null;
+    $('modalBg').classList.remove('on');
+    refresh(); toast(`Theme “${t.name || 'unnamed'}” applied`);
+  }
+});
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 1800);
+}
+
+/* ============================ style segmented control ============================ */
+const segEl = $('seg');
+for (const s of STYLE_IDS) {
+  const b = document.createElement('button'); b.textContent = STYLE_LABELS[s]; b.dataset.s = s;
+  b.addEventListener('click', () => setStyle(s));
+  segEl.appendChild(b);
+}
+function syncSeg() {
+  segEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.s === S.style));
+}
+function setStyle(s) {
+  S.style = s;
+  document.body.dataset.style = s;
+  syncSeg(); refresh();
+}
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  const i = '1234'.indexOf(e.key);
+  if (i >= 0) setStyle(STYLE_IDS[i]);
+  if (e.key === ' ') { e.preventDefault(); setPlaying(!sim.playing); }
+});
+
+/* ============================ boot ============================ */
+buildInspector();
+document.body.dataset.style = S.style;
+syncSeg();
+refresh();
+</script>
+</body>
+</html>
