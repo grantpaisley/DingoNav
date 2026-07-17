@@ -4556,7 +4556,9 @@ function regRow(r) {
   const idAttr = r.id ? ` id="${r.id}"` : '';
   const rstHtml = (r.adv || r.veh) ? '<span class="advRst" title="reset"><svg class="ic"><use href="#i-rotate-ccw"/></svg></span>' : '';
   if (r.t === 'toggle') {
-    row.innerHTML = `<label>${r.l}</label><span class="sw"><input type="checkbox"${idAttr}><span></span></span>`;
+    // the switch must BE a label — the checkbox is 0x0/invisible, so only native
+    // label association makes the visible slider toggle it on tap
+    row.innerHTML = `<label>${r.l}</label><label class="sw"><input type="checkbox"${idAttr}><span></span></label>`;
     const inp = row.querySelector('input');
     inp.checked = !!regGet(r);
     inp.onchange = () => regSet(r, inp.checked);
