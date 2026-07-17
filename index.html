@@ -226,7 +226,7 @@
   .gtile.active{border-color:var(--accent)}
   .gtile .gi{font-size:42px; line-height:1; display:flex; align-items:center; justify-content:center; gap:10px}
   .gtile .gi .gv{font-size:26px; font-weight:800; font-variant-numeric:tabular-nums}
-  .gtile .gl{font-size:15px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.04em}
+  .gtile .gl{font-size:15px; font-weight:700; color:var(--dim); letter-spacing:.02em}
   .gtile.active .gl{color:var(--accent)}
   /* tiles declare where they belong: ride grid, idle grid, or both */
   .gtile[data-m]{display:none}
@@ -300,11 +300,11 @@
     transform:translateY(105%); transition:transform .22s ease}
   #panel.on{transform:translateY(0)}
   #panel h3{font-size:13px; letter-spacing:.06em; color:var(--dim); margin:18px 0 8px}
-  /* day scheme (2026-07-17): bottom bar + slide-up panel go white/light-grey on day
-     map styles — the CSS vars re-skin everything inside; ☰ grid & toasts stay dark */
-  body.daymode #bottom, body.daymode #panel{--fg:#15202b; --dim:#5a6a78; --panel:#eef1f4; color:var(--fg)}
-  body.daymode #bottom{background:rgba(245,247,249,.96); border-top-color:#ccd5dd}
-  body.daymode #panel{background:#eef1f4}
+  /* day scheme: the bottom bar goes white/light-grey on day map styles. The panel
+     stays dark for now — its Mac-like light treatment (proper component colours)
+     is a designed pass, not a variable flip; settings must stay readable. */
+  body.daymode #bottom{--fg:#15202b; --dim:#5a6a78; color:var(--fg);
+    background:rgba(245,247,249,.96); border-top-color:#ccd5dd}
   #panelNav{display:flex; gap:10px; margin-bottom:6px}
   #panelNav #navBtn{flex:1}
   #panelNav .ctl{width:56px; height:56px; flex:none}
@@ -784,6 +784,16 @@ if (!S.set._v3) {
   if (S.set.adv.colRoute === '#00e5ff') delete S.set.adv.colRoute; // was the old default → follow the new one
   saveSet();
 }
+// v4 migration: single-track dots become dense dashes (re-point stored old defaults),
+// and a new version replaces saved UI layout config (silent for now — a later
+// version may warn before doing this)
+if (!S.set._v4) {
+  S.set._v4 = 1;
+  if (S.set.adv.singleDash === 0.1) delete S.set.adv.singleDash;
+  if (S.set.adv.singleGap === 1.7) delete S.set.adv.singleGap;
+  S.set.layout = {};
+  saveSet();
+}
 
 /* advanced tuning knobs: hand-tuned constants promoted to sliders while the feel is dialled in.
    ADV(k) reads the override or the shipping default; the Adv tab writes S.set.adv. */
@@ -803,7 +813,8 @@ const ADV_D = {
   slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
   colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
   colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
-  dirtDash: 2.4, dirtGap: 1.4, singleDash: 0.1, singleGap: 1.7,
+  dirtDash: 2.4, dirtGap: 1.4, singleDash: 1.2, singleGap: 0.9, // single = denser square dashes, not dots
+  gapStyle: 'case', // dash gaps show the casing colour (continuous case); 'clear' = old transparent gaps
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
@@ -1661,16 +1672,20 @@ function addOverlays() {
   map.addSource('selSurf', { type: 'geojson', data: EMPTY });
   const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
   const dashOf = { sealed: null, dirt: dashDirt, single: dashSingle };
+  // dashes are square-ended (butt caps) — only the continuous sealed line gets round ends
   const capOf = { sealed: { 'line-join': 'round', 'line-cap': 'round' }, dirt: { 'line-join': 'round' },
-    single: { 'line-join': 'round', 'line-cap': 'round' } };
+    single: { 'line-join': 'round' } };
   const sf = (s, st) => ['all', ['==', ['get', 's'], s], ['==', ['get', 'state'], st]];
   const dashed = (base, d) => d ? { ...base, 'line-dasharray': d } : base;
+  // casing is CONTINUOUS by default — dash gaps in the core read as casing colour
+  // (Grant's mock-up). gapStyle 'clear' restores dashed casing = transparent gaps.
+  const caseDashOf = s => ADV('gapStyle') === 'clear' && dashOf[s] ? caseDash(dashOf[s]) : null;
   /* progress ladder, bottom→top: travelled (grey, reduced dark case) → missed
      (half-strength colour, NO case — casing is the exclusive route-ahead signal)
      → remaining (full colour, cased). Patterns survive every state. */
   for (const s of ['sealed', 'dirt', 'single'])
     map.addLayer({ id: 'surf-done-case-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'done'), layout: capOf[s],
-      paint: dashed({ 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() }, dashOf[s] && caseDash(dashOf[s])) });
+      paint: dashed({ 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() }, caseDashOf(s)) });
   for (const s of ['sealed', 'dirt', 'single'])
     map.addLayer({ id: 'surf-done-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'done'), layout: capOf[s],
       paint: dashed({ 'line-color': ADV('colDone'), 'line-opacity': ADV('progDoneOp'), 'line-width': coreW() }, dashOf[s]) });
@@ -1685,7 +1700,7 @@ function addOverlays() {
     paint: { 'line-color': caseColor(), 'line-width': totalW() } });
   for (const s of ['sealed', 'dirt', 'single'])
     map.addLayer({ id: 'surf-case-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'rem'), layout: capOf[s],
-      paint: dashed({ 'line-color': caseColor(), 'line-width': totalW() }, dashOf[s] && caseDash(dashOf[s])) });
+      paint: dashed({ 'line-color': caseColor(), 'line-width': totalW() }, caseDashOf(s)) });
   for (const s of ['sealed', 'dirt', 'single'])
     map.addLayer({ id: 'surf-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'rem'), layout: capOf[s],
       paint: dashed({ 'line-color': ['get', 'c'], 'line-width': coreW() }, dashOf[s]) });
@@ -4400,6 +4415,7 @@ const SETTINGS = [
   { k: 'routeWIn', t: 'range', adv: 1, l: 'Route width zoomed in (px)', min: 4, max: 20, step: 0.5 },
   { k: 'coreFrac', t: 'range', adv: 1, l: 'Core share of route width', min: 0.4, max: 0.95, step: 0.01 },
   { k: 'caseMode', t: 'seg', adv: 1, l: 'Route casing', opts: [['auto', 'Auto'], ['dark', 'Dark'], ['white', 'White']] },
+  { k: 'gapStyle', t: 'seg', adv: 1, l: 'Dash gaps', opts: [['case', 'Casing colour'], ['clear', 'See-through']] },
   { k: 'colDone', t: 'color', adv: 1, l: 'Travelled route core' },
   { k: 'colDoneCase', t: 'color', adv: 1, l: 'Travelled route casing' },
   { k: 'progDoneOp', t: 'range', adv: 1, l: 'Travelled route opacity', min: 0.1, max: 1, step: 0.05 },
@@ -4469,9 +4485,11 @@ function applyAdvPaint() {
     map.setPaintProperty('surf-recent-' + s, 'line-width', coreW());
   }
   const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
+  const clear = ADV('gapStyle') === 'clear';
   for (const [s, d] of [['dirt', dashDirt], ['single', dashSingle]]) {
     for (const pre of ['surf-', 'surf-done-', 'surf-miss-', 'surf-recent-']) map.setPaintProperty(pre + s, 'line-dasharray', d);
-    for (const pre of ['surf-case-', 'surf-done-case-']) map.setPaintProperty(pre + s, 'line-dasharray', caseDash(d));
+    for (const pre of ['surf-case-', 'surf-done-case-']) // continuous casing unless gaps are set to clear
+      map.setPaintProperty(pre + s, 'line-dasharray', clear ? caseDash(d) : null);
   }
   map.setPaintProperty('heat-under', 'line-opacity', ADV('heatUnderOp'));
   map.setPaintProperty('heat-under', 'line-color', clsMatch());
@@ -4737,7 +4755,8 @@ function loUndock(id) {
 function loAnchor(id, slot) { // normal-mode placement: viewport-fraction anchors, no stored pixels
   const st = LO_ELS[id].el.style, p = loSlotXY(slot);
   loUndock(id);
-  st.position = 'fixed'; st.top = p.y + 'px'; st.bottom = 'auto';
+  // clamp into the viewport — a stale saved slot must never push chrome off-screen
+  st.position = 'fixed'; st.top = Math.max(40, Math.min(innerHeight - 40, p.y)) + 'px'; st.bottom = 'auto';
   if (p.col === 0) { st.left = LO_GRID.edge + 'px'; st.right = 'auto'; st.transform = 'translateY(-50%)'; }
   else if (p.col === LO_GRID.cols - 1) { st.right = LO_GRID.edge + 'px'; st.left = 'auto'; st.transform = 'translateY(-50%)'; }
   else { st.left = (p.col * 25) + '%'; st.right = 'auto'; st.transform = 'translate(-50%,-50%)'; }
