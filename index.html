@@ -849,7 +849,7 @@ function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
 let basePM = null, basePMKey = 'none'; // PMTiles handle for the cue engine's corridor decode
 let hasHillshade = false; // optional terrarium DEM .pmtiles → hillshade layer
-let stravaMeta = null; // {count, zmin, zmax} of baked Strava tiles in IDB, or null
+let stravaRideMeta = null, stravaHikeMeta = null; // {count,zmin,zmax} of baked ride/hike Strava tiles in IDB, or null
 let satMeta = null; // {count, zmin, zmax} of baked ESRI satellite tiles in IDB, or null
 // 1×1 transparent PNG bytes for out-of-corridor Strava tiles (generated, so no
 // hand-copied base64 to get wrong).
@@ -1513,11 +1513,15 @@ async function initMap() {
   // Strava corridor tiles served from IDB (baked into the .dingonav bundle).
   // Missing tiles (outside the corridor) resolve to a 1×1 transparent PNG so the
   // basemap shows through with no broken-tile errors.
-  maplibregl.addProtocol('stravatile', async (params) => {
-    const key = 'stravatile-' + params.url.replace('stravatile://', '').replaceAll('/', '-');
-    try { const rec = await idb.get(key); if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() }; } catch (e) {}
-    return { data: STRAVA_BLANK.buffer };
-  });
+  // ride (blue) + hike (purple) tiles are stored under separate keys; register a
+  // protocol for each. Tiles are pre-coloured in the bundle, so raster as-is.
+  for (const owner of ['ride', 'hike']) {
+    maplibregl.addProtocol('strava' + owner, async (params) => {
+      const key = `strava${owner}tile-` + params.url.replace(`strava${owner}://`, '').replaceAll('/', '-');
+      try { const rec = await idb.get(key); if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() }; } catch (e) {}
+      return { data: STRAVA_BLANK.buffer };
+    });
+  }
 
   // Satellite (ESRI World Imagery) corridor tiles served from IDB (baked into the
   // .dingonav bundle). Out-of-corridor tiles resolve to a blank so the request
@@ -1632,7 +1636,8 @@ async function initMap() {
     const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 250);
     map.once('load', () => { clearInterval(t); res(); });
   });
-  try { stravaMeta = await idb.get('strava-meta'); } catch (e) {}
+  try { stravaRideMeta = await idb.get('strava-ride-meta'); } catch (e) {}
+  try { stravaHikeMeta = await idb.get('strava-hike-meta'); } catch (e) {}
   // satMeta already loaded above (before buildStyle); no need to re-read here.
   mapReady = true; // before addOverlays — its refreshMapData() call needs this
   addOverlays();
@@ -1652,15 +1657,28 @@ function coreW() { const f = ADV('coreFrac'); return ['interpolate', ['linear'],
 // stay in step with the core's (gaps remain fully transparent)
 function caseDash(a) { const f = ADV('coreFrac'); return a.map(x => +(x * f).toFixed(2)); }
 function addOverlays() {
-  // Strava heatmap raster — added first so it sits directly on the basemap,
-  // UNDER our own heatmap and tracks. Only when a bundle shipped tiles.
-  if (stravaMeta && stravaMeta.count > 0) {
-    map.addSource('strava', { type: 'raster', tiles: ['stravatile://{z}/{x}/{y}'], tileSize: 256,
-      minzoom: stravaMeta.zmin, maxzoom: stravaMeta.zmax });
-    map.addLayer({ id: 'strava-heat', type: 'raster', source: 'strava',
-      layout: { visibility: S.set.strava === false ? 'none' : 'visible' },
+  // Strava heat rasters — added first so they sit directly on the basemap,
+  // UNDER our own heatmap and tracks. Ride (blue) then hike (purple) so hike
+  // reads on top where they overlap. Only when a bundle shipped tiles.
+  const stravaLayers = [
+    ['ride', stravaRideMeta, 'stravaRide'],
+    ['hike', stravaHikeMeta, 'stravaHike'],
+  ];
+  let stravaLoaded = 0;
+  for (const [owner, meta, setKey] of stravaLayers) {
+    if (!meta || !meta.count) continue;
+    map.addSource('strava-' + owner, { type: 'raster', tiles: ['strava' + owner + '://{z}/{x}/{y}'], tileSize: 256,
+      minzoom: meta.zmin, maxzoom: meta.zmax });
+    map.addLayer({ id: 'strava-' + owner + '-heat', type: 'raster', source: 'strava-' + owner,
+      layout: { visibility: S.set[setKey] === false ? 'none' : 'visible' },
       paint: { 'raster-opacity': 0.55 } });
-    setStravaInfo(stravaMeta.count + ' Strava tiles loaded (z' + stravaMeta.zmin + '–' + stravaMeta.zmax + ')');
+    stravaLoaded += meta.count;
+  }
+  if (stravaLoaded) {
+    const parts = [];
+    if (stravaRideMeta && stravaRideMeta.count) parts.push(stravaRideMeta.count + ' ride');
+    if (stravaHikeMeta && stravaHikeMeta.count) parts.push(stravaHikeMeta.count + ' hike');
+    setStravaInfo('Strava tiles loaded: ' + parts.join(', '));
   }
 
   map.addSource('heat', { type: 'geojson', data: S.heat ? S.heat.geojson : EMPTY });
@@ -3462,8 +3480,11 @@ function setBaseStatus(s) { document.getElementById('baseStatus').textContent = 
 function setHillStatus(s) { document.getElementById('hillStatus').textContent = s; }
 function setStravaInfo(s) { document.getElementById('stravaInfo').textContent = s; }
 function applyStrava() {
-  if (map && map.getLayer('strava-heat'))
-    map.setLayoutProperty('strava-heat', 'visibility', S.set.strava === false ? 'none' : 'visible');
+  if (!map) return;
+  if (map.getLayer('strava-ride-heat'))
+    map.setLayoutProperty('strava-ride-heat', 'visibility', S.set.stravaRide === false ? 'none' : 'visible');
+  if (map.getLayer('strava-hike-heat'))
+    map.setLayoutProperty('strava-hike-heat', 'visibility', S.set.stravaHike === false ? 'none' : 'visible');
 }
 function applyHill() {
   if (map && map.getLayer('hillshade'))
@@ -3648,21 +3669,26 @@ async function loadBundleZip(file, ctx) {
     const blob = new Blob([entries['hillshade.pmtiles']], { type: 'application/octet-stream' });
     await idb.put({ id: 'hillshade', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' hillshade', kind: 'hillshade', blob });
   }
-  // Strava corridor tiles → IDB, keyed for the stravatile:// protocol. Track the
-  // zoom range so the raster source only requests zooms we actually shipped.
-  let zmin = 99, zmax = 0;
-  for (const path in entries) {
-    const m = path.match(/^strava\/(\d+)\/(\d+)\/(\d+)\.png$/);
-    if (!m) continue;
-    const z = +m[1];
-    zmin = Math.min(zmin, z); zmax = Math.max(zmax, z);
-    await idb.put({ id: `stravatile-${m[1]}-${m[2]}-${m[3]}`, kind: 'stravatile',
-      blob: new Blob([entries[path]], { type: 'image/png' }) });
-    stravaTiles++;
-  }
-  if (stravaTiles) {
-    await idb.put({ id: 'strava-meta', kind: 'stravameta', count: stravaTiles, zmin, zmax });
-    if (S.set.strava === undefined) { S.set.strava = true; saveSet(); } // show by default when first shipped
+  // Strava corridor tiles → IDB, split by sport (ride=blue, hike=purple), keyed
+  // for the strava{ride,hike}:// protocols. Track each zoom range so the raster
+  // source only requests zooms we actually shipped.
+  for (const [owner, setKey] of [['ride', 'stravaRide'], ['hike', 'stravaHike']]) {
+    let zmin = 99, zmax = 0, count = 0;
+    const re = new RegExp('^strava-' + owner + '/(\\d+)/(\\d+)/(\\d+)\\.png$');
+    for (const path in entries) {
+      const m = path.match(re);
+      if (!m) continue;
+      const z = +m[1];
+      zmin = Math.min(zmin, z); zmax = Math.max(zmax, z);
+      await idb.put({ id: `strava${owner}tile-${m[1]}-${m[2]}-${m[3]}`, kind: `strava${owner}tile`,
+        blob: new Blob([entries[path]], { type: 'image/png' }) });
+      count++;
+    }
+    if (count) {
+      await idb.put({ id: `strava-${owner}-meta`, kind: `strava${owner}meta`, count, zmin, zmax });
+      if (S.set[setKey] === undefined) { S.set[setKey] = true; saveSet(); } // show by default when first shipped
+      stravaTiles += count;
+    }
   }
   // Satellite (ESRI World Imagery) corridor tiles → IDB, keyed for the
   // sattile:// protocol. Selected via the "Sat" map style.
@@ -4379,7 +4405,8 @@ const SETTINGS = [
   { sec: 'ride', k: 'code', t: 'text', l: 'Ride name', id: 'rideCode', max: 24, ph: 'e.g. watagans-42', apply: () => startFriends() },
   // General
   { sec: 'map', k: 'hillshade', t: 'toggle', l: 'Terrain shading', id: 'setHill', apply: applyHill },
-  { sec: 'map', k: 'strava', t: 'toggle', l: 'Strava heatmap overlay', id: 'setStrava', apply: applyStrava },
+  { sec: 'map', k: 'stravaRide', t: 'toggle', l: 'Strava rides (blue)', id: 'setStravaRide', apply: applyStrava },
+  { sec: 'map', k: 'stravaHike', t: 'toggle', l: 'Strava hikes (purple)', id: 'setStravaHike', apply: applyStrava },
   { sec: 'ui', k: 'wake', t: 'toggle', l: 'Keep screen on while navigating', id: 'setWake',
     apply: () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); } },
   { sec: 'ui', k: 'gloveSide', t: 'toggle', l: 'Ride controls button on the right', id: 'setGloveRight',
