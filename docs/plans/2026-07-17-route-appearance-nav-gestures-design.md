@@ -157,13 +157,25 @@ Add registry options for **fill colour** and **surround/outline colour**.
 
 ## 4. Chrome: day theme, hamburger, typography
 
-- **☰ hamburger gets a persistent dark-grey plate**, **exempt from the routing
-  transparency fade** (decided, was Q11) — a visibility fix that fades away is
-  no fix. All other floating controls keep the 07-13 routing fade.
-- **Day theme scope (decided, was Q12): bottom bar + slide-up panel only** go
-  white/light-grey by day, driven by the existing day/night map-style flip.
-  ☰ tile grid and settings stay dark always.
-- **Text mixed case everywhere** (kill ALL-CAPS), **symbols/icons larger**.
+- **Day theme is Mac-like** (samples review, 2026-07-17 second pass — supersedes
+  the earlier ☰-always-dark and panel-scope answers):
+  - Plates (controls, ☰, dot/square): `#f5f5f7`, hairline `#c9c9ce`, dark glyphs
+    (15:1). The ☰ visibility requirement is met by contrast, not darkness.
+  - Speed/mode readouts: near-black `#15202b` with a light halo (white failed
+    1.8:1 on day maps); countdown amber darkens to `#b45309` by day.
+  - Accent: **macOS blue `#007AFF` by day** (cyan fails 1.4:1 on light), cyan
+    `#00e5ff` at night — swapped via `body.daymode`, mirrored by hand in canvas.
+  - Panel: full Mac light component pass (white buttons + hairlines, blue
+    selected segs, green iOS-style switches) — light by day, original dark at
+    night.
+  - Turn strip: frosted white by day, dark translucent at night.
+  - **No riding fade on day styles** (`--navOp:1`); night keeps the 0.4 ghost.
+  - Route dash gaps read as the **casing colour** (continuous case); single
+    track = dense square dashes, not dots. `Dash gaps` seg restores see-through.
+- **Text mixed case everywhere** (kill ALL-CAPS incl. tile labels), **symbols
+  ~12% larger**.
+- New app versions **replace saved UI layout config** (v4 migration; silent for
+  now, a later version may warn), and layout anchors clamp into the viewport.
 
 ## 5. Nav gestures — DECIDED grammar (was Q13; supersedes 2026-07-15 §1/§2 triggers)
 

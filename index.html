@@ -300,11 +300,40 @@
     transform:translateY(105%); transition:transform .22s ease}
   #panel.on{transform:translateY(0)}
   #panel h3{font-size:13px; letter-spacing:.06em; color:var(--dim); margin:18px 0 8px}
-  /* day scheme: the bottom bar goes white/light-grey on day map styles. The panel
-     stays dark for now — its Mac-like light treatment (proper component colours)
-     is a designed pass, not a variable flip; settings must stay readable. */
+  /* ---------- Mac-like day theme (2026-07-17 samples review) ----------
+     Day map styles flip the chrome light: #f5f5f7 plates with hairline borders
+     and dark glyphs (15:1), macOS-blue accent (cyan fails 1.4:1 on light),
+     light panel with white controls and green switches, dark speed text with a
+     light halo (white failed 1.8:1 on day maps), frosted turn strip, and no
+     riding fade — light plates are already quiet. Night chrome is untouched. */
+  body.daymode{--accent:#007AFF; --navOp:1}
   body.daymode #bottom{--fg:#15202b; --dim:#5a6a78; color:var(--fg);
     background:rgba(245,247,249,.96); border-top-color:#ccd5dd}
+  body.daymode .ctl{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f}
+  body.daymode .ctl:active{background:#e8e8ed}
+  body.daymode .ctlgroup .ctl.preset{color:#6e6e73}
+  body.daymode .ctlgroup .ctl.preset.set{color:#1d1d1f}
+  body.daymode #menuBtn{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f; text-shadow:none}
+  body.daymode #menuBtn:active{background:#e8e8ed}
+  body.daymode #dotBtn{background:rgba(245,245,247,.92); border-color:#c9c9ce; color:#1d1d1f}
+  body.daymode #hudSpeed, body.daymode #vargModeBig{color:#15202b;
+    text-shadow:0 1px 8px rgba(255,255,255,.85), 0 0 3px rgba(255,255,255,.7)}
+  body.daymode #hudSpeed small{color:#3f4a55}
+  body.daymode #hudSpeed.cd, body.daymode #hudSpeed.cd small{color:#b45309}
+  body.daymode #hudSpeed.low, body.daymode #hudSpeed.low small{color:#c22a2a}
+  body.daymode #hudBox{background:rgba(255,255,255,.72); border-bottom-color:#d0d5db}
+  body.daymode #hudType, body.daymode #hudDist{color:#15202b}
+  body.daymode #hudDist small{color:#5a6a78}
+  body.daymode #hudArrow.left, body.daymode #hudArrow.right{color:#b45309}
+  body.daymode #panel{--fg:#15202b; --dim:#5a6a78; --panel:#eef1f4; --panel2:#ffffff; --bg:#e4e9ee;
+    background:#eef1f4; color:var(--fg)}
+  body.daymode #panel .btn{border-color:#c9c9ce}
+  body.daymode #panel .row input[type=text]{border-color:#c9c9ce}
+  body.daymode #panel .seg button{border-color:#c9c9ce}
+  body.daymode #panel .seg button.active{background:var(--accent); border-color:var(--accent); color:#fff}
+  body.daymode #panel .sw span{background:#d1d1d6}
+  body.daymode #panel .sw span::before{background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  body.daymode #panel .sw input:checked + span{background:#34c759}
   #panelNav{display:flex; gap:10px; margin-bottom:6px}
   #panelNav #navBtn{flex:1}
   #panelNav .ctl{width:56px; height:56px; flex:none}
@@ -2830,7 +2859,9 @@ function drawCountdown(ctx, w, h, ns) {
   const frac = Math.max(0, Math.min(1, d / act));
   const near = d <= (ns.cdNear || 0);
   ctx.fillStyle = '#26313d'; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = near ? '#ffb020' : '#00e5ff'; ctx.fillRect(w - frac * w, 0, frac * w, h);
+  // canvas can't read CSS vars — mirror the day/night accent swap by hand
+  ctx.fillStyle = near ? '#ffb020' : (document.body.classList.contains('daymode') ? '#007AFF' : '#00e5ff');
+  ctx.fillRect(w - frac * w, 0, frac * w, h);
   let txt;
   if (S.set.countUnit === 's') {
     const spd = S.pos && S.pos.speed > 0.5 ? S.pos.speed : null;
