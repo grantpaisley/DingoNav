@@ -611,6 +611,7 @@
 <div id="emptyState">
   <div class="big">DingoNav</div>
   <div style="color:var(--dim)">No tracks loaded yet</div>
+  <div id="emptyPacks" style="display:flex; flex-direction:column; gap:10px"></div>
   <button class="btn primary" id="emptyLoad">Load GPX / heatmap files</button>
 </div>
 
@@ -795,6 +796,8 @@ const idb = {
   del(id) { return new Promise((res, rej) => { const q = idb.tx('readwrite').delete(id); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
   get(id) { return new Promise((res, rej) => { const q = idb.tx('readonly').get(id); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
   all() { return new Promise((res, rej) => { const q = idb.tx('readonly').getAll(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  // keys only — tile purges must not haul thousands of blobs into memory
+  keys() { return new Promise((res, rej) => { const q = idb.tx('readonly').getAllKeys(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
   clear() { return new Promise((res, rej) => { const q = idb.tx('readwrite').clear(); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
 };
 
@@ -1574,7 +1577,7 @@ async function setMapStyle(name) {
     map.once('idle', () => { clearInterval(t); res(); });
   });
   addOverlays(); refreshPosLayers(); drawProgress(true);
-  if (S.cueEdit) { map.setFilter('alert-dots', null); map.setPaintProperty('alert-dots', 'circle-radius', 9); }
+  if (S.cueEdit) applyCueEditPaint(true);
   toast('Map style: ' + curStyle().label);
 }
 
@@ -1728,6 +1731,13 @@ function coreW() { const f = ADV('coreFrac'); return ['interpolate', ['linear'],
 // dash lengths are in line-widths — rescale for the wider case layer so its dashes
 // stay in step with the core's (gaps remain fully transparent)
 function caseDash(a) { const f = ADV('coreFrac'); return a.map(x => +(x * f).toFixed(2)); }
+/* typed-mark dot radius: zoomed out it shrinks to half the route core width
+   (reads as a blip ON the line), snapping up to the full 8 px dot at the
+   old alert minzoom. Tracks the routeW sliders via applyAdvPaint. */
+function markDotR() {
+  const tiny = ADV('routeWOut') * ADV('coreFrac') / 2;
+  return ['interpolate', ['linear'], ['zoom'], 12.3, tiny, 12.5, 8];
+}
 function addOverlays() {
   // Strava heat rasters — added first so they sit directly on the basemap,
   // UNDER our own heatmap and tracks. Ride (blue) then hike (purple) so hike
@@ -1848,20 +1858,37 @@ function addOverlays() {
       'text-allow-overlap': true, 'text-ignore-placement': true,
       visibility: ADV('slopeSize') > 0 ? 'visible' : 'none' },
     paint: { 'text-color': caseColor() } });
+  // turn cues: unchanged fixed-size dots, hidden below z12.5
   map.addLayer({ id: 'alert-dots', type: 'circle', source: 'alerts', minzoom: 12.5,
-    filter: ['!', ['get', 'removed']], // greyed-out deletions only show in edit mode
-    paint: { 'circle-radius': ['case', ['==', ['get', 'k'], 'turn'], 4.5, 8],
+    filter: ['all', ['!', ['get', 'removed']], ['==', ['get', 'k'], 'turn']], // greyed-out deletions only show in edit mode
+    paint: { 'circle-radius': 4.5,
       'circle-stroke-width': 1.5, 'circle-stroke-color': '#0e1216',
       'circle-color': ['case', ['get', 'removed'], '#5a6a78',
-        ['!=', ['get', 'k'], 'turn'], ['get', 'col'],
         ['get', 'manual'], '#42d7f5', '#ffb020'],
       'circle-opacity': ['case', ['get', 'removed'], 0.55, 1] } });
-  // typed marks wear their glyph letter (turns stay bare dots)
-  map.addLayer({ id: 'alert-glyphs', type: 'symbol', source: 'alerts', minzoom: 12.5,
+  // typed marks, zoom-tiered: <12.5 a tiny track-width blip, 12.5–14.5 the
+  // colored dot (+ glyph letter), ≥14.5 a rounded square baked per kind
+  map.addLayer({ id: 'mark-dots', type: 'circle', source: 'alerts', maxzoom: 14.5,
+    filter: ['all', ['!', ['get', 'removed']], ['!=', ['get', 'k'], 'turn']],
+    paint: { 'circle-radius': markDotR(),
+      // the tiny tier is all fill — a 2 px dot shouldn't be all stroke
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 12.3, 0, 12.5, 1.5],
+      'circle-stroke-color': '#0e1216',
+      'circle-color': ['case', ['get', 'removed'], '#5a6a78', ['get', 'col']],
+      'circle-opacity': ['case', ['get', 'removed'], 0.55, 1] } });
+  // typed marks wear their glyph letter (turns stay bare dots); the square
+  // tier bakes its own glyph, so the text hands off at the same zoom
+  map.addLayer({ id: 'alert-glyphs', type: 'symbol', source: 'alerts', minzoom: 12.5, maxzoom: 14.5,
     filter: ['all', ['!', ['get', 'removed']], ['!=', ['get', 'g'], '']],
     layout: { 'text-field': ['get', 'g'], 'text-size': 11, 'text-font': ['Noto Sans Medium'],
       'text-allow-overlap': true, 'text-ignore-placement': true },
     paint: { 'text-color': '#0e1216' } });
+  for (const k in MARKS) if (k !== 'turn' && !map.hasImage('mark-' + k))
+    map.addImage('mark-' + k, markSquareImage(k), { pixelRatio: 2 });
+  map.addLayer({ id: 'mark-squares', type: 'symbol', source: 'alerts', minzoom: 14.5,
+    filter: ['all', ['!', ['get', 'removed']], ['!=', ['get', 'k'], 'turn']],
+    layout: { 'icon-image': ['concat', 'mark-', ['get', 'k']],
+      'icon-allow-overlap': true, 'icon-ignore-placement': true } });
   map.addLayer({ id: 'friends-dots', type: 'circle', source: 'friends',
     paint: { 'circle-radius': 8, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'],
       'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff', 'circle-stroke-opacity': ['get', 'opacity'] } });
@@ -1907,6 +1934,26 @@ function addOverlays() {
     paint: { 'circle-radius': 7, 'circle-color': '#42d7f5',
       'circle-stroke-width': 2, 'circle-stroke-color': '#0e1216' } });
   refreshMapData(); refreshTrail(); refreshSpots(); applyAdvPaint(); refreshPresets();
+}
+/* rounded square + glyph letter for a mark kind, drawn @2x (18 px on screen).
+   Letter over the Lucide icon: it matches the medium-tier glyph text exactly,
+   and stays legible at this size. */
+function markSquareImage(kind) {
+  const m = MARKS[kind];
+  const c = document.createElement('canvas'); c.width = c.height = 36;
+  const x = c.getContext('2d');
+  const i = 2.5, s = 36 - 2 * i, r = 8; // inset, side, corner radius
+  x.beginPath();
+  x.moveTo(i + r, i);
+  x.arcTo(i + s, i, i + s, i + s, r); x.arcTo(i + s, i + s, i, i + s, r);
+  x.arcTo(i, i + s, i, i, r); x.arcTo(i, i, i + s, i, r);
+  x.closePath();
+  x.fillStyle = m.col; x.strokeStyle = '#0e1216'; x.lineWidth = 3;
+  x.fill(); x.stroke();
+  x.fillStyle = '#0e1216'; x.font = 'bold 20px system-ui, sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(m.glyph || '', 18, 19);
+  return x.getImageData(0, 0, 36, 36);
 }
 function navDartImage() { // classic location-arrow: triangle with a notched tail, white-outlined
   const c = document.createElement('canvas'); c.width = c.height = 56;
@@ -3157,11 +3204,12 @@ function findTurnPointNear(x, y, R) {
 
 /* ---------------- mark picker: full-screen 3×3 kind grid ---------------- */
 const markPickerEl = document.getElementById('markPicker'), markGrid = document.getElementById('markGrid');
-let pickerCtx = null; // { x, y, dirAuto, dirOv, edit: { cue } | null }
-/* closest analysed-track pass within 25 m — gates the picker and feeds dir inference */
-function nearestPass(x, y) {
+let pickerCtx = null; // { x, y, dirAuto, dirOv, edit: { cue } | null, only: track | null }
+/* closest analysed-track pass within 25 m — gates the picker and feeds dir inference.
+   `only` restricts to one track (cue-edit works on the selected track alone). */
+function nearestPass(x, y, only) {
   let best = null, bd = 25;
-  for (const t of S.tracks) {
+  for (const t of (only ? [only] : S.tracks)) {
     if (!t.baseCues) continue;
     for (const idx of trackPassesNear(t, x, y, 25)) {
       const d = dist(x, y, t.xy[idx * 2], t.xy[idx * 2 + 1]);
@@ -3170,10 +3218,10 @@ function nearestPass(x, y) {
   }
   return best;
 }
-function openMarkPicker(x, y, edit) {
-  const near = nearestPass(x, y);
+function openMarkPicker(x, y, edit, only) {
+  const near = nearestPass(x, y, only);
   if (!near) { toast('No track there — tap on the route'); return; }
-  pickerCtx = { x, y, dirAuto: inferTurnDir(near.trk, near.idx), dirOv: null, edit: edit || null };
+  pickerCtx = { x, y, dirAuto: inferTurnDir(near.trk, near.idx), dirOv: null, edit: edit || null, only: only || null };
   document.getElementById('markPickerTitle').textContent = edit ? 'Change mark' : 'Add mark here';
   renderMarkGrid();
   markPickerEl.classList.add('open');
@@ -3200,10 +3248,10 @@ function renderMarkGrid() {
   };
 }
 function placeMark(kind) {
-  const { x, y, dirOv, edit } = pickerCtx;
+  const { x, y, dirOv, edit, only } = pickerCtx;
   closeMarkPicker();
   if (edit) removeTurnPointAt(x, y); // change = remove + re-add: two records, replays cleanly everywhere
-  const n = addTurnPointAt(x, y, false, kind, kind === 'turn' ? dirOv : null);
+  const n = addTurnPointAt(x, y, false, kind, kind === 'turn' ? dirOv : null, only);
   if (n) { toast(MARKS[kind].label + ' marked — queued for the pack'); vib([60]); }
   else toast('Nothing placed — no track there, or a mark already sits on this spot');
 }
@@ -3226,9 +3274,9 @@ function trackPassesNear(trk, x, y, R) {
   if (cl) idxs.push(cl.best);
   return idxs;
 }
-function addTurnPointAt(x, y, fromRemote, kind, dir) {
+function addTurnPointAt(x, y, fromRemote, kind, dir, only) {
   let n = 0;
-  for (const t of S.tracks) {
+  for (const t of (only ? [only] : S.tracks)) {
     if (!t.baseCues || !t.overlay) continue; // only analysed tracks with their overlay loaded
     let ch = 0;
     for (const idx of trackPassesNear(t, x, y, 25)) {
@@ -3706,7 +3754,9 @@ async function addFile(name, text, ctx) {
       // bundle REPLACES the pack's tracks + heatmap instead of accumulating
       // duplicates; bundles with neither load loose, exactly as before.
       const slug = obj.bundleId || (ctx && ctx.slug) || '';
-      if (slug) await removePackData(slug);
+      // one active pack: a pack download replaces ALL previous pack data (any
+      // slug), not just its own — loose user-loaded tracks stay
+      if (slug) await purgeAllPacks();
       let nT = 0, errs = 0;
       if (obj.heatmap) await addFile(obj.heatmapName || 'heatmap.geojson', JSON.stringify(obj.heatmap), slug ? { pack: slug } : undefined);
       for (const t of obj.tracks) {
@@ -3783,6 +3833,40 @@ async function removePackData(slug) {
     document.getElementById('heatInfo').textContent = 'Heatmap: none';
   }
 }
+/* One active pack: wipe EVERY pack's tracks, heatmap, tiles and (unless asked
+   to keep them) provenance records. User-loaded tracks (pack === '') and all
+   cueov-* edit overlays survive — overlays are keyed by stable ride id and
+   re-attach when a pack comes back. Untagged basemap/hillshade (loaded by hand
+   or auto-downloaded) are user assets and are never purged. */
+async function purgeAllPacks({ keepProvenance = false } = {}) {
+  const slugs = new Set(S.packs.keys());
+  for (const t of S.tracks) if (t.pack) slugs.add(t.pack);
+  let ids = [];
+  try { ids = await idb.keys(); } catch (e) {}
+  for (const id of ids) {
+    if (id.startsWith('pack-')) slugs.add(id.slice(5));
+    else if (id.startsWith('heatmap-')) slugs.add(id.slice(8));
+  }
+  for (const slug of slugs) {
+    await removePackData(slug);
+    if (!keepProvenance) {
+      try { await idb.del('pack-' + slug); } catch (e) {}
+      S.packs.delete(slug);
+    }
+  }
+  // pack-shipped tiles: strava/sat tile pyramids + their metas, and any
+  // basemap/hillshade tagged with a pack slug
+  for (const id of ids) {
+    if (/^(stravaridetile|stravahiketile|sattile)-/.test(id) ||
+        id === 'strava-ride-meta' || id === 'strava-hike-meta' || id === 'sat-meta') {
+      try { await idb.del(id); } catch (e) {}
+    }
+  }
+  for (const id of ['basemap', 'hillshade']) {
+    try { const rec = await idb.get(id); if (rec && rec.pack) await idb.del(id); } catch (e) {}
+  }
+  stravaRideMeta = null; stravaHikeMeta = null; satMeta = null;
+}
 /* Forget a pack entirely (the header ✕): its data plus the pack record. */
 async function removePack(slug) {
   await removePackData(slug);
@@ -3840,12 +3924,14 @@ async function loadBundleZip(file, ctx) {
   }
   if (entries['basemap.pmtiles']) {
     const blob = new Blob([entries['basemap.pmtiles']], { type: 'application/octet-stream' });
-    await idb.put({ id: 'basemap', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' basemap', kind: 'basemap', blob });
+    // pack tag: lets purgeAllPacks tell a pack-shipped basemap from one the
+    // user loaded by hand (untagged assets are never purged)
+    await idb.put({ id: 'basemap', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' basemap', kind: 'basemap', pack: pack || '', blob });
     basemap = true;
   }
   if (entries['hillshade.pmtiles']) {
     const blob = new Blob([entries['hillshade.pmtiles']], { type: 'application/octet-stream' });
-    await idb.put({ id: 'hillshade', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' hillshade', kind: 'hillshade', blob });
+    await idb.put({ id: 'hillshade', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' hillshade', kind: 'hillshade', pack: pack || '', blob });
   }
   // Strava corridor tiles → IDB, split by sport (ride=blue, hike=purple), keyed
   // for the strava{ride,hike}:// protocols. Track each zoom range so the raster
@@ -3946,9 +4032,20 @@ document.getElementById('hillInput').addEventListener('change', async e => {
   toast('Terrain shading saved — reloading'); setTimeout(() => location.reload(), 800);
 });
 document.getElementById('clearBtn').onclick = async () => {
-  if (!confirm('Remove all loaded tracks, heatmap, basemap and terrain from this device?')) return;
-  stopNav(); await idb.clear();
-  S.tracks = []; S.heat = null; S.sel = -1;
+  if (!confirm('Remove all loaded tracks, heatmap, basemap and terrain from this device? Pack share links are kept so you can re-download.')) return;
+  stopNav();
+  // keep pack provenance (slug + source) across the wipe — it's the only
+  // record of where a pack came from, and the empty state's re-download
+  // button needs it. Everything else (tracks, tiles, cues, overlays) goes.
+  let packRecs = [];
+  try { packRecs = (await idb.all()).filter(r => r.kind === 'pack'); } catch (e) {}
+  await idb.clear();
+  for (const r of packRecs) { try { await idb.put(r); } catch (e) {} }
+  S.tracks = []; S.heat = null; S.heatPack = ''; S.sel = -1;
+  S.rides = []; S.trail = []; S.prog = null;
+  S.packs = new Map(packRecs.map(r => [r.slug, r]));
+  stravaRideMeta = null; stravaHikeMeta = null; satMeta = null;
+  delete S.set._packCfg; saveSet(); // a re-download should re-offer pack config
   refreshTrackList(); refreshEmpty(); updateBottomBar(); refreshMapData();
 };
 window.addEventListener('dragover', e => e.preventDefault());
@@ -4035,6 +4132,12 @@ function refreshTrackList() {
   }
   if (!S.tracks.length) el.innerHTML = '<div class="hint">No tracks yet.</div>';
   else if (!shown) el.innerHTML = '<div class="hint">No tracks match "' + escHtml(q) + '".</div>';
+  // provenance-only packs (e.g. after "Clear all data" with loose files still
+  // loaded): show the header anyway so its ⟳ re-download stays reachable
+  for (const [slug, pack] of S.packs) {
+    if (groups.has(slug)) continue;
+    if (pack.srcSlug || pack.sourceUrl) el.appendChild(packHeader(slug, pack, pack.name, 0));
+  }
 }
 document.getElementById('trackSearch').oninput = () => refreshTrackList();
 /* Each pack carries its own surrounding heatmap; selecting a track makes its
@@ -4088,8 +4191,7 @@ function setCueEdit(on) {
   const eb = document.getElementById('cueEditBtn');
   eb.classList.toggle('active', on);
   if (mapReady) {
-    map.setFilter('alert-dots', on ? null : ['!', ['get', 'removed']]);
-    map.setPaintProperty('alert-dots', 'circle-radius', on ? 9 : 4.5);
+    applyCueEditPaint(on);
     map.getCanvas().style.cursor = on ? 'crosshair' : '';
   }
   if (on) toast('Edit cues — tap a dot to remove it, tap the route to add one');
@@ -4122,17 +4224,52 @@ function cueEditTap(lngLat) {
       if (ri >= 0) { ov.removed.splice(ri, 1); toast('Cue restored'); }
       else { ov.removed.push(best.at); toast('Cue removed — tap again to restore'); }
     }
+    saveCueOverlay(trk); applyCueOverlay(trk);
+    updateBottomBar(); refreshMapData(); drawProgress(true);
   } else {
     const near = nearestOnTrack(trk, x, y, -1);
     if (near.idx < 0 || near.d > tapR) return; // not near the route — ignore
-    ov.added.push(mkManualCue(trk, near.idx));
-    toast('Cue added');
+    // same add flow as riding mode: the 9-kind picker, restricted to the
+    // selected track. Snapped track-point coords guarantee the picker's fixed
+    // 25 m radius hits even when the zoom-scaled tapR is wider; placement +
+    // save + pack sync all happen in placeMark → addTurnPointAt.
+    openMarkPicker(trk.xy[near.idx * 2], trk.xy[near.idx * 2 + 1], null, trk);
   }
-  saveCueOverlay(trk); applyCueOverlay(trk);
-  updateBottomBar(); refreshMapData(); drawProgress(true);
 }
 function cueOverlay(trk) { return trk.overlay || (trk.overlay = { removed: [], added: [] }); }
-function refreshEmpty() { document.getElementById('emptyState').classList.toggle('on', !S.tracks.length && !S.heat); }
+/* edit-mode map look: every cue/mark becomes a uniform big tappable dot at any
+   zoom (removed ones show greyed); the square/glyph tiers get out of the way.
+   Re-applied after setStyle rebuilds the layers. */
+function applyCueEditPaint(on) {
+  if (!map.getLayer('alert-dots')) return;
+  map.setFilter('alert-dots', on ? ['==', ['get', 'k'], 'turn']
+    : ['all', ['!', ['get', 'removed']], ['==', ['get', 'k'], 'turn']]);
+  map.setPaintProperty('alert-dots', 'circle-radius', on ? 9 : 4.5);
+  map.setFilter('mark-dots', on ? ['!=', ['get', 'k'], 'turn']
+    : ['all', ['!', ['get', 'removed']], ['!=', ['get', 'k'], 'turn']]);
+  map.setPaintProperty('mark-dots', 'circle-radius', on ? 9 : markDotR());
+  map.setPaintProperty('mark-dots', 'circle-stroke-width',
+    on ? 1.5 : ['interpolate', ['linear'], ['zoom'], 12.3, 0, 12.5, 1.5]);
+  map.setLayerZoomRange('mark-dots', 0, on ? 24 : 14.5);
+  map.setLayoutProperty('mark-squares', 'visibility', on ? 'none' : 'visible');
+  map.setLayoutProperty('alert-glyphs', 'visibility', on ? 'none' : 'visible');
+}
+function refreshEmpty() {
+  const on = !S.tracks.length && !S.heat;
+  document.getElementById('emptyState').classList.toggle('on', on);
+  // known packs (provenance survives "Clear all data") get a one-tap re-download
+  const ep = document.getElementById('emptyPacks');
+  ep.innerHTML = '';
+  if (!on) return;
+  for (const pack of S.packs.values()) {
+    if (!pack.srcSlug && !pack.sourceUrl) continue;
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.innerHTML = `<svg class="ic"><use href="#i-rotate-ccw"/></svg> Re-download ${escHtml(pack.name)}`;
+    b.onclick = () => refreshPack(pack.slug);
+    ep.appendChild(b);
+  }
+}
 let toastT = null;
 function toast(msg) {
   const el = document.getElementById('toast');
@@ -4736,6 +4873,8 @@ function applyAdvPaint() {
     for (const pre of ['surf-case-', 'surf-done-case-']) // continuous casing unless gaps are set to clear
       map.setPaintProperty(pre + s, 'line-dasharray', clear ? caseDash(d) : null);
   }
+  // keep the tiny mark-dot tier matched to the route width sliders
+  if (!S.cueEdit) map.setPaintProperty('mark-dots', 'circle-radius', markDotR());
   map.setPaintProperty('heat-under', 'line-opacity', ADV('heatUnderOp'));
   map.setPaintProperty('heat-under', 'line-color', clsMatch());
   for (const l of ['dir-vs-rem', 'dir-vs-done']) {
@@ -5333,34 +5472,47 @@ async function boot() {
   let shared = params.get('bundle');
   if (slug) shared = await resolveShareUrl(slug);
   if (shared) {
-    history.replaceState(null, '', location.pathname + location.hash);
     try {
       const resp = await fetch(shared);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const blob = await resp.blob();
       const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
       const isZip = head[0] === 0x50 && head[1] === 0x4B; // 'PK'
-      const nBefore = S.tracks.length;
       // remember where this came from (pack slug, or the full legacy URL) so
       // the pack header's ⟳ can re-fetch the latest revision later
       const ctx = slug ? { slug } : { sourceUrl: shared };
       const r = isZip
         ? await loadBundleZip(new File([blob], (slug || 'shared') + '.dingonav'), ctx)
         : await addFile('shared-bundle.json', await blob.text(), ctx);
+      // strip the param only AFTER a successful import — a failed/interrupted
+      // download keeps ?b= in the URL so the next open retries automatically
+      // (the import is idempotent: purge + stable ids make a re-run harmless)
+      history.replaceState(null, '', location.pathname + location.hash);
       if (r && r.bundle) {
         const extras = [r.basemap && 'map', r.satTiles && 'satellite', r.stravaTiles && 'Strava'].filter(Boolean);
         const notes = r.description ? ` — “${r.description}”` : '';
         toast(`${r.bundleName || 'Shared ride'} loaded — ${r.tracks} track${r.tracks === 1 ? '' : 's'}${r.heatmap ? ' + heatmap' : ''}${extras.length ? ' + ' + extras.join(' + ') : ''}${r.errs ? ' · ' + r.errs + ' failed' : ''}${notes}`);
-        // The pack's track order is meaningful: tracks[0] is the default.
-        if (r.tracks) S.sel = Math.min(nBefore, S.tracks.length - 1);
+        // The pack's track order is meaningful: tracks[0] is the default —
+        // find it by pack field (the import purged all previous pack tracks).
+        if (r.tracks) S.sel = Math.max(0, S.tracks.findIndex(t => (t.pack || '') === (r.pack || '')));
       } else toast('Shared file loaded');
     } catch (e) {
       console.warn('shared bundle failed', e);
+      // leave a re-download breadcrumb: even a first-ever failed share-link
+      // open gets a stub pack record so the empty state offers a retry button
+      if (slug && !S.packs.has(slug)) {
+        const stub = { id: 'pack-' + slug, kind: 'pack', slug, name: slug, revision: 0,
+          description: '', srcSlug: slug, sourceUrl: null, loadedAt: 0 };
+        try { await idb.put(stub); } catch (e2) {}
+        S.packs.set(slug, stub);
+      }
       toast(String(e).includes('HTTP 404')
         ? 'This pack was removed (or the link is stale) — anything loaded earlier is still on the device'
         : 'Could not load the shared link — are you online?');
     }
   }
+  // No tile reload needed on this path: the import above is fully awaited
+  // before initMap() below, which reads basemap/strava/sat tiles from IDB.
   // backtrack trail from the last ride survives an app restart
   try { const tr = await idb.get('trail'); if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; } } catch (e) {}
   try { const pr = await idb.get('prog'); if (pr && pr.spans) S.prog = { track: pr.track || null, spans: pr.spans, prevIdx: null }; } catch (e) {}
