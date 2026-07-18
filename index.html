@@ -291,6 +291,26 @@
     pointer-events:none; white-space:nowrap}
   body.turnmode #turnHint{display:block}
 
+  /* MARK PICKER: full-screen 3×3 kind grid — tap the track in turn mode to place,
+     long-press an existing mark to change its kind */
+  #markPicker{position:fixed; inset:0; z-index:40; display:none; background:rgba(10,13,16,.92);
+    flex-direction:column; justify-content:center; padding:18px}
+  #markPicker.open{display:flex}
+  #markPickerHead{display:flex; align-items:center; justify-content:space-between;
+    max-width:480px; width:100%; margin:0 auto 14px}
+  #markPickerHead b{font-size:17px}
+  #markPickerClose{background:none; border:none; color:var(--dim); font-size:22px; padding:8px; cursor:pointer}
+  #markGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:480px; width:100%; margin:0 auto}
+  .mtile{background:var(--panel2); border:1px solid #2c3640; border-radius:14px; padding:16px 6px 12px;
+    text-align:center; cursor:pointer; color:var(--fg)}
+  .mtile:active{background:#26313c}
+  .mtile.cur{border-color:var(--accent)}
+  .mtile .ic{width:30px; height:30px; stroke-width:1.8}
+  .mtile .ml{font-size:14px; margin-top:7px}
+  .mtile .ms{font-size:11.5px; color:var(--dim); margin-top:2px; min-height:14px}
+  #dirChip{display:inline-block; margin-top:2px; padding:2px 10px; border-radius:999px;
+    background:#26313c; font-size:12px; color:var(--accent)}
+
   /* ---------- panel ---------- */
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
   #shade.on{display:block}
@@ -526,6 +546,14 @@
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/></symbol>
+  <symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-construction" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="8" rx="1"/><path d="M17 14v7"/><path d="M7 14v7"/><path d="M17 3v3"/><path d="M7 3v3"/><path d="M10 14 2.3 6.3"/><path d="m14 6 7.7 7.7"/><path d="m8 6 8 8"/></symbol>
+  <symbol id="i-fence" viewBox="0 0 24 24"><path d="M4 3 2 5v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"/><path d="M6 8h4"/><path d="M6 18h4"/><path d="m12 3-2 2v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"/><path d="M14 8h4"/><path d="M14 18h4"/><path d="m20 3-2 2v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"/></symbol>
+  <symbol id="i-waves" viewBox="0 0 24 24"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></symbol>
+  <symbol id="i-fuel" viewBox="0 0 24 24"><line x1="3" x2="15" y1="22" y2="22"/><line x1="4" x2="14" y1="9" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2 2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></symbol>
+  <symbol id="i-utensils-crossed" viewBox="0 0 24 24"><path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8"/><path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7"/><path d="m2.1 21.8 6.4-6.3"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-tent" viewBox="0 0 24 24"><path d="M3.5 21 14 3"/><path d="M20.5 21 10 3"/><path d="M15.5 21 12 15l-3.5 6"/><path d="M2 21h20"/></symbol>
 </svg>
 <div id="map"></div>
 
@@ -570,8 +598,13 @@
   <div class="ctl preset" id="presetMax" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
 </div>
 <div id="dotBtn" title="dot: re-centre · square: whole track"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
-<button id="markTurn" title="drop a turn point here">MARK TURN</button>
-<div id="turnHint">tap a point to remove · tap the map to leave</div>
+<button id="markTurn" title="add a mark on the track">ADD MARK</button>
+<div id="turnHint">ADD MARK then tap the track · tap a point to remove · long-press a point to change it</div>
+<div id="markPicker">
+  <div id="markPickerHead"><b id="markPickerTitle">Add mark here</b>
+    <button id="markPickerClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <div id="markGrid"></div>
+</div>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
 <div id="lockPill" title="centre lock — long-press map to unlock"><svg class="ic"><use href="#i-lock"/></svg> locked</div>
 
@@ -657,7 +690,7 @@
     <div class="hint" id="heatInfo"></div>
     <h3>Turn points</h3>
     <div class="hint" id="turnSyncInfo"></div>
-    <div class="btnRow"><button class="btn" id="turnExportBtn"><svg class="ic"><use href="#i-upload"/></svg> Copy turn edits for Dingo</button></div>
+    <div class="btnRow"><button class="btn" id="turnExportBtn"><svg class="ic"><use href="#i-upload"/></svg> Copy mark edits for Dingo</button></div>
   </div>
 
   <div class="tabSec" id="tabGeneral">
@@ -1365,14 +1398,49 @@ function applyCueOverlay(trk) {
   all.sort((a, b) => a.at - b.at);
   trk.alerts = all;
 }
-function mkManualCue(trk, idx) { // same shape the analyser emits; geometry-only (no way names off-line)
+/* ---------------- mark kinds ----------------
+   A cue is a typed "mark": turns keep the analyser's left/right machinery,
+   the other kinds are rider-placed waypoints. `kind` is absent on old records
+   (= turn), so overlays, bundles and the live channel stay compatible. */
+const MARKS = {
+  turn:     { label: 'Turn',       ic: 'corner-up-right',  col: '#42d7f5', glyph: '' },
+  danger:   { label: 'Danger !!!', ic: 'triangle-alert',   col: '#f0c24b', glyph: '!' },
+  obstacle: { label: 'Obstacle',   ic: 'construction',     col: '#ef9f27', glyph: 'O' },
+  gate:     { label: 'Gate',       ic: 'fence',            col: '#cfd6da', glyph: 'G' },
+  creek:    { label: 'Creek',      ic: 'waves',            col: '#5dcaa5', glyph: 'W' },
+  fuel:     { label: 'Fuel',       ic: 'fuel',             col: '#85b7eb', glyph: 'F' },
+  food:     { label: 'Pub / food', ic: 'utensils-crossed', col: '#ed93b1', glyph: 'P' },
+  lookout:  { label: 'Lookout',    ic: 'eye',              col: '#afa9ec', glyph: 'L' },
+  camp:     { label: 'Camp',       ic: 'tent',             col: '#97c459', glyph: 'C' },
+};
+const SILENT_KINDS = { fuel: 1, food: 1, lookout: 1, camp: 1 }; // map markers only, no barks
+const kindOf = a => (a.kind && MARKS[a.kind]) ? a.kind : 'turn';
+// danger barks earlier and repeats close in — never at the normal turn distances
+const DANGER_FAR = 200, DANGER_NEAR = 50;
+
+function mkManualCue(trk, idx, kind, dir) { // same shape the analyser emits; geometry-only (no way names off-line)
   const brgAt = i => { const j = Math.max(0, Math.min(trk.n - 2, i)); return bearing(trk.xy[j * 2], trk.xy[j * 2 + 1], trk.xy[j * 2 + 2], trk.xy[j * 2 + 3]); };
   let deg = 0;
   for (let j = idx - 3; j < idx + 3; j++) deg += angDiff(brgAt(j), brgAt(j + 1));
   const after = idx + Math.ceil(25 / RESAMPLE_M);
-  return { at: trk.cum[idx], idx, deg: Math.round(deg), type: deg > 0 ? 'right' : 'left',
+  kind = (kind && MARKS[kind]) ? kind : 'turn';
+  // turn direction: rider override (L/R/S) beats the geometry guess
+  const type = kind !== 'turn' ? kind
+    : dir === 'L' ? 'left' : dir === 'R' ? 'right' : dir === 'S' ? 'straight'
+      : deg > 0 ? 'right' : 'left';
+  const cue = { at: trk.cum[idx], idx, deg: Math.round(deg), type,
     from: null, onto: null, name: null, manual: true,
     outBrg: Math.round(brgAt(after)), inBrg: Math.round(brgAt(idx - 3)) };
+  if (kind !== 'turn') cue.kind = kind;
+  else if (dir) cue.dir = dir; // remember the override so re-application keeps it
+  return cue;
+}
+/* geometry-inferred direction at a spot — feeds the picker's Turn tile chip */
+function inferTurnDir(trk, idx) {
+  const brgAt = i => { const j = Math.max(0, Math.min(trk.n - 2, i)); return bearing(trk.xy[j * 2], trk.xy[j * 2 + 1], trk.xy[j * 2 + 2], trk.xy[j * 2 + 3]); };
+  let deg = 0;
+  for (let j = idx - 3; j < idx + 3; j++) deg += angDiff(brgAt(j), brgAt(j + 1));
+  return Math.abs(deg) < 25 ? 'S' : deg > 0 ? 'R' : 'L';
 }
 
 /* ---------------- audio ---------------- */
@@ -1401,6 +1469,10 @@ const BEEP = {
   done()     { if (!S.set.sound) return; tone(700, .09, 0); tone(1050, .12, .12); console.log('[beep] turn done'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
+  straight() { if (!S.set.sound) return; tone(990, .3, 0); vib([160]); console.log('[beep] straight'); },
+  // danger ignores the mute toggle by design — a stop-level hazard always barks
+  danger()   { tone(1320, .12, 0); tone(1320, .12, .18); tone(1320, .3, .36); vib([200, 80, 200, 80, 400]); console.log('[beep] danger'); },
+  mark()     { if (!S.set.sound) return; tone(880, .2, 0); vib([120]); console.log('[beep] mark'); }, // obstacle / creek / gate
 };
 function vib(pat) { if (navigator.vibrate) navigator.vibrate(pat); }
 
@@ -1778,9 +1850,18 @@ function addOverlays() {
     paint: { 'text-color': caseColor() } });
   map.addLayer({ id: 'alert-dots', type: 'circle', source: 'alerts', minzoom: 12.5,
     filter: ['!', ['get', 'removed']], // greyed-out deletions only show in edit mode
-    paint: { 'circle-radius': 4.5, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#0e1216',
-      'circle-color': ['case', ['get', 'removed'], '#5a6a78', ['get', 'manual'], '#42d7f5', '#ffb020'],
+    paint: { 'circle-radius': ['case', ['==', ['get', 'k'], 'turn'], 4.5, 8],
+      'circle-stroke-width': 1.5, 'circle-stroke-color': '#0e1216',
+      'circle-color': ['case', ['get', 'removed'], '#5a6a78',
+        ['!=', ['get', 'k'], 'turn'], ['get', 'col'],
+        ['get', 'manual'], '#42d7f5', '#ffb020'],
       'circle-opacity': ['case', ['get', 'removed'], 0.55, 1] } });
+  // typed marks wear their glyph letter (turns stay bare dots)
+  map.addLayer({ id: 'alert-glyphs', type: 'symbol', source: 'alerts', minzoom: 12.5,
+    filter: ['all', ['!', ['get', 'removed']], ['!=', ['get', 'g'], '']],
+    layout: { 'text-field': ['get', 'g'], 'text-size': 11, 'text-font': ['Noto Sans Medium'],
+      'text-allow-overlap': true, 'text-ignore-placement': true },
+    paint: { 'text-color': '#0e1216' } });
   map.addLayer({ id: 'friends-dots', type: 'circle', source: 'friends',
     paint: { 'circle-radius': 8, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'],
       'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff', 'circle-stroke-opacity': ['get', 'opacity'] } });
@@ -1940,7 +2021,9 @@ function refreshMapData() {
     geometry: { type: 'LineString', coordinates: dir > 0 ? trk.coordsLL : [...trk.coordsLL].reverse() } } : EMPTY);
   // dots come from the base analysis + hand-added cues; removed ones stay (greyed) for edit mode
   const cueFeat = (a, removed, manual) => { const [la, lo] = toLL(trk.xy[a.idx * 2], trk.xy[a.idx * 2 + 1]);
-    return { type: 'Feature', properties: { t: a.type, removed, manual }, geometry: { type: 'Point', coordinates: [lo, la] } }; };
+    const k = kindOf(a);
+    return { type: 'Feature', properties: { t: a.type, removed, manual, k,
+      col: MARKS[k].col, g: MARKS[k].glyph }, geometry: { type: 'Point', coordinates: [lo, la] } }; };
   const ov = trk && trk.overlay, cueFeats = [];
   if (trk && trk.baseCues) {
     for (const a of trk.baseCues) cueFeats.push(cueFeat(a, !!(ov && cueRemoved(ov, a.at)), false));
@@ -2268,6 +2351,15 @@ function initLockGesture() {
     cancel();
     timer = setTimeout(() => {
       timer = null; vib([40]);
+      // long-press ON a mark: change its kind (the picker), not the centre lock
+      if (mapReady && start) {
+        const r = el.getBoundingClientRect();
+        const ll = map.unproject([start[0] - r.left, start[1] - r.top]);
+        const [mx, my] = toXY(ll.lat, ll.lng);
+        const mpp = spanForZoom(map.getZoom(), ll.lat) / (el.clientHeight || 700);
+        const hit = findTurnPointNear(mx, my, Math.max(15, mpp * 30));
+        if (hit) { openMarkPicker(hit.x, hit.y, { cue: hit.cue }); return; }
+      }
       if (S.lock) { setLock(false); toast('Centre lock off — map can be moved'); }
       else {
         setLock(true); setFollow(true);
@@ -2660,12 +2752,17 @@ function onFix(lat, lon, acc, speed, heading) {
     ns.movingS += dts;
     ns.avgSpd = ns.avgSpd == null ? spd : ns.avgSpd * 0.98 + spd * 0.02;
   }
-  const { far: farM, near: nearM } = warnDists(ns);
+  let { far: farM, near: nearM } = warnDists(ns);
+  // silent kinds (fuel, food, lookout, camp) are map markers only — navigation
+  // looks straight past them to the next audible mark
   let next = null, dTo = Infinity;
   if (trk.alerts) {
-    if (ns.dir > 0) { for (const a of trk.alerts) if (a.at > s + 5) { next = a; dTo = a.at - s; break; } }
-    else { for (let i = trk.alerts.length - 1; i >= 0; i--) { const a = trk.alerts[i]; if (a.at < s - 5) { next = a; dTo = s - a.at; break; } } }
+    if (ns.dir > 0) { for (const a of trk.alerts) if (a.at > s + 5 && !SILENT_KINDS[kindOf(a)]) { next = a; dTo = a.at - s; break; } }
+    else { for (let i = trk.alerts.length - 1; i >= 0; i--) { const a = trk.alerts[i]; if (a.at < s - 5 && !SILENT_KINDS[kindOf(a)]) { next = a; dTo = s - a.at; break; } } }
   }
+  // danger overrides the speed-scaled distances: bark at 200 m, repeat at 50 m
+  const nextDanger = next && kindOf(next) === 'danger';
+  if (nextDanger) { farM = Math.max(farM, DANGER_FAR); nearM = DANGER_NEAR; }
   if (ns.lastNext && next !== ns.lastNext && !ns.off) {
     // rode through the cue on-track — confirm ~30 m past the turn point, and only
     // if it actually alerted (re-armed / never-approached cues stay quiet)
@@ -2689,10 +2786,16 @@ function onFix(lat, lon, acc, speed, heading) {
   if (next) {
     let st = ns.alertStates.get(next); if (!st) ns.alertStates.set(next, st = { far: true, near: true });
     if (dTo > farM + 80) { st.far = true; st.near = true; st.done = false; } // re-arm on repeat laps
+    const k = kindOf(next);
     let ty = next.type; if (ns.dir < 0) ty = ty === 'left' ? 'right' : 'left';
     // deep tone(s) on approach, high tone(s) at the turn — count carries the direction
-    if (dTo <= farM && dTo > nearM && st.far) { st.far = false; BEEP.appr(ty); }
-    if (dTo <= nearM && st.near) { st.near = false; st.far = false; BEEP.now(ty); }
+    if (dTo <= farM && dTo > nearM && st.far) { st.far = false; nextDanger ? BEEP.danger() : BEEP.appr(ty); }
+    if (dTo <= nearM && st.near) {
+      st.near = false; st.far = false;
+      if (k === 'danger') BEEP.danger();
+      else if (k !== 'turn') BEEP.mark(); // obstacle / creek / gate: one neutral bark
+      else ty === 'straight' ? BEEP.straight() : BEEP.now(ty);
+    }
   }
 }
 let commitT = null;
@@ -2711,15 +2814,18 @@ function setHud(alert, dTo, dir, farM) {
   if (!show) { fill.style.width = '0'; S._turnCue = null; S._hudInfo = null; updateBigArrows(); renderMain(); return; }
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
-  S._turnCue = type; updateBigArrows(); renderMain(); // giant side arrow + countdown in the main slot
-  const icons = { left: 'corner-up-left', right: 'corner-up-right' };
-  const labels = { left: 'Turn left', right: 'Turn right' };
+  S._turnCue = type === 'left' || type === 'right' ? type : null; updateBigArrows(); renderMain(); // side arrows are turns-only
+  const icons = { left: 'corner-up-left', right: 'corner-up-right', straight: 'arrow-up',
+    danger: 'triangle-alert', obstacle: 'construction', gate: 'fence', creek: 'waves' };
+  const labels = { left: 'Turn left', right: 'Turn right', straight: 'Straight ahead',
+    danger: 'DANGER !!!', obstacle: 'Obstacle', gate: 'Gate', creek: 'Creek crossing' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
   const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
   const ontoTxt = onto && onto !== from ? ' · onto ' + ((dir > 0 && alert.name) || onto) : '';
   S._hudInfo = { alert, type, dir };
   // north-up: rotate the arrow to the turn's actual exit bearing; course-up: flat left/right
-  if (S.set.orient === 'north' && alert.outBrg != null) {
+  const isTurn = type === 'left' || type === 'right' || type === 'straight';
+  if (isTurn && S.set.orient === 'north' && alert.outBrg != null) {
     const exit = dir > 0 ? alert.outBrg : (alert.inBrg + 180) % 360;
     setIc(arrow, 'arrow-up'); arrow.className = type; arrow.style.transform = 'rotate(' + exit + 'deg)';
   } else {
@@ -2973,7 +3079,7 @@ function applyMoveGestures() {
 const markTurnBtn = document.getElementById('markTurn');
 function setMarkArm(on) {
   if (S.turn) S.turn.arming = on;
-  markTurnBtn.textContent = on ? 'Tap map to place' : 'Mark turn';
+  markTurnBtn.textContent = on ? 'Tap track to choose' : 'Add mark';
   markTurnBtn.classList.toggle('armed', on);
 }
 function enterTurnMode() {
@@ -3013,8 +3119,8 @@ function rideTap(lngLat) {
     if (hit) { removeTurnPointAt(hit.x, hit.y); toast('Turn point removed'); vib([60]); }
     return; // empty taps do nothing — TURN MODE is a double-tap
   }
-  if (S.turn.arming) { // MARK TURN armed — place at the tap, snapped to the track
-    if (addTurnPointAt(x, y)) { setMarkArm(false); toast('Turn marked — queued for the pack'); vib([60]); }
+  if (S.turn.arming) { // ADD MARK armed — the tapped spot opens the kind picker
+    if (nearestPass(x, y)) { setMarkArm(false); openMarkPicker(x, y); }
     else toast('No track there — tap on the route');
     return;
   }
@@ -3033,7 +3139,7 @@ function rideTap(lngLat) {
 markTurnBtn.onclick = () => {
   if (!S.turn) return;
   setMarkArm(!S.turn.arming);
-  toast(S.turn.arming ? 'Tap the track to place the marker' : 'Placement cancelled');
+  toast(S.turn.arming ? 'Tap the track to choose a mark' : 'Placement cancelled');
 };
 /* nearest visible turn point (any analysed track) within R metres */
 function findTurnPointNear(x, y, R) {
@@ -3043,10 +3149,63 @@ function findTurnPointNear(x, y, R) {
     for (const a of t.alerts) {
       const ax = t.xy[a.idx * 2], ay = t.xy[a.idx * 2 + 1];
       const d = dist(x, y, ax, ay);
-      if (d < bd) { bd = d; best = { x: ax, y: ay }; }
+      if (d < bd) { bd = d; best = { x: ax, y: ay, cue: a }; }
     }
   }
   return best;
+}
+
+/* ---------------- mark picker: full-screen 3×3 kind grid ---------------- */
+const markPickerEl = document.getElementById('markPicker'), markGrid = document.getElementById('markGrid');
+let pickerCtx = null; // { x, y, dirAuto, dirOv, edit: { cue } | null }
+/* closest analysed-track pass within 25 m — gates the picker and feeds dir inference */
+function nearestPass(x, y) {
+  let best = null, bd = 25;
+  for (const t of S.tracks) {
+    if (!t.baseCues) continue;
+    for (const idx of trackPassesNear(t, x, y, 25)) {
+      const d = dist(x, y, t.xy[idx * 2], t.xy[idx * 2 + 1]);
+      if (d < bd) { bd = d; best = { trk: t, idx }; }
+    }
+  }
+  return best;
+}
+function openMarkPicker(x, y, edit) {
+  const near = nearestPass(x, y);
+  if (!near) { toast('No track there — tap on the route'); return; }
+  pickerCtx = { x, y, dirAuto: inferTurnDir(near.trk, near.idx), dirOv: null, edit: edit || null };
+  document.getElementById('markPickerTitle').textContent = edit ? 'Change mark' : 'Add mark here';
+  renderMarkGrid();
+  markPickerEl.classList.add('open');
+}
+function closeMarkPicker() { markPickerEl.classList.remove('open'); pickerCtx = null; }
+document.getElementById('markPickerClose').onclick = closeMarkPicker;
+function renderMarkGrid() {
+  const cur = pickerCtx.edit ? kindOf(pickerCtx.edit.cue) : null;
+  const d = pickerCtx.dirOv || pickerCtx.dirAuto;
+  const dirTxt = ({ L: 'left', R: 'right', S: 'straight' })[d] + (pickerCtx.dirOv ? '' : ' · auto');
+  markGrid.innerHTML = Object.entries(MARKS).map(([k, m]) =>
+    '<div class="mtile' + (k === cur ? ' cur' : '') + '" data-k="' + k + '">'
+    + '<svg class="ic" style="color:' + m.col + '"><use href="#i-' + m.ic + '"/></svg>'
+    + '<div class="ml">' + m.label + '</div>'
+    + (k === 'turn' ? '<div class="ms"><span id="dirChip">' + dirTxt + '</span></div>' : '<div class="ms"></div>')
+    + '</div>').join('');
+  for (const el of markGrid.querySelectorAll('.mtile')) el.onclick = ev => {
+    if (ev.target.closest('#dirChip')) { // cycle the turn direction: auto → L → R → S → auto
+      const order = [null, 'L', 'R', 'S'];
+      pickerCtx.dirOv = order[(order.indexOf(pickerCtx.dirOv) + 1) % order.length];
+      renderMarkGrid(); return;
+    }
+    placeMark(el.dataset.k);
+  };
+}
+function placeMark(kind) {
+  const { x, y, dirOv, edit } = pickerCtx;
+  closeMarkPicker();
+  if (edit) removeTurnPointAt(x, y); // change = remove + re-add: two records, replays cleanly everywhere
+  const n = addTurnPointAt(x, y, false, kind, kind === 'turn' ? dirOv : null);
+  if (n) { toast(MARKS[kind].label + ' marked — queued for the pack'); vib([60]); }
+  else toast('Nothing placed — no track there, or a mark already sits on this spot');
 }
 /* all passes of a track through a point: indices within R, clustered by index gaps —
    an out-and-back section carries the turn in both directions automatically */
@@ -3067,7 +3226,7 @@ function trackPassesNear(trk, x, y, R) {
   if (cl) idxs.push(cl.best);
   return idxs;
 }
-function addTurnPointAt(x, y, fromRemote) {
+function addTurnPointAt(x, y, fromRemote, kind, dir) {
   let n = 0;
   for (const t of S.tracks) {
     if (!t.baseCues || !t.overlay) continue; // only analysed tracks with their overlay loaded
@@ -3077,13 +3236,15 @@ function addTurnPointAt(x, y, fromRemote) {
       if (t.alerts && t.alerts.some(c => Math.abs(c.at - at) < 30)) continue; // already a point here
       const ov = cueOverlay(t);
       const ri = ov.removed.findIndex(r => Math.abs(r - at) < 30);
-      if (ri >= 0) ov.removed.splice(ri, 1); else ov.added.push(mkManualCue(t, idx));
+      // a typed mark replaces the resurrected auto cue, not just un-removes it
+      if (ri >= 0 && (!kind || kind === 'turn') && !dir) ov.removed.splice(ri, 1);
+      else ov.added.push(mkManualCue(t, idx, kind, dir));
       ch++;
     }
     if (ch) { n += ch; saveCueOverlay(t); applyCueOverlay(t); }
   }
   if (n) {
-    if (!fromRemote) { const [la, lo] = toLL(x, y); queueTurnEdit('add', la, lo); }
+    if (!fromRemote) { const [la, lo] = toLL(x, y); queueTurnEdit('add', la, lo, kind, dir); }
     updateBottomBar(); refreshMapData(); drawProgress(true);
   }
   return n;
@@ -3136,21 +3297,28 @@ function saveTurnSync() {
   } catch (e) {}
   turnSyncInfo();
 }
-function queueTurnEdit(op, lat, lon) {
+function queueTurnEdit(op, lat, lon, kind, dir) {
   const e = { op, la: +lat.toFixed(6), lo: +lon.toFixed(6), t: Date.now(), by: S.set.name || 'rider' };
-  e.id = turnEditId(e);
+  if (kind && kind !== 'turn') e.kind = kind;
+  if (dir) e.dir = dir;
+  e.id = turnEditId(e); // hash stays op|la|lo|t — kind rides along, same spot+time = same edit
   turnSync.seen.add(e.id); // the topic echoes our own message back — never re-apply it
   turnSync.outbox.push(e);
   saveTurnSync();
   publishTurnEdits();
 }
-function publishTurnEdits() { // flush unsent contributions to the ride topic
+function publishTurnEdits(all) { // flush contributions to the ride topic (all = re-announce
+  // the whole outbox: listeners' seen-sets dedupe, and it repopulates ntfy's ~12 h
+  // cache so Dingo's harvest can catch the group history days later)
   const topic = friendTopic();
   if (!topic || !navigator.onLine) return;
   for (const e of turnSync.outbox) {
-    if (e.sent) continue;
+    if (e.sent && !all) continue;
+    const body = { k: 'turn', id: e.id, op: e.op, la: e.la, lo: e.lo, t: e.t, by: e.by };
+    if (e.kind) body.kind = e.kind;
+    if (e.dir) body.dir = e.dir;
     fetch('https://ntfy.sh/' + topic, { method: 'POST',
-      body: JSON.stringify({ k: 'turn', id: e.id, op: e.op, la: e.la, lo: e.lo, t: e.t, by: e.by }),
+      body: JSON.stringify(body),
       keepalive: true })
       .then(r => { if (r.ok) { e.sent = 1; saveTurnSync(); } })
       .catch(() => {}); // offline in the bush — stays queued, flushes on the next connect
@@ -3170,9 +3338,10 @@ function applyRemoteEdit(e, quiet) {
   }
   if (!REF) { turnSync.pending.push(e); saveTurnSync(); return; } // nothing loaded yet
   const [x, y] = toXY(e.la, e.lo);
-  const n = e.op === 'add' ? addTurnPointAt(x, y, true) : removeTurnPointAt(x, y, true);
+  const n = e.op === 'add' ? addTurnPointAt(x, y, true, e.kind, e.dir) : removeTurnPointAt(x, y, true);
   if (!n) turnSync.pending.push(e); // no analysed track there yet — retries after analysis
-  else if (!quiet) toast((e.op === 'add' ? 'Turn point added by ' : 'Turn point removed by ') + (e.by || 'a rider'));
+  else if (!quiet) toast((e.op === 'add'
+    ? (MARKS[kindOf(e)].label + ' marked by ') : 'Mark removed by ') + (e.by || 'a rider'));
   saveTurnSync();
 }
 function retryPendingEdits() { // runs after each track's cue analysis lands
@@ -3180,7 +3349,7 @@ function retryPendingEdits() { // runs after each track's cue analysis lands
   const list = turnSync.pending; turnSync.pending = [];
   for (const e of list) {
     const [x, y] = toXY(e.la, e.lo);
-    const n = e.op === 'add' ? addTurnPointAt(x, y, true) : removeTurnPointAt(x, y, true);
+    const n = e.op === 'add' ? addTurnPointAt(x, y, true, e.kind, e.dir) : removeTurnPointAt(x, y, true);
     if (!n) turnSync.pending.push(e);
   }
   saveTurnSync();
@@ -3455,6 +3624,14 @@ function startFriends() {
     fetch('https://ntfy.sh/' + topic, { method: 'POST', body: JSON.stringify({ n: S.set.name || 'rider', la: +lat.toFixed(5), lo: +lon.toFixed(5) }), keepalive: true }).catch(() => {});
   }, 20000);
   setFriendStatus('on ' + topic + ' as "' + (S.set.name || 'rider') + '" — position shares while riding; turn points share live');
+  // Re-announce the whole outbox once per topic per session: listeners' seen-sets
+  // dedupe, and it repopulates ntfy's ~12 h cache so Dingo's harvest can pick up
+  // the group history long after the ride (any rider opening the app re-seeds it).
+  if (!startFriends._announced) startFriends._announced = new Set();
+  if (navigator.onLine && !startFriends._announced.has(topic)) {
+    startFriends._announced.add(topic);
+    publishTurnEdits(true);
+  }
 }
 function connectFriendWS(topic) {
   if (friendWS) { friendWS.onclose = null; friendWS.close(); }
@@ -3561,7 +3738,8 @@ async function addFile(name, text, ctx) {
       }
       return { bundle: true, tracks: nT, heatmap: !!obj.heatmap, errs,
                bundleName, description: obj.description || '',
-               pack: slug || null, revision: obj.revision || 0 };
+               pack: slug || null, revision: obj.revision || 0,
+               rideName: obj.rideName || '' };
     }
     if (obj.type === 'FeatureCollection' || obj.features) {
       const pack = (ctx && ctx.pack) || '';
@@ -3650,14 +3828,14 @@ async function refreshPack(slug) {
 async function loadBundleZip(file, ctx) {
   const entries = fflate.unzipSync(new Uint8Array(await file.arrayBuffer()));
   let nT = 0, nH = 0, errs = 0, basemap = false, stravaTiles = 0;
-  let bundleName = '', description = '', pack = null, revision = 0;
+  let bundleName = '', description = '', pack = null, revision = 0, rideName = '';
 
   if (entries['bundle.json']) {
     const r = await addFile('bundle.json', fflate.strFromU8(entries['bundle.json']), ctx);
     if (r && r.bundle) {
       nT += r.tracks; if (r.heatmap) nH++; errs += r.errs;
       bundleName = r.bundleName || ''; description = r.description || '';
-      pack = r.pack; revision = r.revision || 0;
+      pack = r.pack; revision = r.revision || 0; rideName = r.rideName || '';
     }
   }
   if (entries['basemap.pmtiles']) {
@@ -3705,11 +3883,19 @@ async function loadBundleZip(file, ctx) {
   if (satTiles) {
     await idb.put({ id: 'sat-meta', kind: 'satmeta', count: satTiles, zmin: szmin, zmax: szmax });
   }
-  // the bundle name is the natural group-ride name — default it in, never overwrite a chosen one
-  if (!S.set.code && (nT || nH)) {
-    S.set.code = file.name.replace(/\.(dingonav|zip)$/i, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 24);
-    saveSet();
-    const ce = document.getElementById('rideCode'); if (ce) ce.value = S.set.code;
+  // Default ride name: the pack's baked rideName wins (canonical — everyone on the
+  // pack converges on one channel no matter how the file was renamed in transit),
+  // the filename is the fallback. A code the rider typed themselves is never
+  // touched; one we auto-set (codeAuto) upgrades to the canonical name.
+  if ((nT || nH) && (!S.set.code || (S.set.codeAuto && rideName))) {
+    const fromFile = file.name.replace(/\.(dingonav|zip)$/i, '');
+    const next = (rideName || fromFile).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 24);
+    if (next && next !== S.set.code) {
+      S.set.code = next; S.set.codeAuto = 1;
+      saveSet();
+      const ce = document.getElementById('rideCode'); if (ce) ce.value = S.set.code;
+      startFriends();
+    }
   }
   return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles, satTiles,
            bundleName, description, pack, revision };
@@ -4402,7 +4588,8 @@ const SETTINGS = [
   // Account
   { sec: 'account', k: 'name', t: 'text', l: 'Your name', id: 'myName', max: 12, ph: 'Grant' },
   { sec: 'account', k: 'email', t: 'text', l: 'Email', id: 'myEmail', max: 60, ph: 'you@example.com' },
-  { sec: 'ride', k: 'code', t: 'text', l: 'Ride name', id: 'rideCode', max: 24, ph: 'e.g. watagans-42', apply: () => startFriends() },
+  { sec: 'ride', k: 'code', t: 'text', l: 'Ride name', id: 'rideCode', max: 24, ph: 'e.g. watagans-42',
+    apply: () => { S.set.codeAuto = 0; saveSet(); startFriends(); } }, // typed by hand — bundles stop overriding it
   // General
   { sec: 'map', k: 'hillshade', t: 'toggle', l: 'Terrain shading', id: 'setHill', apply: applyHill },
   { sec: 'map', k: 'stravaRide', t: 'toggle', l: 'Strava rides (blue)', id: 'setStravaRide', apply: applyStrava },
@@ -4661,11 +4848,11 @@ applyEdges();
 /* turn-point contribution export: the whole outbox as JSON — paste into Dingo to bake
    the edits into the pack, so every future download carries them */
 document.getElementById('turnExportBtn').onclick = async () => {
-  if (!turnSync.outbox.length) { toast('No turn-point edits queued yet'); return; }
+  if (!turnSync.outbox.length) { toast('No mark edits queued yet'); return; }
   const txt = JSON.stringify({ turnEdits: turnSync.outbox.map(({ sent, ...e }) => e) }, null, 1);
   console.log('[turnsync]', txt); // clipboard is flaky in webviews — always logged too
-  try { await navigator.clipboard.writeText(txt); toast('Turn edits copied — paste into Dingo to update the pack'); }
-  catch (e) { toast('Clipboard blocked — turn edits logged to the console'); }
+  try { await navigator.clipboard.writeText(txt); toast('Mark edits copied — paste into Dingo’s pack review to bake them'); }
+  catch (e) { toast('Clipboard blocked — mark edits logged to the console'); }
 };
 turnSyncInfo();
 
