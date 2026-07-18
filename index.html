@@ -95,12 +95,6 @@
   #vargModeBig.on{display:block}
   #vargModeBig.fade{opacity:0}
   body.navving.hasroute #vargModeBig{top:calc(env(safe-area-inset-top) + 118px)}
-  /* mode-change flash: the new mode + its curve settings, ~2s then gone */
-  #vargFlash{position:fixed; top:24%; left:50%; transform:translateX(-50%); z-index:27; display:none;
-    background:rgba(14,18,22,.92); border:1px solid #2a3540; border-radius:16px; padding:14px 26px;
-    font-size:26px; font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums}
-  #vargFlash small{color:var(--dim); font-weight:600; font-size:15px}
-  #vargFlash.on{display:block}
   /* indicator telltales — big translucent glyphs across the top, same visual
      language as the speed/mode readouts. Each hidden until its bit is live, so
      nothing shows unless a blinker/beam is actually on. */
@@ -428,7 +422,6 @@
     #muteBtn{width:40px; height:40px; font-size:19px; top:calc(env(safe-area-inset-top) + 44px)}
     #vargModeBig{font-size:76px}
     body.navving.hasroute #vargModeBig{top:calc(env(safe-area-inset-top) + 76px)}
-    #vargFlash{font-size:20px}
     #vargInd .beam{font-size:26px}
     #progress.countdown #progCanvas{height:52px}
     /* short viewports (landscape / split-screen): tighten the two-column cluster so
@@ -573,9 +566,7 @@
 </div>
 <div id="vargModeBig"><span id="vargModeNum">—</span></div>
 <div id="bigArrowL" class="bigArrow"><svg class="ic"><use href="#i-arrow-big-left"/></svg></div>
-<div id="bigArrowR" class="bigArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div>
-<div id="vargFlash"></div>
-<div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
+<div id="bigArrowR" class="bigArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div><div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
   <rect width="100%" height="100%" fill="#fff"/>
   <text id="vargOverTxt" x="50%" y="50%" text-anchor="middle" dominant-baseline="central" fill="#000">REVERSE</text>
 </mask></defs><rect id="vargOverBg" width="100%" height="100%" fill="#ff4545" fill-opacity=".45" mask="url(#vgMask)"/></svg></div>
@@ -620,18 +611,17 @@
      (ride / idle / both); the grid IS the dock — layout-editor buttons land here too. -->
 <div id="gloveOverlay"><div id="gloveGrid">
   <div class="gtile" data-m="ride" id="gMute"><div class="gi"><svg class="ic"><use href="#i-volume-2"/></svg></div><div class="gl">Mute</div></div>
-  <div class="gtile" data-m="ride" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
-  <div class="gtile" data-m="ride" id="gZoomMin"><div class="gi"><svg class="ic"><use href="#i-zoom-in"/></svg></div><div class="gl">Zoom close</div></div>
   <div class="gtile" data-m="ride" id="gZoomMax"><div class="gi"><svg class="ic"><use href="#i-zoom-out"/></svg></div><div class="gl">Zoom wide</div></div>
+  <div class="gtile" data-m="ride" id="gZoomMin"><div class="gi"><svg class="ic"><use href="#i-zoom-in"/></svg></div><div class="gl">Zoom close</div></div>
+  <div class="gtile" data-m="ride" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
   <div class="gtile" data-m="ride" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
   <div class="gtile" data-m="ride" id="gOrient"><div class="gi">N</div><div class="gl">North up</div></div>
-  <div class="gtile" data-m="ride" id="gNum"><div class="gi"><svg class="ic"><use href="#i-battery-medium"/></svg></div><div class="gl">Swap number</div></div>
   <div class="gtile" data-m="both" id="gLayers"><div class="gi"><svg class="ic"><use href="#i-layers"/></svg></div><div class="gl">Day</div></div>
   <div class="gtile" data-m="both" id="gStartStop"><div class="gi"><svg class="ic"><use href="#i-play"/></svg></div><div class="gl">Start</div></div>
   <div class="gtile" data-m="idle" id="gTracks"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Tracks</div></div>
   <div class="gtile" data-m="idle" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
   <div class="gtile" data-m="idle" id="gDemo"><div class="gi"><svg class="ic"><use href="#i-circle-play"/></svg></div><div class="gl">Demo ride</div></div>
-  <div class="gtile" data-m="idle" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
+  <div class="gtile" data-m="both" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
 </div></div>
 
 <div id="progress">
@@ -2707,7 +2697,7 @@ function startNav() {
   const rev = !!(trk && trk.reverse);
   S.navState = { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0, alertStates: new Map(),
     movingS: 0, avgSpd: null, lastFixT: 0 };
-  S.nav = true; setFollow(true); S.dotFit = false; S.numSwap = false;
+  S.nav = true; setFollow(true); S.dotFit = false;
   camOffX = camOffY = 0; // look-ahead offset migrates in from centre
   closeGlove();
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
@@ -3061,8 +3051,7 @@ function drawCountdown(ctx, w, h, ns) {
    One edge readout — speed (adventure profile) or battery (Stark). On a turn approach the
    countdown borrows the slot in amber, then the number returns. Nothing is ever centred. */
 function primaryIsBattery() {
-  const stark = (S.set.rideProfile || 'adventure') === 'stark';
-  return S.numSwap ? !stark : stark;
+  return (S.set.rideProfile || 'adventure') === 'stark';
 }
 function cdMain(ns) { // distance or seconds, per the countdown-units setting; seconds freeze when stopped
   const d = Math.max(0, ns.cdD || 0);
@@ -3565,10 +3554,6 @@ function refreshGlove() {
   const o = effOrient();
   orientFace(g('gOrient').querySelector('.gi'), o);
   g('gOrient').querySelector('.gl').textContent = ORIENT_LABEL[o] || 'north up';
-  // the number NOT owning the edge slot lives here — tap to swap them
-  g('gNum').querySelector('.gi').innerHTML = primaryIsBattery()
-    ? icSvg('gauge') + '<span class="gv">' + Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' km/h</span>'
-    : icSvg('battery-medium') + '<span class="gv">' + (varg.soc == null ? '—' : varg.soc) + '%</span>';
   const ss = g('gStartStop');
   ss.classList.toggle('stop', S.nav);
   ss.classList.toggle('go', !S.nav);
@@ -3591,7 +3576,6 @@ document.getElementById('gLayers').onclick = gloveTap(() => {
 });
 document.getElementById('gMute').onclick = gloveTap(() => setSound(!S.set.sound));
 document.getElementById('gOrient').onclick = gloveTap(() => northBtn.onclick());
-document.getElementById('gNum').onclick = gloveTap(() => { S.numSwap = !S.numSwap; renderMain(); });
 document.getElementById('gMark').onclick = () => { closeGlove(); markSpot(); };
 document.getElementById('gZoomMin').onclick = () => { closeGlove(); presetTap('min'); };
 document.getElementById('gZoomMax').onclick = () => { closeGlove(); presetTap('max'); };
@@ -3602,7 +3586,7 @@ document.getElementById('gSettings').onclick = () => { closeGlove(); openPanel()
   document.querySelector('#setTabs button[data-t="General"]').click(); };
 document.getElementById('gRideProf').onclick = gloveTap(() => {
   S.set.rideProfile = S.set.rideProfile === 'stark' ? 'adventure' : 'stark';
-  saveSet(); S.numSwap = false; renderMain();
+  saveSet(); renderMain();
 });
 document.getElementById('gDemo').onclick = () => { closeGlove(); S.demo ? (stopDemo(), stopNav()) : startDemo(); };
 function applyGloveSide() {
@@ -3639,11 +3623,11 @@ function startDemo() {
   stopDemo();
   stopGPS(); // real GPS would fight the simulated fixes
   let d = 0, tick = 0;
-  const SPEED = 8.5; // m/s ≈ 30 km/h
+  const SPEED = 8.5; // m/s ≈ 30 km/h reported to nav; ticks run at 10 Hz so the route plays back 10×
   S.demo = setInterval(() => {
     if (window.__demoJump != null) { d = window.__demoJump; window.__demoJump = null; } // dev: jump along the route
     d += SPEED;
-    // simulate Stark mode changes so the digit, flash card and tap-to-replay work off the bike
+    // simulate Stark mode changes so the digit and mode ping work off the bike
     if (++tick % 25 === 1) { const m = 1 + (((tick / 25) | 0) % 5);
       vargApplyState({ mode: m, hp: 20 + m * 12, regen: Math.max(0, 100 - m * 18), tc: Math.max(0, 100 - m * 15) }); }
     if (d >= trk.lengthM) { toast('Demo finished'); stopNav(); return; }
@@ -3651,9 +3635,9 @@ function startDemo() {
     const jitter = () => (Math.random() - 0.5) * 6;
     const [lat, lon] = toLL(trk.xy[i * 2] + jitter(), trk.xy[i * 2 + 1] + jitter());
     onFix(lat, lon, 8, SPEED, null);
-  }, 1000);
+  }, 100);
   if (!S.nav) startNav();
-  toast('Demo ride at 30 km/h — listen for beeps');
+  toast('Demo ride at 30 km/h, 10× playback — listen for beeps');
 }
 function stopDemo() { if (S.demo) { clearInterval(S.demo); S.demo = null; startGPS(); } } // resume real GPS
 document.getElementById('demoBtn').onclick = () => { closePanel(); S.demo ? (stopDemo(), stopNav()) : startDemo(); };
@@ -4336,7 +4320,7 @@ const varg = {
   mode: null, special: null, // mode 1–5; special: null | 'rev' | 'crawl'
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
-  seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, pickAll: false, sndT: null, flashT: null,
+  seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, pickAll: false, sndT: null,
 };
 const vargPill = document.getElementById('vargPill');
 const vargStatus = document.getElementById('vargStatus');
@@ -4390,21 +4374,9 @@ function vargSpecial(sp) { // sp: null | 'rev' | 'crawl'
   vargUI();
 }
 
-function vargFlashCard() { // new mode + its curve settings, ~4 s, on every mode change
-  const f = document.getElementById('vargFlash'), bits = [];
-  if (varg.hp != null) bits.push(varg.hp + '<small> hp</small>');
-  if (varg.regen != null) bits.push('<small>regen </small>' + varg.regen + '<small>%</small>');
-  if (varg.tc != null) bits.push('<small>TC </small>' + varg.tc + '<small>%</small>');
-  f.innerHTML = 'M' + varg.mode + (bits.length ? ' <small>·</small> ' + bits.join(' <small>·</small> ') : '');
-  f.classList.add('on');
-  clearTimeout(varg.flashT); varg.flashT = setTimeout(() => f.classList.remove('on'), 4000);
-}
-
-// tapping the resident mode digit replays the HP/Regen/TC card — same card as a mode change
-document.getElementById('vargModeBig').onclick = () => { if (varg.mode != null) vargFlashCard(); };
 function vargApplyState(st) { // single entry point for the future mode/config decoder
   for (const k of ['hp', 'regen', 'tc']) if (st[k] != null) varg[k] = st[k];
-  if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; vargFlashCard(); modePing(); }
+  if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; modePing(); }
   if ('special' in st) vargSpecial(st.special);
   vargUI();
 }
