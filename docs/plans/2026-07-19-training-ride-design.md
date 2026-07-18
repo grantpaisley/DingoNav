@@ -80,9 +80,10 @@ accent box-shadow + 1.2 s pulse. Must clear `#dotBtn`, `#menuBtn`,
 
 ### Training route
 
-- `TRAIN_PTS` (~220 `[lat,lon]`, 5 dp) — a real ~3.5 km loop with ≥5
-  junctions inside `central-coast.pmtiles` coverage (map default centre
-  [151.3, −33.3]).
+- `TRAIN_PTS` (110 `[lat,lon]`, 5 dp) — a real 4.0 km path with 10 junction
+  turns + 1 danger mark, OSM-derived fire trails in Ourimbah State Forest
+  (Middle Ridge Rd / Tank Point Rd / Joes Point Rd), inside
+  `central-coast.pmtiles` coverage.
 - `TRAIN_CUES` — baked cues authored via the dev-console path
   (`window.__cue.cues` after loading the same points as GPX), plus one
   hand-added danger mark. Baked cues mean `startNav` skips `analyzeRoute`
