@@ -61,6 +61,9 @@
   #hudSpeed.low{color:var(--bad)}
   /* with a route loaded the turn strip owns the very top, so drop the readouts below it */
   body.navving.hasroute #hudSpeed{top:calc(env(safe-area-inset-top) + 118px)}
+  /* riding: the left/right control clusters own the edges — readouts + pills sit inboard of them */
+  body.navving #hudSpeed{left:112px}
+  body.navving #holdPill, body.navving #lockPill{left:116px}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 128px)}
   body.navving #lockPill{top:calc(env(safe-area-inset-top) + 164px)}
   body.navving.hasroute #holdPill{top:calc(env(safe-area-inset-top) + 272px)}
@@ -95,6 +98,7 @@
   #vargModeBig.on{display:block}
   #vargModeBig.fade{opacity:0}
   body.navving.hasroute #vargModeBig{top:calc(env(safe-area-inset-top) + 118px)}
+  body.navving #vargModeBig{right:112px}
   /* indicator telltales — big translucent glyphs across the top, same visual
      language as the speed/mode readouts. Each hidden until its bit is live, so
      nothing shows unless a blinker/beam is actually on. */
@@ -189,13 +193,14 @@
   .ctlgroup{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:10;
     display:flex; flex-direction:column; gap:8px}
   #leftCtl{left:10px} #rightCtl{right:10px}
-  /* riding: drop both groups below the top turn strip (speed is centred, out of their way now) */
-  body.navving .ctlgroup{top:calc(env(safe-area-inset-top) + 62px)}
+  /* riding: same clusters as stopped; with a route the turn strip owns the very top,
+     so both groups drop below it (the edge readouts shift inboard to sit beside them) */
+  body.navving.hasroute .ctlgroup{top:calc(env(safe-area-inset-top) + 118px)}
   /* edges = top/bottom: horizontal rows, left-anchored — nav group on the top edge, zoom near the bottom */
   body.edges-tb #leftCtl, body.edges-tb #rightCtl{top:auto; bottom:auto; left:10px; right:auto;
     transform:none; flex-direction:row}
   body.edges-tb #leftCtl{top:calc(env(safe-area-inset-top) + 10px)}
-  body.navving.edges-tb #leftCtl{top:calc(env(safe-area-inset-top) + 62px)}
+  body.navving.hasroute.edges-tb #leftCtl{top:calc(env(safe-area-inset-top) + 118px)}
   body.edges-tb #rightCtl{bottom:60px}
   .ctl{width:54px; height:54px; border-radius:14px; background:rgba(22,28,34,.92); border:1px solid #2a3540;
     color:var(--fg); font-size:26px; display:flex; align-items:center; justify-content:center; cursor:pointer}
@@ -209,9 +214,10 @@
   /* orientation, sound and the compass now live in the cluster — retire the
      standalone rose, top-right mute and the rose's mode label */
   #north{display:none !important} #muteBtn{display:none !important} #orientLabel{display:none !important}
-  /* riding: exactly three interactive elements — the map, the dot, ☰. The control
-     clusters are stopped-screen chrome; zoom presets and the rest live in the ☰ grid. */
-  body.navving .ctlgroup{display:none}
+  /* riding: the clusters stay (same buttons as the stopped screen) but rest dimmed
+     like the other ride chrome; touch brings one to full strength */
+  body.navving .ctlgroup{opacity:var(--navOp,.4)}
+  body.navving .ctlgroup:active{opacity:1}
   /* the dot/square: square = centred, tap → whole track · dot = panned, tap → re-centre */
   #dotBtn{position:fixed; right:14px; bottom:96px; z-index:17; width:96px; height:96px; border-radius:50%;
     background:rgba(22,28,34,.55); border:1px solid #2a3540; display:none; align-items:center;
@@ -458,6 +464,10 @@
     #muteBtn{width:40px; height:40px; font-size:19px; top:calc(env(safe-area-inset-top) + 44px)}
     #vargModeBig{font-size:76px}
     body.navving.hasroute #vargModeBig{top:calc(env(safe-area-inset-top) + 76px)}
+    body.navving.hasroute .ctlgroup{top:calc(env(safe-area-inset-top) + 76px)}
+    body.navving #hudSpeed{left:78px}
+    body.navving #holdPill, body.navving #lockPill{left:82px}
+    body.navving #vargModeBig{right:78px}
     #vargInd .beam{font-size:26px}
     #progress.countdown #progCanvas{height:52px}
     /* short viewports (landscape / split-screen): tighten the two-column cluster so
