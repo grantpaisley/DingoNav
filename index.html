@@ -155,6 +155,42 @@
   #dlgOk{margin-top:18px; width:100%; padding:13px; border:none; border-radius:12px;
     background:var(--accent); color:#00252b; font-size:16px; font-weight:800; cursor:pointer}
 
+  /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design) ---------- */
+  #demoPick{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(88vw,380px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
+    padding:20px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #demoPick.on{display:block}
+  #demoPick h4{font-size:18px; margin-bottom:14px}
+  .dpBtn{display:flex; flex-direction:column; gap:4px; width:100%; padding:14px; margin-bottom:10px;
+    border:1px solid #2a3540; border-radius:12px; background:var(--panel2); color:var(--fg);
+    font-size:16px; text-align:left; cursor:pointer}
+  .dpBtn b{color:var(--accent)}
+  .dpBtn span{font-size:13px; color:var(--dim)}
+  .dpBtn:disabled{opacity:.4; cursor:default}
+  #dpCancel{width:100%; padding:10px; border:none; background:none; color:var(--dim); font-size:14px; cursor:pointer}
+  /* card sits bottom-centre, clear of the dot (right) and progress strip; NO shade —
+     the map must stay touchable for the do-the-action lessons. z 27 > glove overlay's 25. */
+  #trainCard{position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 118px); width:min(70vw,400px); z-index:27;
+    background:var(--panel); border:1px solid var(--accent); border-radius:16px; padding:14px 16px;
+    display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #trainCard.on{display:block}
+  #trainTop{display:flex; justify-content:space-between; font-size:13px; color:var(--dim); margin-bottom:6px}
+  #trainExit{cursor:pointer}
+  #trainCard h4{font-size:17px; margin-bottom:6px}
+  #trainMsg{font-size:14px; line-height:1.5}
+  #trainMsg b{color:var(--accent)}
+  #trainBtns{display:flex; align-items:center; gap:14px; margin-top:12px}
+  #trainBtns:not(:has(.on)){display:none}
+  #trainOk{flex:1; padding:11px; border:none; border-radius:12px; background:var(--accent);
+    color:#00252b; font-size:15px; font-weight:800; cursor:pointer; display:none}
+  #trainOk.on{display:block}
+  #trainSkip{font-size:13px; color:var(--dim); cursor:pointer; display:none; text-decoration:underline}
+  #trainSkip.on{display:block}
+  .trainSpot{box-shadow:0 0 0 4px var(--accent), 0 0 22px 4px rgba(0,229,255,.45)!important;
+    animation:trainPulse 1.2s ease-in-out infinite}
+  @keyframes trainPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.55)}}
+
   /* ---------- side controls (two groups: nav-left, zoom-right; edges configurable) ---------- */
   .ctlgroup{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:10;
     display:flex; flex-direction:column; gap:8px}
@@ -584,6 +620,15 @@
 <div id="toast"></div>
 <div id="dlgShade"></div>
 <div id="dlg"><h4 id="dlgTitle"></h4><div id="dlgMsg"></div><button id="dlgOk">Got it</button></div>
+<div id="demoPick"><h4>Demo ride</h4>
+  <button class="dpBtn" id="dpTrain"><b>Training ride</b><span>learn DingoNav on a guided fake ride — no track needed</span></button>
+  <button class="dpBtn" id="dpPlain"><b>Plain demo</b><span id="dpPlainSub">replay the selected track at 30 km/h</span></button>
+  <button id="dpCancel">Cancel</button></div>
+<div id="trainCard">
+  <div id="trainTop"><span id="trainStep"></span><span id="trainExit">✕ end training</span></div>
+  <h4 id="trainTitle"></h4><div id="trainMsg"></div>
+  <div id="trainBtns"><button id="trainOk">Got it</button><span id="trainSkip">can't do this here — skip</span></div>
+</div>
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div id="leftCtl" class="ctlgroup">
@@ -613,6 +658,7 @@
   <div style="color:var(--dim)">No tracks loaded yet</div>
   <div id="emptyPacks" style="display:flex; flex-direction:column; gap:10px"></div>
   <button class="btn primary" id="emptyLoad">Load GPX / heatmap files</button>
+  <button class="btn" id="emptyTrain">Try the training ride</button>
 </div>
 
 <div id="gloveBtn" class="left" title="ride controls">▦</div>
@@ -1679,11 +1725,12 @@ async function initMap() {
   });
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
-  map.on('dragstart', () => { if (S.nav) setFollow(false); S.dotFit = false; });
+  map.on('dragstart', () => { if (S.nav) setFollow(false); S.dotFit = false; trainEvent('drag'); });
   // gesture zoom (pinch / wheel / double-tap) while navigating = hold, same as the ± buttons
   map.on('zoomend', e => {
     if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom());
     if (S.nav) autoCompass(); // threshold-mode compass tracks zoom level
+    if (e.originalEvent) trainEvent('zoom-gesture');
   });
   // riding: double-tap toggles TURN MODE; single taps (point removal, armed
   // placement) wait out the double-tap window so the two can't collide
@@ -2270,6 +2317,7 @@ function camTargetOff() {
 let lastEase = 0;
 function followCamera() {
   if (!mapReady || !S.pos || !S.follow || !S.nav) return;
+  if (TRAIN.active && TRAIN.holdD != null) return; // lesson pause: stationary — don't fight the learner's gestures with re-eases
   const now = Date.now(); if (now - lastEase < 800) return;
   lastEase = now;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
@@ -2322,7 +2370,7 @@ function showDialog(title, html) {
   document.getElementById('dlgShade').classList.add('on');
   document.getElementById('dlg').classList.add('on');
 }
-function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); }
+function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); }
 document.getElementById('dlgOk').onclick = closeDialog;
 document.getElementById('dlgShade').onclick = closeDialog;
 // first tap/hold of min or max explains favourite zoom; the gesture that triggered it is consumed
@@ -2341,6 +2389,7 @@ function presetTap(k) {
   const z = zoomForSpan(presetSpan(k), centerLat());
   map.easeTo({ zoom: z, duration: 350 });
   if (S.nav && S.set.autoZoom) setTimeout(() => setHold(z), 400);
+  trainEvent('preset');
 }
 function presetSet(k) {
   if (zoomTipGate()) return;
@@ -2371,6 +2420,7 @@ function dotSquareTap() {
   if (!S.follow || S.dotFit) { // dot: come home, centre on me
     S.dotFit = false; setFollow(true);
     if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 450 }); }
+    trainEvent('recentre');
   } else { // square: zoom out to the whole track
     S.dotFit = true; setFollow(false); fitSelected();
   }
@@ -2392,6 +2442,7 @@ function setLock(on) {
   S.lock = on; lockPill.classList.toggle('on', on);
   document.getElementById('dotBtn').classList.toggle('locked', on); // the dot wears the lock state
   if (mapReady) on ? map.dragPan.disable() : map.dragPan.enable(); // drag is otherwise always live
+  trainEvent(on ? 'lock' : 'unlock');
 }
 lockPill.onclick = () => { setLock(false); toast('Centre lock off'); };
 
@@ -2450,6 +2501,7 @@ function setSound(on) {
   const gm = document.getElementById('gMute');
   if (gm) { setIc(gm.querySelector('.gi'), on ? 'volume-2' : 'volume-x');
     gm.querySelector('.gl').textContent = on ? 'Mute' : 'Muted'; gm.classList.toggle('active', !on); }
+  trainEvent(on ? 'unmute' : 'mute');
 }
 muteBtn.onclick = () => { setSound(!S.set.sound); toast(S.set.sound ? 'Sound on' : 'Muted'); };
 document.getElementById('soundCtl').onclick = () => muteBtn.onclick(); // cluster sound = mute toggle
@@ -2790,8 +2842,8 @@ function onFix(lat, lon, acc, speed, heading) {
   }
   ns.idx = near.idx;
 
-  if (near.d > ADV('offM') && !ns.off) ns.off = true;
-  if (near.d < ADV('onM') && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); }
+  if (near.d > ADV('offM') && !ns.off) { ns.off = true; trainEvent('offtrack'); }
+  if (near.d < ADV('onM') && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); trainEvent('backontrack'); }
   if (ns.off) {
     const bn = document.getElementById('banner');
     bn.textContent = 'Off track · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
@@ -3154,9 +3206,11 @@ function enterTurnMode() {
   map.easeTo({ center: [lo, la], zoom: S.turn.zoom,
     bearing: brg, offset: [0, Math.round(innerHeight * 0.18)], duration: 450 });
   setHold(null); vib([40]);
+  trainEvent('turnmode');
 }
 function exitTurnMode(restore = true) {
   if (!S.turn) return;
+  trainEvent('turnmode-exit');
   const t = S.turn; S.turn = null;
   document.body.classList.remove('turnmode');
   if (restore && mapReady) {
@@ -3546,8 +3600,8 @@ function ridesGPX() {
 /* ---------------- glove button + overlay (huge tiles for gloved hands) ---------------- */
 const gloveBtn = document.getElementById('gloveBtn'), gloveOverlay = document.getElementById('gloveOverlay');
 let gloveT = null;
-function gloveArm() { clearTimeout(gloveT); gloveT = setTimeout(closeGlove, 8000); }
-function openGlove() { refreshGlove(); gloveOverlay.classList.add('on'); gloveArm(); }
+function gloveArm() { clearTimeout(gloveT); if (TRAIN.active) return; gloveT = setTimeout(closeGlove, 8000); } // no auto-close mid-lesson
+function openGlove() { refreshGlove(); gloveOverlay.classList.add('on'); gloveArm(); trainEvent('glove'); }
 function closeGlove() { clearTimeout(gloveT); gloveT = null; gloveOverlay.classList.remove('on'); }
 gloveBtn.onclick = () => gloveOverlay.classList.contains('on') ? closeGlove() : openGlove();
 // tap empty space (not a tile) = close with no action
@@ -3604,7 +3658,7 @@ document.getElementById('gRideProf').onclick = gloveTap(() => {
   S.set.rideProfile = S.set.rideProfile === 'stark' ? 'adventure' : 'stark';
   saveSet(); S.numSwap = false; renderMain();
 });
-document.getElementById('gDemo').onclick = () => { closeGlove(); S.demo ? (stopDemo(), stopNav()) : startDemo(); };
+document.getElementById('gDemo').onclick = () => { closeGlove(); S.demo ? (stopDemo(), stopNav()) : demoChoice(); };
 function applyGloveSide() {
   gloveBtn.classList.toggle('right', S.set.gloveSide === 'right');
   gloveBtn.classList.toggle('left', S.set.gloveSide !== 'right');
@@ -3640,24 +3694,299 @@ function startDemo() {
   stopGPS(); // real GPS would fight the simulated fixes
   let d = 0, tick = 0;
   const SPEED = 8.5; // m/s ≈ 30 km/h
+  // one synthetic fix through the same entry real GPS uses. Training's off-track act
+  // displaces the fix ~90 m sideways (past offM) for TRAIN.offT ticks — the real
+  // banner, growl and back-on chirp all fire on their own.
+  const feed = (dd, spd) => {
+    const i = idxAt(trk, dd);
+    let x = trk.xy[i * 2], y = trk.xy[i * 2 + 1];
+    if (TRAIN.active && TRAIN.offT > 0) {
+      const j = Math.min(trk.n - 1, i + 1);
+      const dx = trk.xy[j * 2] - x, dy = trk.xy[j * 2 + 1] - y, m = Math.hypot(dx, dy) || 1;
+      // pick the side once per act: another leg of the loop may run close by, and
+      // drifting toward it would ring "back on track" long before the lesson is done
+      if (TRAIN.offSign == null)
+        TRAIN.offSign = nearestOnTrack(trk, x - dy / m * 90, y + dx / m * 90).d >=
+                        nearestOnTrack(trk, x + dy / m * 90, y - dx / m * 90).d ? 1 : -1;
+      x -= TRAIN.offSign * dy / m * 90; y += TRAIN.offSign * dx / m * 90;
+      if (--TRAIN.offT === 0) TRAIN.offSign = null;
+    }
+    const jitter = () => (Math.random() - 0.5) * 6;
+    const [lat, lon] = toLL(x + jitter(), y + jitter());
+    onFix(lat, lon, 8, spd, null);
+  };
   S.demo = setInterval(() => {
     if (window.__demoJump != null) { d = window.__demoJump; window.__demoJump = null; } // dev: jump along the route
+    if (TRAIN.active && TRAIN.pauseReq) { TRAIN.pauseReq = false; TRAIN.holdD = d; } // a chained lesson asked to freeze here
+    // lesson pause: hold the spot and feed speed-0 fixes — the app genuinely reads
+    // "stopped", so pinch-zoom unlocks (the real stop-and-manipulate grammar)
+    if (TRAIN.active && TRAIN.holdD != null) { feed(TRAIN.holdD, 0); return; }
     d += SPEED;
     // simulate Stark mode changes so the digit, flash card and tap-to-replay work off the bike
-    if (++tick % 25 === 1) { const m = 1 + (((tick / 25) | 0) % 5);
+    if (++tick % 25 === 1 && !TRAIN.active) { const m = 1 + (((tick / 25) | 0) % 5);
       vargApplyState({ mode: m, hp: 20 + m * 12, regen: Math.max(0, 100 - m * 18), tc: Math.max(0, 100 - m * 15) }); }
+    if (TRAIN.active) trainCheck(d); // may pause this very tick (holdD = d)
     if (d >= trk.lengthM) { toast('Demo finished'); stopNav(); return; }
-    const i = idxAt(trk, d);
-    const jitter = () => (Math.random() - 0.5) * 6;
-    const [lat, lon] = toLL(trk.xy[i * 2] + jitter(), trk.xy[i * 2 + 1] + jitter());
-    onFix(lat, lon, 8, SPEED, null);
+    feed(d, TRAIN.active && TRAIN.holdD != null ? 0 : SPEED);
   }, 1000);
   if (!S.nav) startNav();
-  toast('Demo ride at 30 km/h — listen for beeps');
+  if (!TRAIN.active) toast('Demo ride at 30 km/h — listen for beeps');
 }
-function stopDemo() { if (S.demo) { clearInterval(S.demo); S.demo = null; startGPS(); } } // resume real GPS
-document.getElementById('demoBtn').onclick = () => { closePanel(); S.demo ? (stopDemo(), stopNav()) : startDemo(); };
+function stopDemo() {
+  if (!S.demo) return;
+  clearInterval(S.demo); S.demo = null; startGPS(); // resume real GPS
+  if (TRAIN.active) endTraining(false); // every exit path funnels through cleanup
+}
+document.getElementById('demoBtn').onclick = () => { closePanel(); S.demo ? (stopDemo(), stopNav()) : demoChoice(); };
 document.getElementById('testBeep').onclick = () => { audio(); BEEP.turn(); };
+
+/* ---------------- training ride (2026-07-19 design) ----------------
+   An interactive tutorial layered on demo mode: the sim pauses at teaching moments
+   and advances when the learner performs the real gesture. Everything here is inert
+   unless TRAIN.active — plain demo and real rides are untouched. The route is a real
+   ~4 km fire-trail loop in Ourimbah State Forest NSW (OSM-derived), inside the
+   auto-downloaded central-coast basemap; it also works on the dark fallback. It is
+   built in memory only — never persisted, never listed, removed on exit. */
+const TRAIN = { active: false, i: 0, showing: false, holdD: null, pauseReq: false, offT: 0,
+  offSign: null, prevSelId: null, prevSound: null };
+const TRAIN_PTS = [
+  [-33.31694,151.3554],[-33.31718,151.3547],[-33.31729,151.35455],[-33.3176,151.35436],[-33.31795,151.35415],[-33.31816,151.35404],
+  [-33.31847,151.354],[-33.31865,151.35385],[-33.31876,151.35342],[-33.31828,151.3535],[-33.31753,151.35356],[-33.31699,151.35341],
+  [-33.31651,151.35296],[-33.31619,151.35258],[-33.31627,151.35239],[-33.3163,151.35191],[-33.31627,151.35135],[-33.31634,151.35104],
+  [-33.31659,151.35078],[-33.31692,151.35053],[-33.31665,151.35034],[-33.31654,151.35015],[-33.3164,151.35003],[-33.31618,151.34998],
+  [-33.31574,151.34967],[-33.31544,151.34957],[-33.31512,151.34951],[-33.31482,151.34928],[-33.31457,151.34898],[-33.31442,151.34887],
+  [-33.3143,151.34881],[-33.31415,151.34879],[-33.31405,151.34886],[-33.31401,151.34895],[-33.31397,151.34915],[-33.31382,151.34934],
+  [-33.31387,151.34959],[-33.31387,151.34985],[-33.3138,151.35007],[-33.31369,151.35025],[-33.31362,151.3504],[-33.31317,151.35016],
+  [-33.31284,151.34995],[-33.31257,151.34965],[-33.31227,151.34931],[-33.3121,151.34916],[-33.31179,151.34908],[-33.31186,151.3487],
+  [-33.31194,151.34821],[-33.31209,151.34783],[-33.31237,151.34745],[-33.31236,151.3474],[-33.31239,151.34732],[-33.31244,151.34724],
+  [-33.31235,151.34704],[-33.31222,151.34676],[-33.31214,151.34657],[-33.31205,151.34639],[-33.31197,151.34625],[-33.31189,151.34616],
+  [-33.31181,151.34608],[-33.31177,151.34606],[-33.31172,151.34608],[-33.31168,151.34617],[-33.31173,151.34639],[-33.31177,151.34663],
+  [-33.31179,151.34692],[-33.31177,151.34723],[-33.31168,151.3475],[-33.31159,151.34786],[-33.31148,151.34796],[-33.31138,151.34806],
+  [-33.3111,151.34811],[-33.31087,151.34808],[-33.31062,151.34797],[-33.31028,151.34787],[-33.30966,151.34768],[-33.30949,151.34766],
+  [-33.30936,151.34769],[-33.30921,151.34758],[-33.30878,151.34725],[-33.30807,151.34667],[-33.3079,151.34659],[-33.30782,151.3462],
+  [-33.30764,151.34582],[-33.3074,151.34543],[-33.30711,151.3459],[-33.30669,151.34625],[-33.30603,151.34642],[-33.30561,151.3461],
+  [-33.30496,151.3456],[-33.30467,151.3454],[-33.30432,151.34517],[-33.30374,151.34506],[-33.30327,151.34496],[-33.3029,151.34483],
+  [-33.30264,151.34483],[-33.30196,151.34522],[-33.3014,151.34561],[-33.30086,151.34579],[-33.30052,151.34577],[-33.30079,151.3461],
+  [-33.30087,151.34643],[-33.30096,151.34723],[-33.3008,151.34798],[-33.30073,151.34849],[-33.30056,151.34873],[-33.30037,151.34943],
+  [-33.30011,151.34997],[-33.29969,151.35059]
+];
+// Cues anchored by lat/lon and resolved onto the resampled track at runtime, so they
+// stay consistent whatever REF the projection is anchored to (a far-away REF skews
+// metre distances; resolving through the same skew keeps cue.at aligned with trk.cum).
+const TRAIN_CUES = [
+  { ll: [-33.31876,151.35342], deg: 115,  type: 'right', name: 'Middle Ridge Rd' }, // ~297 m
+  { ll: [-33.31619,151.35258], deg: -56,  type: 'left' },                           // ~612 m
+  { ll: [-33.31692,151.35053], deg: 117,  type: 'right' },                          // ~839 m — the TURN MODE fork
+  { ll: [-33.31415,151.34879], deg: 73,   type: 'right' },                          // ~1195 m
+  { ll: [-33.31362,151.3504],  deg: -81,  type: 'left' },                           // ~1367 m
+  { ll: [-33.31179,151.34908], deg: -90,  type: 'left' },                           // ~1608 m
+  { ll: [-33.31244,151.34724], deg: 64,   type: 'right' },                          // ~1799 m
+  { ll: [-33.31172,151.34608], deg: 122,  type: 'right' },                          // ~1939 m
+  { ll: [-33.30998,151.34778], deg: 0,    type: 'straight', kind: 'danger' },       // ~2300 m — danger-bark lesson
+  { ll: [-33.3074,151.34543],  deg: 108,  type: 'right' },                          // ~2684 m
+  { ll: [-33.30052,151.34577], deg: 137,  type: 'right', name: 'Joes Point Rd' },   // ~3536 m
+];
+function trainCueAt(trk, c) {
+  const [x, y] = toXY(c.ll[0], c.ll[1]);
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < trk.n; i++) { const d = dist(x, y, trk.xy[i * 2], trk.xy[i * 2 + 1]); if (d < bd) { bd = d; bi = i; } }
+  const brgAt = i => { const j = Math.min(trk.n - 1, i + 1);
+    return bearing(trk.xy[i * 2], trk.xy[i * 2 + 1], trk.xy[j * 2], trk.xy[j * 2 + 1]); };
+  const cue = { at: trk.cum[bi], idx: bi, deg: c.deg, type: c.type,
+    from: null, onto: null, name: c.name || null,
+    outBrg: Math.round(brgAt(Math.min(trk.n - 1, bi + Math.ceil(25 / RESAMPLE_M)))),
+    inBrg: Math.round(brgAt(Math.max(0, bi - 3))) };
+  if (c.kind) cue.kind = c.kind;
+  return cue;
+}
+function buildTrainingTrack() {
+  let trk = S.tracks.find(t => t._training);
+  if (trk) return trk;
+  trk = processTrack('__training', 'Training ride', TRAIN_PTS);
+  trk._training = true; trk.pack = '';
+  trk.baseCues = TRAIN_CUES.map(c => trainCueAt(trk, c));
+  trk.overlay = { removed: [], added: [] }; // pre-set so startNav never analyses or hits IDB
+  applyCueOverlay(trk);
+  S.tracks.push(trk);
+  return trk;
+}
+
+/* The lesson script. `at` = trigger (fn of the built track → metres along it; sorted
+   alerts: [0]=297R [1]=612L [2]=839R [3]=1195R [4]=1367L [5]=1608L [6]=1799R [7]=1939R
+   [8]=danger [9]=2684R [10]=3536R). No `at` = chained straight after the previous step.
+   `pre` = before the sim starts. `ride: true` = card shows without pausing.
+   `advance: {ack}` = Got-it button; `{ev}` = wait for the real gesture (skip link shown). */
+const TRAIN_STEPS = [
+  { pre: true, title: 'G\'day — training ride', advance: { ack: true },
+    html: 'DingoNav navigates with <b>beeps</b>, not a talking voice — your eyes stay on the trail. ' +
+      'This is a guided fake ride that teaches everything in about five minutes. <b>Turn your sound up.</b>' },
+  { pre: true, title: 'Packs', advance: { ack: true },
+    html: 'Rides arrive as one <b>.dingonav pack</b> — the tracks plus offline maps in a single file. ' +
+      'Open it once and everything works with <b>zero phone signal</b>. If you ever clear the app, ' +
+      'the home screen keeps a one-tap re-download for every pack it has seen.' },
+  { pre: true, title: 'The beep language', advance: { ack: true },
+    before() { audio();
+      BEEP.appr('right'); setTimeout(() => BEEP.appr('left'), 1100);
+      setTimeout(() => BEEP.now('right'), 2400); setTimeout(() => BEEP.now('left'), 3300); },
+    html: '<b>1 beep = right. 2 beeps = left.</b><br><b>Deep</b> pitch = turn coming up. ' +
+      '<b>High</b> pitch = turn NOW.<br>That\'s the whole language — here are all four:' },
+  { at: () => 60, title: 'Your riding screen', target: '#hud', advance: { ack: true },
+    html: 'Top strip: the <b>next turn</b> with a countdown. Bottom: <b>ride progress</b>. ' +
+      'Top centre: <b>speed</b>. Everything else is map. Tap Got it and we\'ll roll.' },
+  { at: t => t.alerts[0].at - 160, title: 'Just listen', advance: { ack: true },
+    html: 'A <b>right turn</b> is coming up. You\'ll hear the <b>deep beep</b> first — get ready — ' +
+      'then the <b>high beep</b> at the turn itself, with a giant arrow on screen. ' +
+      'Nothing to do: ride and listen.' },
+  { at: t => t.alerts[0].at + 75, title: 'That chime', target: '#hudBox', advance: { ack: true },
+    html: 'The rising <b>two-note chime</b> just now means: turn done, carry on. ' +
+      'If you never hear it after a turn, you probably took the wrong fork.' },
+  { at: t => t.alerts[1].at - 140, title: 'Look around', advance: { ev: 'drag' },
+    html: '<b>Drag the map</b> with a finger — looking around is always allowed, even mid-ride.' },
+  { title: 'Come home', target: '#dotBtn', advance: { ev: 'recentre' },
+    html: 'You\'re panned away, so the big round button became a <b>dot</b>. <b>Tap it</b> to snap back onto yourself.' },
+  { title: 'Zoom when stopped', advance: { ev: 'zoom-gesture' },
+    html: 'You\'re stopped right now, so <b>pinch to zoom</b> works (on a computer: scroll). ' +
+      'Above walking pace finger-zoom locks so a glove brush can\'t wreck the view — riding, you zoom from the menu.' },
+  { title: 'The glove menu', target: '#menuBtn', advance: { ev: 'glove' },
+    html: 'Tap the <b>☰ button</b> — the whole screen becomes giant glove-sized tiles. Every ride control lives here.' },
+  { title: 'Mute', target: '#gMute', advance: { ev: 'unmute' },
+    html: 'Tap <b>Mute</b>, then tap it <b>again</b> to un-mute. Muted, all beeps stop — ' +
+      'except <b>danger barks, which always sound</b>.' },
+  { title: 'Favourite zooms', target: '#gZoomMin', advance: { ev: 'preset' },
+    html: 'Tap <b>Zoom close</b> — your saved tight zoom for junctions. <b>Zoom wide</b> is the overview. ' +
+      '(On the stopped screen, hold a preset button to save the current zoom as that favourite.)' },
+  { at: t => t.alerts[2].at - 45, title: 'Turn mode', advance: { ev: 'turnmode' },
+    html: 'Unmarked fork ahead. <b>Double-tap the map</b>: it snap-zooms in and turns track-up ' +
+      'so you can read which fork is yours.' },
+  { title: 'Marks — then back out', target: '#markTurn', advance: { ev: 'turnmode-exit' },
+    html: 'In turn mode, <b>ADD MARK</b> pins this junction for everyone who shares the pack ' +
+      '(press it, tap the track — not now, this is a tour). <b>Double-tap again</b> to ride on.' },
+  { at: t => t.alerts[2].at + 110, title: 'Going off track', advance: { ack: true },
+    html: 'Now watch — we\'ll <b>overshoot on purpose</b>. You\'ll hear a <b>low growl</b> and ' +
+      'see a red banner with your distance back to the route.' },
+  { ride: true, title: 'Off track!', target: '#banner', advance: { ev: 'backontrack' },
+    before() { TRAIN.offT = 12; },
+    html: 'There\'s the growl and the <b>red banner</b>. Your breadcrumb trail shows the way you came — ' +
+      'head back toward the route line and wait for the <b>rising chirp</b>.' },
+  { title: 'Back on — and direction', advance: { ack: true },
+    html: 'That chirp = back on track. One more trick: ride a route in the <b>wrong direction</b> and ' +
+      'DingoNav notices, flips every cue around, and tells you — no setting to find.' },
+  { at: t => t.alerts[4].at + 80, title: 'Centre lock', advance: { ev: 'lock' },
+    html: '<b>Press and hold the map</b> for a second: <b>centre lock</b>. The map pins to you and dragging ' +
+      'is disabled, so a knee or glove brush can\'t move it. Long-press again later to release.' },
+  { at: t => t.alerts[8].at - 250, title: 'Danger marks', advance: { ack: true },
+    html: 'A <b>danger mark</b> is ahead — riders drop these on washouts, wires, cliffs. It <b>triple-barks ' +
+      'at 200 m</b> and again at 50 m — <b>even when muted</b>. Roll on and listen.' },
+  { at: t => t.alerts[10].at + 90, title: 'That\'s the lot', advance: { ack: true },
+    html: 'You speak the language now: <b>count = direction, pitch = distance</b>, chime = done, ' +
+      'growl = off track, barks = danger. The ☰ menu has everything else. Load a real pack and go ride.' },
+];
+
+function trainSpot(sel) {
+  for (const el of document.querySelectorAll('.trainSpot')) el.classList.remove('trainSpot');
+  if (sel) { const el = document.querySelector(sel); if (el) el.classList.add('trainSpot'); }
+}
+function trainShow(st) {
+  TRAIN.showing = true;
+  document.getElementById('trainStep').textContent = (TRAIN.i + 1) + '/' + TRAIN_STEPS.length;
+  document.getElementById('trainTitle').textContent = st.title;
+  document.getElementById('trainMsg').innerHTML = st.html;
+  document.getElementById('trainOk').classList.toggle('on', !!(st.advance && st.advance.ack));
+  document.getElementById('trainSkip').classList.toggle('on', !!(st.advance && st.advance.ev));
+  trainSpot(st.target);
+  document.getElementById('trainCard').classList.add('on');
+  if (st.before) st.before();
+}
+function trainHide() {
+  TRAIN.showing = false;
+  trainSpot(null);
+  document.getElementById('trainCard').classList.remove('on');
+}
+function trainCheck(d) { // from the demo loop, once per tick while rolling
+  if (TRAIN.showing) return;
+  const st = TRAIN_STEPS[TRAIN.i];
+  if (!st || st._at == null || d < st._at) return;
+  if (!st.ride) TRAIN.holdD = d;
+  trainShow(st);
+}
+function trainEvent(ev) { // one-line taps in the real handlers land here
+  if (!TRAIN.active || !TRAIN.showing) return;
+  const st = TRAIN_STEPS[TRAIN.i];
+  if (st && st.advance && st.advance.ev === ev) trainAdvance();
+}
+function trainAdvance() {
+  const st = TRAIN_STEPS[TRAIN.i];
+  trainHide();
+  if (st && st.after) st.after();
+  TRAIN.i++;
+  const nx = TRAIN_STEPS[TRAIN.i];
+  if (!nx) { endTraining(true); return; }
+  if (nx.pre) { trainShow(nx); return; }
+  if (!S.demo) startDemo(); // the first ride step after the pre-ride cards
+  if (nx._at == null) { // chained step: keep the current pause, or release it for a ride-along card
+    if (nx.ride) TRAIN.holdD = null; else if (TRAIN.holdD == null) TRAIN.pauseReq = true;
+    trainShow(nx);
+  } else TRAIN.holdD = null; // resume until the next trigger distance
+}
+function startTraining() {
+  if (TRAIN.active) return;
+  stopDemo(); closeGlove(); closePanel(); closeDialog();
+  audio(); // unlock on this gesture — the pre-ride cards play sample beeps
+  const trk = buildTrainingTrack();
+  TRAIN.prevSelId = S.sel >= 0 && S.tracks[S.sel] && !S.tracks[S.sel]._training ? S.tracks[S.sel].id : null;
+  TRAIN.prevSound = S.set.sound;
+  if (!S.set.seenZoomTip) { S.set.seenZoomTip = true; saveSet(); } // its dialog would collide with the zoom lesson
+  S.sel = S.tracks.indexOf(trk);
+  TRAIN.active = true; TRAIN.i = 0; TRAIN.showing = false; TRAIN.holdD = null; TRAIN.pauseReq = false; TRAIN.offT = 0; TRAIN.offSign = null;
+  for (const st of TRAIN_STEPS) st._at = st.at ? Math.round(st.at(trk)) : null;
+  refreshTrackList(); updateBottomBar(); refreshMapData(); refreshEmpty();
+  if (mapReady) map.fitBounds(trk.llBounds, { padding: 60, duration: 800, maxZoom: 16 });
+  trainShow(TRAIN_STEPS[0]);
+}
+function endTraining(finished) {
+  if (!TRAIN.active) return;
+  TRAIN.active = false; TRAIN.holdD = null; TRAIN.pauseReq = false; TRAIN.offT = 0; TRAIN.offSign = null;
+  trainHide();
+  if (TRAIN.prevSound != null && S.set.sound !== TRAIN.prevSound) setSound(TRAIN.prevSound); // abandoned mid-mute-lesson
+  S.trail = []; trailDirty = true; refreshTrail(); // the fake ride never joins the own-rides heat (archiveRide gate)
+  S.prog = null; // nothing to flush for the fake ride
+  if (S.nav) stopNav(); // re-entry safe: active is already false
+  const ti = S.tracks.findIndex(t => t._training);
+  if (ti >= 0) S.tracks.splice(ti, 1);
+  S.sel = TRAIN.prevSelId != null ? S.tracks.findIndex(t => t.id === TRAIN.prevSelId) : -1;
+  refreshTrackList(); updateBottomBar(); refreshMapData(); refreshEmpty();
+  toast(finished ? 'Training done — load a pack and go ride' : 'Training ended');
+}
+document.getElementById('trainExit').onclick = () => endTraining(false);
+document.getElementById('trainOk').onclick = () => {
+  const st = TRAIN_STEPS[TRAIN.i];
+  if (TRAIN.active && st && st.advance && st.advance.ack) trainAdvance();
+};
+document.getElementById('trainSkip').onclick = () => { if (TRAIN.active) trainAdvance(); };
+// dev: jump straight to lesson n (skips any in-between state changes)
+window.__trainGoto = n => {
+  if (!TRAIN.active || !TRAIN_STEPS[n]) return;
+  trainHide(); TRAIN.i = n; TRAIN.holdD = null; TRAIN.pauseReq = false; TRAIN.offT = 0; TRAIN.offSign = null;
+  const st = TRAIN_STEPS[n];
+  if (st.pre) { trainShow(st); return; }
+  if (!S.demo) startDemo();
+  if (st._at != null) window.__demoJump = Math.max(0, st._at - 20);
+  else trainShow(st);
+};
+
+/* demo chooser: Training (no track needed) vs Plain (replays the selection) */
+function demoChoice() {
+  const trk = S.tracks[S.sel];
+  document.getElementById('dpPlain').disabled = !trk;
+  document.getElementById('dpPlainSub').textContent =
+    trk ? 'replay "' + trk.name + '" at 30 km/h' : 'select a track first';
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('demoPick').classList.add('on');
+}
+document.getElementById('dpTrain').onclick = () => { closeDialog(); startTraining(); };
+document.getElementById('dpPlain').onclick = () => { closeDialog(); startDemo(); };
+document.getElementById('dpCancel').onclick = closeDialog;
+document.getElementById('emptyTrain').onclick = () => startTraining(); // the brand-new-user moment
 
 /* ---------------- friends via ntfy.sh ---------------- */
 let friendWS = null, friendPub = null, friendBackoff = 2000;
@@ -3678,7 +4007,7 @@ function startFriends() {
   connectFriendWS(topic);
   if (friendPub) clearInterval(friendPub);
   friendPub = setInterval(() => {
-    if (!S.nav || !S.pos || !navigator.onLine) return;
+    if (!S.nav || !S.pos || !navigator.onLine || TRAIN.active) return; // never broadcast training's fake fixes
     const [lat, lon] = toLL(S.pos.x, S.pos.y);
     fetch('https://ntfy.sh/' + topic, { method: 'POST', body: JSON.stringify({ n: S.set.name || 'rider', la: +lat.toFixed(5), lo: +lon.toFixed(5) }), keepalive: true }).catch(() => {});
   }, 20000);
@@ -4130,6 +4459,7 @@ function refreshTrackList() {
   // group tracks by pack: bundle packs first (insertion order), loose files last
   const groups = new Map();
   S.tracks.forEach((t, i) => {
+    if (t._training) return; // the tutorial track never appears in the Tracks tab
     const key = t.pack || '';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(i);
