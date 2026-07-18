@@ -1532,13 +1532,24 @@ async function buildStyle() {
   // Independent of the vector basemap — works even with no .pmtiles loaded.
   if (S.set.mapStyle === 'satellite' && satMeta && satMeta.count > 0) {
     const glyphs = (baseUrlRef || new URL('basemap/', location.href).href) + 'fonts/{fontstack}/{range}.pbf';
-    return { version: 8, glyphs,
-      sources: { satellite: { type: 'raster', tiles: ['sattile://{z}/{x}/{y}'], tileSize: 256,
-        minzoom: satMeta.zmin, maxzoom: satMeta.zmax, attribution: '© Esri, Maxar, Earthstar Geographics' } },
-      layers: [
-        { id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } },
-        { id: 'satellite', type: 'raster', source: 'satellite' },
-      ] };
+    // Two bands from one tile store: the continuous corridor + overview band
+    // caps at `base` so MapLibre overzooms it everywhere past that, and the
+    // sparse full-res turn patches (satellite-turns/ in the bundle) layer on
+    // top — missing patch tiles resolve to transparent, so the overzoomed
+    // base shows through away from turns.
+    const base = Math.min(satMeta.base || 16, satMeta.zmax);
+    const sources = { satellite: { type: 'raster', tiles: ['sattile://{z}/{x}/{y}'], tileSize: 256,
+      minzoom: satMeta.zmin, maxzoom: base, attribution: '© Esri, Maxar, Earthstar Geographics' } };
+    const layers = [
+      { id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } },
+      { id: 'satellite', type: 'raster', source: 'satellite' },
+    ];
+    if (satMeta.zmax > base) {
+      sources['satellite-turns'] = { type: 'raster', tiles: ['sattile://{z}/{x}/{y}'], tileSize: 256,
+        minzoom: base + 1, maxzoom: satMeta.zmax };
+      layers.push({ id: 'satellite-turns', type: 'raster', source: 'satellite-turns' });
+    }
+    return { version: 8, glyphs, sources, layers };
   }
   if (!hasBasemap) return { version: 8,
     glyphs: new URL('basemap/', location.href).href + 'fonts/{fontstack}/{range}.pbf',
@@ -3954,20 +3965,25 @@ async function loadBundleZip(file, ctx) {
       stravaTiles += count;
     }
   }
-  // Satellite (ESRI World Imagery) corridor tiles → IDB, keyed for the
-  // sattile:// protocol. Selected via the "Sat" map style.
-  let szmin = 99, szmax = 0, satTiles = 0;
+  // Satellite (ESRI World Imagery) tiles → IDB, keyed for the sattile://
+  // protocol; selected via the "Sat" map style. satellite/ is the continuous
+  // corridor + zoomed-out overview band; satellite-turns/ holds sparse
+  // full-resolution patches around turns. `base` records where the continuous
+  // band ends so buildStyle can overzoom it there and layer the patches above.
+  let szmin = 99, szmax = 0, sbase = 0, satTiles = 0;
   for (const path in entries) {
-    const m = path.match(/^satellite\/(\d+)\/(\d+)\/(\d+)\.jpg$/);
+    const m = path.match(/^satellite(-turns)?\/(\d+)\/(\d+)\/(\d+)\.jpg$/);
     if (!m) continue;
-    const z = +m[1];
+    const z = +m[2];
     szmin = Math.min(szmin, z); szmax = Math.max(szmax, z);
-    await idb.put({ id: `sattile-${m[1]}-${m[2]}-${m[3]}`, kind: 'sattile',
+    if (!m[1]) sbase = Math.max(sbase, z);
+    await idb.put({ id: `sattile-${m[2]}-${m[3]}-${m[4]}`, kind: 'sattile',
       blob: new Blob([entries[path]], { type: 'image/jpeg' }) });
     satTiles++;
   }
   if (satTiles) {
-    await idb.put({ id: 'sat-meta', kind: 'satmeta', count: satTiles, zmin: szmin, zmax: szmax });
+    await idb.put({ id: 'sat-meta', kind: 'satmeta', count: satTiles, zmin: szmin, zmax: szmax,
+      base: sbase || szmax });
   }
   // Default ride name: the pack's baked rideName wins (canonical — everyone on the
   // pack converges on one channel no matter how the file was renamed in transit),
