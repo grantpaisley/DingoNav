@@ -16,8 +16,8 @@
   }
   *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
   /* Lucide icons: sized by the parent's font-size, coloured by currentColor */
-  svg.ic{width:1em; height:1em; fill:none; stroke:currentColor; stroke-width:2;
-    stroke-linecap:round; stroke-linejoin:round; display:inline-block; vertical-align:-0.12em; flex:none}
+  svg.ic{width:1.12em; height:1.12em; fill:none; stroke:currentColor; stroke-width:2;
+    stroke-linecap:round; stroke-linejoin:round; display:inline-block; vertical-align:-0.16em; flex:none}
   html,body{height:100%; overflow:hidden; background:var(--bg); color:var(--fg);
     font-family:-apple-system,'Segoe UI',Roboto,sans-serif; user-select:none; -webkit-user-select:none}
   #map{position:fixed; inset:0; background:var(--bg)}
@@ -46,8 +46,11 @@
   #hudDist{font-size:60px; font-weight:800; font-variant-numeric:tabular-nums; margin-left:auto;
     position:relative; white-space:nowrap; flex:none}
   #hudDist small{font-size:30px; font-weight:600; color:var(--dim)}
-  #hudType{font-size:28px; color:var(--fg); text-transform:uppercase; letter-spacing:.06em; position:relative;
+  #hudType{font-size:28px; color:var(--fg); letter-spacing:.02em; position:relative;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0}
+  /* tap the strip → the instruction briefly expands ("Left on to Arcadia Rd") */
+  #hudBox{pointer-events:auto; cursor:pointer}
+  #hudBox.expand #hudType{font-size:36px; font-weight:800; white-space:normal; line-height:1.15}
   /* main number: one edge readout (speed or battery, by ride profile), never centred —
      top-centre is the direction of travel. The turn countdown borrows this slot (amber). */
   #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:12px; z-index:10;
@@ -114,9 +117,10 @@
   /* sized and centred to the free band between the big numbers (top) and the bottom
      bar / MARK TURN chrome — the arrow never overlaps a readout */
   .bigArrow{position:fixed; top:60%; transform:translateY(-50%); z-index:9; display:none;
-    font-size:min(70vw,44vh); line-height:1; color:rgba(255,176,32,.55);
+    font-size:min(70vw,44vh); line-height:1; color:var(--arrowFill,#ffb020); opacity:var(--arrowOp,.55);
     filter:drop-shadow(0 4px 20px rgba(0,0,0,.5)); pointer-events:none}
-  .bigArrow svg.ic{display:block; fill:currentColor; stroke-width:1.2; vertical-align:0}
+  .bigArrow svg.ic{display:block; fill:currentColor; vertical-align:0;
+    stroke:var(--arrowEdge,#101820); stroke-width:var(--arrowEdgeW,0)}
   #bigArrowL{left:2vw} #bigArrowR{right:2vw}
   .bigArrow.on{display:block}
   .bigArrow.blink{display:block; animation:vgPulse .8s ease-in-out infinite}
@@ -178,7 +182,7 @@
   /* riding: exactly three interactive elements — the map, the dot, ☰. The control
      clusters are stopped-screen chrome; zoom presets and the rest live in the ☰ grid. */
   body.navving .ctlgroup{display:none}
-  /* the dot: tap = centre on me · tap again = whole route · hold = lock-to-centre */
+  /* the dot/square: square = centred, tap → whole track · dot = panned, tap → re-centre */
   #dotBtn{position:fixed; right:14px; bottom:96px; z-index:17; width:96px; height:96px; border-radius:50%;
     background:rgba(22,28,34,.55); border:1px solid #2a3540; display:none; align-items:center;
     justify-content:center; font-size:44px; color:var(--fg); cursor:pointer; opacity:var(--navOp,.4);
@@ -222,7 +226,7 @@
   .gtile.active{border-color:var(--accent)}
   .gtile .gi{font-size:42px; line-height:1; display:flex; align-items:center; justify-content:center; gap:10px}
   .gtile .gi .gv{font-size:26px; font-weight:800; font-variant-numeric:tabular-nums}
-  .gtile .gl{font-size:15px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.04em}
+  .gtile .gl{font-size:15px; font-weight:700; color:var(--dim); letter-spacing:.02em}
   .gtile.active .gl{color:var(--accent)}
   /* tiles declare where they belong: ride grid, idle grid, or both */
   .gtile[data-m]{display:none}
@@ -247,16 +251,17 @@
     background:rgba(14,18,22,.96); border-top:1px solid #232d38;
     padding:10px 12px calc(env(safe-area-inset-bottom) + 10px) 58px; display:flex; gap:10px; align-items:center}
   body.navving #bottom{display:none} /* riding: bar removed — ☰ opens the ride-controls panel instead */
-  /* ☰ menu: floating, transparent, bottom-left; opens Settings when idle, ride controls while riding.
-     progress strip starts just to its right (see #progress left) */
+  /* ☰ menu: dark-grey plate so it reads on any map, bottom-left; opens Settings when
+     idle, ride controls while riding. Progress strip starts just to its right.
+     Exempt from the routing transparency fade — a visibility fix that fades is no fix. */
   #menuBtn{position:fixed; left:8px; bottom:8px; z-index:26; width:44px; height:44px; font-size:26px;
-    display:flex; align-items:center; justify-content:center; background:transparent; border:none;
+    display:flex; align-items:center; justify-content:center; background:rgba(34,41,48,.85);
+    border:1px solid #2a3540; border-radius:12px;
     color:var(--fg); text-shadow:0 1px 6px rgba(0,0,0,.8); cursor:pointer}
-  #menuBtn:active{background:rgba(22,28,34,.5); border-radius:12px}
+  #menuBtn:active{background:rgba(52,62,72,.9)}
   /* riding: ☰ is one of the three interactive elements — glove-sized, lifted above the
      full-width progress strip (placeProgress sets its bottom offset) */
-  body.navving #menuBtn{width:88px; height:88px; font-size:44px; opacity:var(--navOp,.4)}
-  body.navving #menuBtn:active{opacity:1}
+  body.navving #menuBtn{width:88px; height:88px; font-size:44px; border-radius:20px}
   body.navving #progress{left:0}
   #trackInfo{flex:1; min-width:0; line-height:1.25}
   #trackName{font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -272,12 +277,13 @@
   .gtile.stop:active{background:#d32f2f}
   .gtile.go{background:var(--ok); border-color:var(--ok)}
   .gtile.go .gi,.gtile.go .gl{color:#04240f}
-  /* TURN MODE: one tap on the map while riding — zoomed, compass-up; MARK TURN drops a point */
+  /* TURN MODE: double-tap the map while riding — zoomed, compass-up; MARK TURN arms, tap places */
   #markTurn{position:fixed; left:50%; transform:translateX(-50%);
     bottom:calc(env(safe-area-inset-bottom) + 30px); z-index:18; display:none; padding:0 44px;
     height:92px; border:none; border-radius:24px; background:var(--warn); color:#231a00;
     font-size:26px; font-weight:900; letter-spacing:.03em; box-shadow:0 6px 24px rgba(0,0,0,.55);
     cursor:pointer}
+  #markTurn.armed{background:var(--accent); color:#00222c}
   body.turnmode #markTurn{display:block}
   #turnHint{position:fixed; left:50%; transform:translateX(-50%);
     bottom:calc(env(safe-area-inset-bottom) + 134px); z-index:18; display:none; font-size:13px;
@@ -313,7 +319,41 @@
     background:var(--panel); border-radius:20px 20px 0 0; padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
     transform:translateY(105%); transition:transform .22s ease}
   #panel.on{transform:translateY(0)}
-  #panel h3{font-size:13px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); margin:18px 0 8px}
+  #panel h3{font-size:13px; letter-spacing:.06em; color:var(--dim); margin:18px 0 8px}
+  /* ---------- Mac-like day theme (2026-07-17 samples review) ----------
+     Day map styles flip the chrome light: #f5f5f7 plates with hairline borders
+     and dark glyphs (15:1), macOS-blue accent (cyan fails 1.4:1 on light),
+     light panel with white controls and green switches, dark speed text with a
+     light halo (white failed 1.8:1 on day maps), frosted turn strip, and no
+     riding fade — light plates are already quiet. Night chrome is untouched. */
+  body.daymode{--accent:#007AFF; --navOp:1}
+  body.daymode #bottom{--fg:#15202b; --dim:#5a6a78; color:var(--fg);
+    background:rgba(245,247,249,.96); border-top-color:#ccd5dd}
+  body.daymode .ctl{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f}
+  body.daymode .ctl:active{background:#e8e8ed}
+  body.daymode .ctlgroup .ctl.preset{color:#6e6e73}
+  body.daymode .ctlgroup .ctl.preset.set{color:#1d1d1f}
+  body.daymode #menuBtn{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f; text-shadow:none}
+  body.daymode #menuBtn:active{background:#e8e8ed}
+  body.daymode #dotBtn{background:rgba(245,245,247,.92); border-color:#c9c9ce; color:#1d1d1f}
+  body.daymode #hudSpeed, body.daymode #vargModeBig{color:#15202b;
+    text-shadow:0 1px 8px rgba(255,255,255,.85), 0 0 3px rgba(255,255,255,.7)}
+  body.daymode #hudSpeed small{color:#3f4a55}
+  body.daymode #hudSpeed.cd, body.daymode #hudSpeed.cd small{color:#b45309}
+  body.daymode #hudSpeed.low, body.daymode #hudSpeed.low small{color:#c22a2a}
+  body.daymode #hudBox{background:rgba(255,255,255,.72); border-bottom-color:#d0d5db}
+  body.daymode #hudType, body.daymode #hudDist{color:#15202b}
+  body.daymode #hudDist small{color:#5a6a78}
+  body.daymode #hudArrow.left, body.daymode #hudArrow.right{color:#b45309}
+  body.daymode #panel{--fg:#15202b; --dim:#5a6a78; --panel:#eef1f4; --panel2:#ffffff; --bg:#e4e9ee;
+    background:#eef1f4; color:var(--fg)}
+  body.daymode #panel .btn{border-color:#c9c9ce}
+  body.daymode #panel .row input[type=text]{border-color:#c9c9ce}
+  body.daymode #panel .seg button{border-color:#c9c9ce}
+  body.daymode #panel .seg button.active{background:var(--accent); border-color:var(--accent); color:#fff}
+  body.daymode #panel .sw span{background:#d1d1d6}
+  body.daymode #panel .sw span::before{background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  body.daymode #panel .sw input:checked + span{background:#34c759}
   #panelNav{display:flex; gap:10px; margin-bottom:6px}
   #panelNav #navBtn{flex:1}
   #panelNav .ctl{width:56px; height:56px; flex:none}
@@ -548,8 +588,7 @@
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div id="leftCtl" class="ctlgroup">
   <div class="ctl" id="orientCtl" title="north-up / course-up / compass">N</div>
-  <div class="ctl" id="followBtn" title="centre on location"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
-  <div class="ctl" id="fitBtn" title="fit track"><svg class="ic"><use href="#i-maximize"/></svg></div>
+  <div class="ctl" id="followBtn" title="dot: re-centre · square: whole track"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
   <div class="ctl" id="soundCtl" title="sound / mute"><svg class="ic"><use href="#i-volume-2"/></svg></div>
 </div>
 <div id="rightCtl" class="ctlgroup">
@@ -558,9 +597,9 @@
   <div class="ctl" id="zoomIn"><svg class="ic"><use href="#i-plus"/></svg></div>
   <div class="ctl preset" id="presetMax" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
 </div>
-<div id="dotBtn" title="tap: centre on me · again: whole route · hold: lock"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
-<button id="markTurn" title="drop a turn point here">MARK TURN</button>
-<div id="turnHint">tap the track to add a mark · tap a point to remove · long-press a point to change it</div>
+<div id="dotBtn" title="dot: re-centre · square: whole track"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
+<button id="markTurn" title="add a mark on the track">ADD MARK</button>
+<div id="turnHint">ADD MARK then tap the track · tap a point to remove · long-press a point to change it</div>
 <div id="markPicker">
   <div id="markPickerHead"><b id="markPickerTitle">Add mark here</b>
     <button id="markPickerClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
@@ -617,7 +656,7 @@
 <div id="shade"></div>
 <div id="panel">
   <div id="panelNav">
-    <button id="navBtn" disabled>START</button>
+    <button id="navBtn" disabled>Start</button>
     <div class="ctl" id="revBtn" title="reverse direction" style="display:none"><svg class="ic"><use href="#i-arrow-left-right"/></svg></div>
   </div>
   <div data-reg="style"></div>
@@ -675,6 +714,7 @@
 
     <h3>Config</h3>
     <div class="btnRow"><button class="btn" id="cfgExportBtn"><svg class="ic"><use href="#i-upload"/></svg> Export config</button><button class="btn" id="cfgImportBtn"><svg class="ic"><use href="#i-download"/></svg> Import config…</button></div>
+    <div class="btnRow"><button class="btn" id="ridesExportBtn"><svg class="ic"><use href="#i-upload"/></svg> Export rides (GPX)</button></div>
     <div class="btnRow"><button class="btn" id="cfgPasteBtn">Paste config from clipboard</button></div>
     <div class="hint">The complete setup in one JSON file — settings, tuning overrides, zoom presets, screen layouts, controller keys. Export downloads the file and copies it to the clipboard; bench-tune on a desktop browser, export there, import here.</div>
 
@@ -780,21 +820,40 @@ const S = {
   follow: true, nav: false,
   pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
-  trail: [], trailTrack: null, autoOrient: false, autoBlock: false,
+  trail: [], trailTrack: null, prog: null, rides: [], autoOrient: false, autoBlock: false,
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
-    profile: false, gloveSide: 'left', ctlEdges: 'sides', vehicle: 'enduro', steep: true, surf: true, trail: true,
+    profile: false, gloveSide: 'left', ctlEdges: 'sides', vehicle: 'enduro', surf: true, trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
     varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure' },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
-// v2 migration: steepness becomes default-on, ♥ favourite spans become the max zoom preset
+// v2 migration: ♥ favourite spans become the max zoom preset
 if (!S.set._v2) {
-  S.set._v2 = 1; S.set.steep = true;
+  S.set._v2 = 1;
   if (S.set.favSpan) for (const v in S.set.favSpan)
     (S.set.zoomPresets[v] = S.set.zoomPresets[v] || {}).max = S.set.favSpan[v];
   delete S.set.favSpan;
+  saveSet();
+}
+// v3 migration (2026-07-17 design): casing replaces the halo, steepness colouring
+// is gone (slope chevrons take over), route blue moves to #4AA8FF
+if (!S.set._v3) {
+  S.set._v3 = 1;
+  delete S.set.steep;
+  delete S.set.adv.haloOp; delete S.set.adv.haloMul; delete S.set.adv.chevCol; // direction Vs are case-coloured now
+  if (S.set.adv.colRoute === '#00e5ff') delete S.set.adv.colRoute; // was the old default → follow the new one
+  saveSet();
+}
+// v4 migration: single-track dots become dense dashes (re-point stored old defaults),
+// and a new version replaces saved UI layout config (silent for now — a later
+// version may warn before doing this)
+if (!S.set._v4) {
+  S.set._v4 = 1;
+  if (S.set.adv.singleDash === 0.1) delete S.set.adv.singleDash;
+  if (S.set.adv.singleGap === 1.7) delete S.set.adv.singleGap;
+  S.set.layout = {};
   saveSet();
 }
 
@@ -803,17 +862,27 @@ if (!S.set._v2) {
 const ADV_D = {
   headDamp: 0.12, headDead: 2, rotHz: 4, easeMs: 900, zoomThresh: 15,
   apprMul: 1.5, apprFloor: 250, offM: 60, onM: 40, beepVol: 0.5, cdDist: 300,
-  btnOp: 0.4, trailGap: 20, haloOp: 0.3, haloMul: 2.2,
-  chevSize: 15, chevGap: 90, chevCol: '#003a44',
-  colRoute: '#00e5ff', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
+  deepHz: 460, highHz: 990, // pitch = phase: deep approaching, high at the turn
+  arrowFill: '#ffb020', arrowOp: 0.55, arrowEdge: '#101820', arrowEdgeW: 0, // giant turn arrow: fill + optional surround (0 = off, the as-is look)
+  apprUnit: 's', apprS: 15, apprM: 250, departUnit: 'm', departM: 30, departS: 4,
+  btnOp: 0.4, trailGap: 20,
+  routeWOut: 6, routeWIn: 11, coreFrac: 0.67, caseMode: 'auto', // route width px at overview/nav zoom; core share; casing auto = dark day / white night
+  colDone: '#7F8791', colDoneCase: '#1A1E24', progDoneOp: 0.5, progMissOp: 0.5, // travelled grey + reduced case; missed = half-strength colour, no case
+  progContM: 150, // max route-metres between on-track fixes that still count as riding the stretch
+  recentM: 75, progRecentOp: 0.8, // just-ridden tail: route colour at strength, linking marker to the grey history
+  rideSimpM: 10, // ride-archive simplification tolerance (Douglas-Peucker, m)
+  chevSize: 15, chevGap: 90, // direction Vs — drawn in the casing colour, so they dim with the travelled case
+  slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
+  colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
   colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
-  dirtDash: 2.4, dirtGap: 1.4, singleDash: 0.1, singleGap: 1.7,
+  dirtDash: 2.4, dirtGap: 1.4, singleDash: 1.2, singleGap: 0.9, // single = denser square dashes, not dots
+  gapStyle: 'case', // dash gaps show the casing colour (continuous case); 'clear' = old transparent gaps
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
 let basePM = null, basePMKey = 'none'; // PMTiles handle for the cue engine's corridor decode
 let hasHillshade = false; // optional terrarium DEM .pmtiles → hillshade layer
-let stravaMeta = null; // {count, zmin, zmax} of baked Strava tiles in IDB, or null
+let stravaRideMeta = null, stravaHikeMeta = null; // {count,zmin,zmax} of baked ride/hike Strava tiles in IDB, or null
 let satMeta = null; // {count, zmin, zmax} of baked ESRI satellite tiles in IDB, or null
 // 1×1 transparent PNG bytes for out-of-corridor Strava tiles (generated, so no
 // hand-copied base64 to get wrong).
@@ -1386,12 +1455,18 @@ function tone(freq, dur, when, vol) {
   g.gain.setValueAtTime(vol, t + dur - 0.03); g.gain.linearRampToValueAtTime(0, t + dur);
   o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + dur + 0.02);
 }
+/* the audio grammar (2026-07-17 design): count = direction (one beep right, two
+   beeps left), pitch = phase (deep = approaching, high = turn here). The old
+   direction-less 660 Hz far beep is gone — the approach already tells you which way. */
 const BEEP = {
-  far()      { if (!S.set.sound) return; tone(660, .22, 0); vib([120]); console.log('[beep] far'); },
-  // the audio channel encodes the direction: one beep = right, two beeps = left
-  right()    { if (!S.set.sound) return; tone(990, .18, 0); vib([100]); console.log('[beep] right'); },
-  left()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .24); vib([80, 60, 80]); console.log('[beep] left'); },
-  turn()     { if (!S.set.sound) return; tone(990, .15, 0); tone(990, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
+  appr(ty)   { if (!S.set.sound) return; const f = ADV('deepHz');
+    tone(f, .2, 0); if (ty === 'left') tone(f, .2, .3);
+    vib(ty === 'left' ? [120, 80, 120] : [120]); console.log('[beep] approach ' + ty); },
+  now(ty)    { if (!S.set.sound) return; const f = ADV('highHz');
+    tone(f, .16, 0); if (ty === 'left') tone(f, .16, .24);
+    vib(ty === 'left' ? [90, 60, 90] : [100]); console.log('[beep] turn ' + ty); },
+  turn()     { if (!S.set.sound) return; const f = ADV('highHz'); tone(f, .15, 0); tone(f, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
+  done()     { if (!S.set.sound) return; tone(700, .09, 0); tone(1050, .12, .12); console.log('[beep] turn done'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
   straight() { if (!S.set.sound) return; tone(990, .3, 0); vib([160]); console.log('[beep] straight'); },
@@ -1487,6 +1562,7 @@ async function buildStyle() {
 }
 async function setMapStyle(name) {
   S.set.mapStyle = name; saveSet();
+  document.body.classList.toggle('daymode', !isNightStyle()); // bar + panel follow the map's day/night
   for (const b of document.querySelectorAll('#styleSeg button')) b.classList.toggle('active', b.dataset.v === name);
   if (!map || !mapReady) return;
   const canSat = name === 'satellite' && satMeta && satMeta.count > 0;
@@ -1509,11 +1585,15 @@ async function initMap() {
   // Strava corridor tiles served from IDB (baked into the .dingonav bundle).
   // Missing tiles (outside the corridor) resolve to a 1×1 transparent PNG so the
   // basemap shows through with no broken-tile errors.
-  maplibregl.addProtocol('stravatile', async (params) => {
-    const key = 'stravatile-' + params.url.replace('stravatile://', '').replaceAll('/', '-');
-    try { const rec = await idb.get(key); if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() }; } catch (e) {}
-    return { data: STRAVA_BLANK.buffer };
-  });
+  // ride (blue) + hike (purple) tiles are stored under separate keys; register a
+  // protocol for each. Tiles are pre-coloured in the bundle, so raster as-is.
+  for (const owner of ['ride', 'hike']) {
+    maplibregl.addProtocol('strava' + owner, async (params) => {
+      const key = `strava${owner}tile-` + params.url.replace(`strava${owner}://`, '').replaceAll('/', '-');
+      try { const rec = await idb.get(key); if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() }; } catch (e) {}
+      return { data: STRAVA_BLANK.buffer };
+    });
+  }
 
   // Satellite (ESRI World Imagery) corridor tiles served from IDB (baked into the
   // .dingonav bundle). Out-of-corridor tiles resolve to a blank so the request
@@ -1591,10 +1671,19 @@ async function initMap() {
     if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom());
     if (S.nav) autoCompass(); // threshold-mode compass tracks zoom level
   });
-  // riding, one clean tap on the map = TURN MODE (drags/pinches never reach here)
+  // riding: double-tap toggles TURN MODE; single taps (point removal, armed
+  // placement) wait out the double-tap window so the two can't collide
+  let rideTapT = null;
   map.on('click', e => {
-    if (S.nav) { rideTap(e.lngLat); return; }
-    if (S.cueEdit) cueEditTap(e.lngLat);
+    if (!S.nav) { if (S.cueEdit) cueEditTap(e.lngLat); return; }
+    clearTimeout(rideTapT);
+    rideTapT = setTimeout(() => { rideTapT = null; rideTap(e.lngLat); }, 280);
+  });
+  map.on('dblclick', e => {
+    if (!S.nav) return; // planning keeps the normal double-click zoom
+    e.preventDefault(); // eat MapLibre's own double-tap zoom while riding
+    clearTimeout(rideTapT); rideTapT = null;
+    S.turn ? exitTurnMode() : enterTurnMode();
   });
   initLockGesture();
   map.on('mousedown', closeGlove); map.on('touchstart', closeGlove); // tap the map = dismiss glove overlay
@@ -1619,27 +1708,54 @@ async function initMap() {
     const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 250);
     map.once('load', () => { clearInterval(t); res(); });
   });
-  try { stravaMeta = await idb.get('strava-meta'); } catch (e) {}
+  try { stravaRideMeta = await idb.get('strava-ride-meta'); } catch (e) {}
+  try { stravaHikeMeta = await idb.get('strava-hike-meta'); } catch (e) {}
   // satMeta already loaded above (before buildStyle); no need to re-read here.
   mapReady = true; // before addOverlays — its refreshMapData() call needs this
   addOverlays();
 }
 function clsMatch() { return ['match', ['get', 'class'], 'other', ADV('colOther'), 'plan', ADV('colPlan'), ADV('colOwn')]; }
+/* route widths: total px interpolated overview→nav zoom; the core keeps its share
+   so one width knob scales the whole cased line. Casing IS the day/night effect:
+   dark case on day styles reads as shadow, white on night styles reads as glow. */
+function isNightStyle() { return S.set.mapStyle === 'dark' || S.set.mapStyle === 'satellite'; }
+function caseColor() {
+  const m = ADV('caseMode');
+  return m === 'white' ? '#ffffff' : m === 'dark' ? '#101820' : isNightStyle() ? '#ffffff' : '#101820';
+}
+function totalW() { return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut'), 17, ADV('routeWIn')]; }
+function coreW() { const f = ADV('coreFrac'); return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut') * f, 17, ADV('routeWIn') * f]; }
+// dash lengths are in line-widths — rescale for the wider case layer so its dashes
+// stay in step with the core's (gaps remain fully transparent)
+function caseDash(a) { const f = ADV('coreFrac'); return a.map(x => +(x * f).toFixed(2)); }
 function addOverlays() {
-  // Strava heatmap raster — added first so it sits directly on the basemap,
-  // UNDER our own heatmap and tracks. Only when a bundle shipped tiles.
-  if (stravaMeta && stravaMeta.count > 0) {
-    map.addSource('strava', { type: 'raster', tiles: ['stravatile://{z}/{x}/{y}'], tileSize: 256,
-      minzoom: stravaMeta.zmin, maxzoom: stravaMeta.zmax });
-    map.addLayer({ id: 'strava-heat', type: 'raster', source: 'strava',
-      layout: { visibility: S.set.strava === false ? 'none' : 'visible' },
+  // Strava heat rasters — added first so they sit directly on the basemap,
+  // UNDER our own heatmap and tracks. Ride (blue) then hike (purple) so hike
+  // reads on top where they overlap. Only when a bundle shipped tiles.
+  const stravaLayers = [
+    ['ride', stravaRideMeta, 'stravaRide'],
+    ['hike', stravaHikeMeta, 'stravaHike'],
+  ];
+  let stravaLoaded = 0;
+  for (const [owner, meta, setKey] of stravaLayers) {
+    if (!meta || !meta.count) continue;
+    map.addSource('strava-' + owner, { type: 'raster', tiles: ['strava' + owner + '://{z}/{x}/{y}'], tileSize: 256,
+      minzoom: meta.zmin, maxzoom: meta.zmax });
+    map.addLayer({ id: 'strava-' + owner + '-heat', type: 'raster', source: 'strava-' + owner,
+      layout: { visibility: S.set[setKey] === false ? 'none' : 'visible' },
       paint: { 'raster-opacity': 0.55 } });
-    setStravaInfo(stravaMeta.count + ' Strava tiles loaded (z' + stravaMeta.zmin + '–' + stravaMeta.zmax + ')');
+    stravaLoaded += meta.count;
+  }
+  if (stravaLoaded) {
+    const parts = [];
+    if (stravaRideMeta && stravaRideMeta.count) parts.push(stravaRideMeta.count + ' ride');
+    if (stravaHikeMeta && stravaHikeMeta.count) parts.push(stravaHikeMeta.count + ' hike');
+    setStravaInfo('Strava tiles loaded: ' + parts.join(', '));
   }
 
   map.addSource('heat', { type: 'geojson', data: S.heat ? S.heat.geojson : EMPTY });
   map.addSource('tracksOther', { type: 'geojson', data: EMPTY });
-  map.addSource('selTrack', { type: 'geojson', data: EMPTY, lineMetrics: true }); // lineMetrics: steepness line-gradient
+  map.addSource('selTrack', { type: 'geojson', data: EMPTY });
   map.addSource('alerts', { type: 'geojson', data: EMPTY });
   map.addSource('friends', { type: 'geojson', data: EMPTY });
   map.addSource('posAcc', { type: 'geojson', data: EMPTY });
@@ -1668,48 +1784,70 @@ function addOverlays() {
   map.addLayer({ id: 'trail-dots', type: 'line', source: 'trail',
     layout: { 'line-cap': 'round' },
     paint: { 'line-color': '#9fb4c6', 'line-opacity': 0.85, 'line-width': 3.5, 'line-dasharray': [0.1, 2] } });
-  /* route rendering: colour = steepness (grade bands baked into feature colours),
-     pattern = surface (solid sealed / dashed dirt / dotted singletrack). Halo layers give a
-     same-colour translucent edge — dash patterns scaled by width so the gaps stay transparent
-     (no dark casing underneath any more). Steepness-only mode rides bare on sel-core. */
+  /* route rendering: one flat core colour, pattern = surface (solid sealed / dashed
+     dirt / dotted singletrack), casing = day/night shadow/glow (caseColor()).
+     Case layers sit under the cores at totalW; dash patterns rescaled (caseDash) so
+     the gaps stay fully transparent. Steepness is no longer a colour channel. */
   map.addSource('selSurf', { type: 'geojson', data: EMPTY });
-  const SURF_W = ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 4];
-  const m = ADV('haloMul');
-  const HALO_W = ['interpolate', ['linear'], ['zoom'], 10, 2.5 * m, 15, 4 * m];
-  const hd = a => a.map(x => +(x / m).toFixed(2)); // dash lengths are in line-widths — rescale for the fat halo
-  map.addLayer({ id: 'sel-halo', type: 'line', source: 'selTrack',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ADV('colRoute'), 'line-opacity': ADV('haloOp'), 'line-width': HALO_W } });
-  map.addLayer({ id: 'surf-halo-sealed', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'sealed'],
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W } });
   const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
-  map.addLayer({ id: 'surf-halo-dirt', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'dirt'],
-    layout: { 'line-join': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W, 'line-dasharray': hd(dashDirt) } });
-  map.addLayer({ id: 'surf-halo-single', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'single'],
+  const dashOf = { sealed: null, dirt: dashDirt, single: dashSingle };
+  // dashes are square-ended (butt caps) — only the continuous sealed line gets round ends
+  const capOf = { sealed: { 'line-join': 'round', 'line-cap': 'round' }, dirt: { 'line-join': 'round' },
+    single: { 'line-join': 'round' } };
+  const sf = (s, st) => ['all', ['==', ['get', 's'], s], ['==', ['get', 'state'], st]];
+  const dashed = (base, d) => d ? { ...base, 'line-dasharray': d } : base;
+  // casing is CONTINUOUS by default — dash gaps in the core read as casing colour
+  // (Grant's mock-up). gapStyle 'clear' restores dashed casing = transparent gaps.
+  const caseDashOf = s => ADV('gapStyle') === 'clear' && dashOf[s] ? caseDash(dashOf[s]) : null;
+  /* progress ladder, bottom→top: travelled (grey, reduced dark case) → missed
+     (half-strength colour, NO case — casing is the exclusive route-ahead signal)
+     → remaining (full colour, cased). Patterns survive every state. */
+  for (const s of ['sealed', 'dirt', 'single'])
+    map.addLayer({ id: 'surf-done-case-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'done'), layout: capOf[s],
+      paint: dashed({ 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() }, caseDashOf(s)) });
+  for (const s of ['sealed', 'dirt', 'single'])
+    map.addLayer({ id: 'surf-done-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'done'), layout: capOf[s],
+      paint: dashed({ 'line-color': ADV('colDone'), 'line-opacity': ADV('progDoneOp'), 'line-width': coreW() }, dashOf[s]) });
+  for (const s of ['sealed', 'dirt', 'single'])
+    map.addLayer({ id: 'surf-miss-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'miss'), layout: capOf[s],
+      paint: dashed({ 'line-color': ['get', 'c'], 'line-opacity': ADV('progMissOp'), 'line-width': coreW() }, dashOf[s]) });
+  for (const s of ['sealed', 'dirt', 'single']) // just-ridden tail — bright, uncased, hugs the marker
+    map.addLayer({ id: 'surf-recent-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'recent'), layout: capOf[s],
+      paint: dashed({ 'line-color': ['get', 'c'], 'line-opacity': ADV('progRecentOp'), 'line-width': coreW() }, dashOf[s]) });
+  map.addLayer({ id: 'sel-case', type: 'line', source: 'selTrack',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('haloOp'), 'line-width': HALO_W, 'line-dasharray': hd(dashSingle) } });
-  map.addLayer({ id: 'surf-sealed', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'sealed'],
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W } });
-  map.addLayer({ id: 'surf-dirt', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'dirt'],
-    layout: { 'line-join': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W, 'line-dasharray': dashDirt } });
-  map.addLayer({ id: 'surf-single', type: 'line', source: 'selSurf', filter: ['==', ['get', 's'], 'single'],
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-width': SURF_W, 'line-dasharray': dashSingle } });
+    paint: { 'line-color': caseColor(), 'line-width': totalW() } });
+  for (const s of ['sealed', 'dirt', 'single'])
+    map.addLayer({ id: 'surf-case-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'rem'), layout: capOf[s],
+      paint: dashed({ 'line-color': caseColor(), 'line-width': totalW() }, caseDashOf(s)) });
+  for (const s of ['sealed', 'dirt', 'single'])
+    map.addLayer({ id: 'surf-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'rem'), layout: capOf[s],
+      paint: dashed({ 'line-color': ['get', 'c'], 'line-width': coreW() }, dashOf[s]) });
   map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ADV('colRoute'),
-      'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 4] } });
-  map.addLayer({ id: 'sel-chevrons', type: 'symbol', source: 'selTrack',
-    layout: { 'symbol-placement': 'line', 'symbol-spacing': ADV('chevGap'), 'text-field': '›',
-      'text-size': Math.max(1, ADV('chevSize')), 'text-font': ['Noto Sans Medium'], 'text-keep-upright': false,
-      'text-allow-overlap': true, 'text-rotation-alignment': 'map',
-      visibility: ADV('chevSize') > 0 ? 'visible' : 'none' },
-    paint: { 'text-color': ADV('chevCol'),
-      'text-halo-color': 'rgba(255,255,255,0.9)', 'text-halo-width': 1.4 } }); // halo keeps arrows legible over grade colours
+    paint: { 'line-color': ADV('colRoute'), 'line-width': coreW() } });
+  /* direction Vs: case-coloured overlay glyphs along the line (the cutout look
+     without the cutout — reads on solid, dashed and dotted alike). They follow the
+     casing of their state, so travelled sections dim automatically. */
+  const dirLayout = () => ({ 'symbol-placement': 'line', 'symbol-spacing': ADV('chevGap'), 'text-field': '›',
+    'text-size': Math.max(1, ADV('chevSize')), 'text-font': ['Noto Sans Medium'], 'text-keep-upright': false,
+    'text-allow-overlap': true, 'text-rotation-alignment': 'map',
+    visibility: ADV('chevSize') > 0 ? 'visible' : 'none' });
+  map.addLayer({ id: 'dir-vs-done', type: 'symbol', source: 'selSurf',
+    filter: ['match', ['get', 'state'], ['done', 'recent'], true, false],
+    layout: dirLayout(), paint: { 'text-color': ADV('colDoneCase'), 'text-opacity': ADV('progDoneOp') } });
+  map.addLayer({ id: 'dir-vs-rem', type: 'symbol', source: 'selSurf', filter: ['==', ['get', 'state'], 'rem'],
+    layout: dirLayout(), paint: { 'text-color': caseColor() } });
+  /* slope chevrons: point uphill, casing colour, only on the route ahead —
+     completed climbs stop shouting (features are built per progress state) */
+  map.addSource('slopeChev', { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'slope-chevs', type: 'symbol', source: 'slopeChev',
+    layout: { 'text-field': ['case', ['==', ['get', 'sev'], 2], '^\n^', '^'],
+      'text-size': Math.max(1, ADV('slopeSize')), 'text-font': ['Noto Sans Medium'],
+      'text-rotate': ['get', 'rot'], 'text-rotation-alignment': 'map', 'text-line-height': 0.7,
+      'text-allow-overlap': true, 'text-ignore-placement': true,
+      visibility: ADV('slopeSize') > 0 ? 'visible' : 'none' },
+    paint: { 'text-color': caseColor() } });
   map.addLayer({ id: 'alert-dots', type: 'circle', source: 'alerts', minzoom: 12.5,
     filter: ['!', ['get', 'removed']], // greyed-out deletions only show in edit mode
     paint: { 'circle-radius': ['case', ['==', ['get', 'k'], 'turn'], 4.5, 8],
@@ -1869,7 +2007,10 @@ function maskedHeatData() {
 function refreshMapData() {
   if (!mapReady) return;
   const heat = maskedHeatData();
-  map.getSource('heat').setData(heat.keep);
+  // archived local rides join the bundle heat as 'own' class — ridden trails accumulate on-device
+  map.getSource('heat').setData(!S.rides.length ? heat.keep : { type: 'FeatureCollection',
+    features: heat.keep.features.concat(S.rides.map(r => ({ type: 'Feature', properties: { class: 'own' },
+      geometry: { type: 'LineString', coordinates: r.pts } }))) });
   map.getSource('heatU').setData(heat.under);
   map.getSource('tracksOther').setData({ type: 'FeatureCollection',
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
@@ -1889,69 +2030,100 @@ function refreshMapData() {
     if (ov) for (const a of ov.added) cueFeats.push(cueFeat(a, false, true));
   } else if (trk && trk.alerts) for (const a of trk.alerts) cueFeats.push(cueFeat(a, false, false));
   map.getSource('alerts').setData({ type: 'FeatureCollection', features: cueFeats });
-  // surface segments: consecutive same-surface runs of the resampled track (unmapped = dirt,
-  // the safe guess out there). End point shared with the next run so the line never gaps.
-  // Each run also carries its colour: the steepness grade band when steepness is on
-  // (colour = steepness, pattern = surface), else the flat route colour.
+  refreshRouteFeatures();
+}
+/* progress class of each track sample, from the merged travelled spans:
+   'recent' inside a span within recentM of the rider (mid-ride only — the bright
+   tail linking the marker to the history) · 'done' inside a span · 'miss' in a
+   gap between spans (skipped, then rejoined past) · 'rem' ahead of the last span
+   and behind the first. Monotonic walk — one closure per pass. */
+function progClassAt(trk) {
+  const p = S.prog, sp = (p && p.track === trk.id && p.spans) || [];
+  if (!sp.length) return () => 'rem';
+  const ns = S.navState;
+  const posC = S.nav && ns && ns.idx >= 0 ? trk.cum[ns.idx] : null;
+  const rM = ADV('recentM');
+  let k = 0;
+  return i => {
+    while (k < sp.length && i > sp[k][1]) k++;
+    if (k < sp.length && i >= sp[k][0])
+      return posC != null && Math.abs(posC - trk.cum[i]) <= rM ? 'recent' : 'done';
+    return k > 0 && k < sp.length ? 'miss' : 'rem';
+  };
+}
+function refreshRouteFeatures() {
+  if (!mapReady) return;
+  const trk = S.tracks[S.sel];
+  // surface segments: consecutive same-(surface × progress-class) runs of the resampled
+  // track (unmapped = dirt, the safe guess out there). End point shared with the next
+  // run so the line never gaps.
   const surfFeats = [];
   if (trk && trk.wayCls) {
     const surfOf = c => c === 1 ? 'sealed' : c === 3 ? 'single' : 'dirt';
-    const steepOn = !!(S.set.steep && trk.hasEle && trk.profile && trk.profile.length > 1);
-    const P = trk.profile;
-    let pi = 1;
-    const colAt = d => { // monotonic walk — cum only ever increases
-      if (!steepOn) return ADV('colRoute');
-      while (pi < P.length - 1 && P[pi].d < d) pi++;
-      return gradeColor(segGrade(P[pi - 1], P[pi]));
-    };
-    let s0 = 0, col0 = colAt(trk.cum[0]);
+    const cls = progClassAt(trk);
+    let s0 = 0, st0 = cls(0);
     for (let i = 1; i <= trk.n; i++) {
-      const col = i < trk.n ? colAt(trk.cum[i]) : null;
-      if (i < trk.n && surfOf(trk.wayCls[i]) === surfOf(trk.wayCls[s0]) && col === col0) continue;
+      const st = i < trk.n ? cls(i) : null;
+      if (i < trk.n && surfOf(trk.wayCls[i]) === surfOf(trk.wayCls[s0]) && st === st0) continue;
       const coords = [];
       for (let j = s0; j <= Math.min(i, trk.n - 1); j++) { const [la, lo] = toLL(trk.xy[j * 2], trk.xy[j * 2 + 1]); coords.push([lo, la]); }
-      if (coords.length > 1) surfFeats.push({ type: 'Feature', properties: { s: surfOf(trk.wayCls[s0]), c: col0 },
+      if (coords.length > 1) surfFeats.push({ type: 'Feature',
+        properties: { s: surfOf(trk.wayCls[s0]), c: ADV('colRoute'), state: st0 },
         geometry: { type: 'LineString', coordinates: coords } });
-      s0 = i; col0 = col;
+      s0 = i; st0 = st;
     }
   }
   map.getSource('selSurf').setData({ type: 'FeatureCollection', features: surfFeats });
   trk && (trk._hasSurf = surfFeats.length > 0);
-  applySteepness();
+  // direction Vs flip with the riding direction (selSurf geometry is always forward)
+  const dir = S.navState ? S.navState.dir : (trk && trk.reverse ? -1 : 1);
+  for (const l of ['dir-vs-rem', 'dir-vs-done'])
+    if (map.getLayer(l)) map.setLayoutProperty(l, 'text-rotate', dir > 0 ? 0 : 180);
+  map.getSource('slopeChev').setData({ type: 'FeatureCollection', features: slopeChevFeats(trk) });
+  applyRouteVis();
 }
-/* ---------------- steepness coloring (unsigned grade %, same ramp as Dingo web) ---------------- */
+/* uphill chevrons for steep (≥ slopeG1 %) and very steep (≥ slopeG2 %) stretches,
+   spaced slopeGap m, rotated to point uphill. Only emitted on the route ahead —
+   travelled/recent climbs are neutralised so upcoming hazards own the attention. */
+function slopeChevFeats(trk) {
+  const feats = [];
+  if (!(trk && trk.hasEle && trk.profile && trk.profile.length > 1)) return feats;
+  const g1 = ADV('slopeG1'), g2 = ADV('slopeG2'), gap = Math.max(20, ADV('slopeGap'));
+  const cls = progClassAt(trk), P = trk.profile;
+  let next = 0;
+  for (let s = 1; s < P.length; s++) {
+    const a = P[s - 1], b = P[s];
+    const g = (b.e - a.e) / Math.max(1, b.d - a.d) * 100;
+    if (Math.abs(g) < g1) { next = Math.max(next, b.d); continue; }
+    for (let d = Math.max(next, a.d); d <= b.d; d += gap) {
+      next = d + gap;
+      const i = idxAt(trk, d);
+      if (cls(i) !== 'rem') continue;
+      const j = Math.min(i + 1, trk.n - 1), h = Math.max(i - 1, 0);
+      let rot = bearing(trk.xy[h * 2], trk.xy[h * 2 + 1], trk.xy[j * 2], trk.xy[j * 2 + 1]);
+      if (g < 0) rot += 180; // downhill in track direction — uphill points back
+      const [la, lo] = toLL(trk.xy[i * 2], trk.xy[i * 2 + 1]);
+      feats.push({ type: 'Feature', properties: { sev: Math.abs(g) >= g2 ? 2 : 1, rot: Math.round(rot) },
+        geometry: { type: 'Point', coordinates: [lo, la] } });
+    }
+  }
+  return feats;
+}
+/* ---------------- grade helpers (progress-strip ramp; same ramp as Dingo web) ---------------- */
 const GRADE_BOUNDS = [4, 8, 14, 22];
 const GRADE_COLORS = ['#2ecc71', '#f1c40f', '#ff8c00', '#ff3b30', '#e040fb'];
 function gradeColor(g) { let i = 0; while (i < GRADE_BOUNDS.length && g >= GRADE_BOUNDS[i]) i++; return GRADE_COLORS[i]; }
 function segGrade(a, b) { return Math.abs(b.e - a.e) / Math.max(1, Math.abs(b.d - a.d)) * 100; }
-function applySteepness() {
+function applyRouteVis() {
   if (!mapReady || !map.getLayer('sel-core')) return;
   const trk = S.tracks[S.sel];
-  const steepOn = !!(S.set.steep && trk && trk.hasEle && trk.profile && trk.profile.length > 1);
-  // arbitration: surface patterns carry the route (with steepness colours baked into the
-  // features when both are on); sel-core covers surface-off / no-way-class tracks.
-  // Steepness rides bare — halos (the same-colour outline) only show when it's off.
+  // arbitration: surface patterns carry the route when way-class data exists;
+  // sel-core/-case cover surface-off and no-way-class tracks
   const surfOn = S.set.surf !== false && trk && trk._hasSurf;
   const vis = (l, on) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none');
-  vis('sel-core', !surfOn);
-  vis('sel-halo', !surfOn && !steepOn);
-  for (const s of ['sealed', 'dirt', 'single']) { vis('surf-' + s, surfOn); vis('surf-halo-' + s, surfOn && !steepOn); }
-  const on = steepOn && !surfOn; // line-gradient path: steepness on a plain core line
-  if (!on) { map.setPaintProperty('sel-core', 'line-gradient', null); return; }
-  const dir = S.navState ? S.navState.dir : (trk && trk.reverse ? -1 : 1);
-  const P = trk.profile, len = trk.lengthM || 1;
-  // banded step gradient over line-progress; the displayed line is reversed when dir < 0
-  const segs = [];
-  if (dir > 0) for (let i = 1; i < P.length; i++) segs.push([P[i - 1].d / len, gradeColor(segGrade(P[i - 1], P[i]))]);
-  else for (let i = P.length - 1; i >= 1; i--) segs.push([1 - P[i].d / len, gradeColor(segGrade(P[i - 1], P[i]))]);
-  const expr = ['step', ['line-progress'], segs[0][1]];
-  let lastPos = 0;
-  for (let i = 1; i < segs.length; i++) {
-    const pos = Math.min(1, Math.max(0, segs[i][0]));
-    if (segs[i][1] === expr[expr.length - 1] || pos <= lastPos) continue;
-    expr.push(pos, segs[i][1]); lastPos = pos;
-  }
-  map.setPaintProperty('sel-core', 'line-gradient', expr.length > 3 ? expr : null);
+  vis('sel-core', !surfOn); vis('sel-case', !surfOn);
+  for (const s of ['sealed', 'dirt', 'single'])
+    for (const pre of ['surf-', 'surf-case-', 'surf-done-', 'surf-done-case-', 'surf-miss-', 'surf-recent-']) vis(pre + s, surfOn);
 }
 function refreshPosLayers() {
   if (!mapReady || !S.pos) return;
@@ -2133,12 +2305,25 @@ for (const b of document.querySelectorAll('.ctl.preset')) {
   b.addEventListener('mouseup', up);
   b.addEventListener('mouseleave', () => clearTimeout(t));
 }
-document.getElementById('fitBtn').onclick = () => { fitSelected(); setFollow(false); };
-document.getElementById('followBtn').onclick = () => {
-  setFollow(!S.follow);
-  if (S.follow && S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); }
-};
-function setFollow(on) { S.follow = on; document.getElementById('followBtn').classList.toggle('active', on); }
+/* dot/square: one stateful re-centre control (merges the old ● and ▢ buttons).
+   Centred → square icon, tap = whole track. Panned away (any drag) → dot icon,
+   tap = re-centre, back to square. Same grammar on the control button and the
+   big riding button. */
+function dotSquareTap() {
+  if (!S.follow || S.dotFit) { // dot: come home, centre on me
+    S.dotFit = false; setFollow(true);
+    if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 450 }); }
+  } else { // square: zoom out to the whole track
+    S.dotFit = true; setFollow(false); fitSelected();
+  }
+}
+document.getElementById('followBtn').onclick = dotSquareTap;
+function setFollow(on) {
+  S.follow = on;
+  document.getElementById('followBtn').classList.toggle('active', on);
+  for (const id of ['followBtn', 'dotBtn']) // the icon IS the state: square = centred, dot = panned away
+    document.getElementById(id).querySelector('use').setAttribute('href', on ? '#i-square' : '#i-locate-fixed');
+}
 setFollow(true);
 
 /* ---------------- centre lock: long-press the map to pin yourself centred ----------------
@@ -2148,37 +2333,13 @@ const lockPill = document.getElementById('lockPill');
 function setLock(on) {
   S.lock = on; lockPill.classList.toggle('on', on);
   document.getElementById('dotBtn').classList.toggle('locked', on); // the dot wears the lock state
-  if (mapReady) on ? map.dragPan.disable() : (gestLocked || map.dragPan.enable());
+  if (mapReady) on ? map.dragPan.disable() : map.dragPan.enable(); // drag is otherwise always live
 }
 lockPill.onclick = () => { setLock(false); toast('Centre lock off'); };
 
-/* the dot: tap = centre on me · tap again = whole route · hold = lock-to-centre.
-   Any manual drag breaks follow (and the route view) — never fight the camera. */
-const dotBtn = document.getElementById('dotBtn');
-let dotHoldT = null, dotHeld = false;
-dotBtn.addEventListener('pointerdown', e => {
-  e.preventDefault(); dotHeld = false; clearTimeout(dotHoldT);
-  dotHoldT = setTimeout(() => {
-    dotHeld = true; vib([40]);
-    if (S.lock) { setLock(false); toast('Centre lock off'); }
-    else {
-      setLock(true); setFollow(true); S.dotFit = false;
-      if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 400 }); }
-      toast('Locked to centre — hold the dot to release');
-    }
-  }, 600);
-});
-dotBtn.addEventListener('pointerup', () => {
-  clearTimeout(dotHoldT);
-  if (dotHeld) { dotHeld = false; return; } // the hold consumed this touch
-  if (!S.follow || S.dotFit) { // come home: centre on me
-    S.dotFit = false; setFollow(true);
-    if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 450 }); }
-  } else { // already centred: show the whole route
-    S.dotFit = true; setFollow(false); fitSelected();
-  }
-});
-dotBtn.addEventListener('pointercancel', () => clearTimeout(dotHoldT));
+/* the big riding button shares the dot/square grammar; hold-to-lock is gone
+   (2026-07-17 design) — centre lock lives on the map long-press only. */
+document.getElementById('dotBtn').onclick = dotSquareTap;
 function initLockGesture() {
   const el = map.getContainer();
   let timer = null, start = null;
@@ -2454,10 +2615,17 @@ function vehVal(k) {
   if (o && o[k] != null) return o[k];
   return (VEHICLES[S.set.vehicle] || VEHICLES.enduro)[k];
 }
+/* approach chime by seconds (speed-scaled, clamped to the vehicle's far window)
+   or a fixed distance; departure chime likewise (2026-07-17 design) */
 function warnDists(ns) {
   const spd = (ns && ns.avgSpd) || vehVal('defSpd');
-  return { far: Math.min(vehVal('farMax'), Math.max(vehVal('farMin'), spd * 15)),
-    near: Math.min(vehVal('nearMax'), Math.max(vehVal('nearMin'), spd * 5)) };
+  const far = ADV('apprUnit') === 'm' ? ADV('apprM')
+    : Math.min(vehVal('farMax'), Math.max(vehVal('farMin'), spd * ADV('apprS')));
+  return { far, near: Math.min(vehVal('nearMax'), Math.max(vehVal('nearMin'), spd * 5)) };
+}
+function departDist(ns) {
+  if (ADV('departUnit') !== 's') return ADV('departM');
+  return Math.max(10, ((ns && ns.avgSpd) || vehVal('defSpd')) * ADV('departS'));
 }
 function startNav() {
   const trk = S.tracks[S.sel]; // undefined → free-ride: live position, speed & compass, no cues/off-track/progress
@@ -2467,8 +2635,13 @@ function startNav() {
   if (S.set.orient === 'oriented' || (S.set.compassAuto || 'turns') !== 'off') enableCompass(true);
   // a new route (or a free ride) starts a fresh backtrack trail; re-starting the same one keeps the thread
   const trailKey = trk ? trk.id : '__free__';
-  if (S.trailTrack !== trailKey) { S.trail = []; trailLast = null; trailDirty = true; refreshTrail(); }
+  if (S.trailTrack !== trailKey) { S.trail = []; trailLast = null; trailDirty = true; refreshTrail(); rideSessionId = null; }
   S.trailTrack = trailKey;
+  // progress spans share the breadcrumb lifecycle: re-starting the same track resumes
+  // the ride; anything else starts fresh
+  if (!S.prog || S.prog.track !== trailKey) { S.prog = { track: trailKey, spans: [] }; progDirty = true; }
+  S.prog.prevIdx = null;
+  refreshRouteFeatures();
   closePanel(); // START lives in the ☰ panel now
   if (trk && !trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
   // start in the direction the rider picked (reverse toggle); auto-voting can still correct it if
@@ -2491,7 +2664,7 @@ function startNav() {
   document.getElementById('gloveBtn').classList.add('on');
   setHold(null);
   placeProgress(); drawProgress(true);
-  const nb = document.getElementById('navBtn'); nb.textContent = 'STOP'; nb.classList.add('stop'); nb.disabled = false;
+  const nb = document.getElementById('navBtn'); nb.textContent = 'Stop'; nb.classList.add('stop'); nb.disabled = false;
   if (S.set.wake) requestWake();
   if (fsOK && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
   if (!S.demo) startGPS();
@@ -2513,11 +2686,13 @@ function stopNav() {
   setHold(null); setLock(false);
   closeGlove();
   placeProgress();
-  const nb = document.getElementById('navBtn'); nb.textContent = 'START'; nb.classList.remove('stop');
+  const nb = document.getElementById('navBtn'); nb.textContent = 'Start'; nb.classList.remove('stop');
   updateBottomBar(); // refresh name/hint (esp. after a free ride)
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   // leave GPS running so the location dot stays on the map after navigation ends
   releaseWake(); stopDemo();
+  flushProg(); // travelled/missed spans stay on the map for post-ride review
+  archiveRide(); // the ridden path joins the own-rides heat + GPX archive
 }
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
 // START/STOP is one plain-tap tile in the ☰ grid — the two-tap path (☰ → tile) is the
@@ -2561,12 +2736,14 @@ function onFix(lat, lon, acc, speed, heading) {
   if (near.d < ADV('onM') && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); }
   if (ns.off) {
     const bn = document.getElementById('banner');
-    bn.textContent = 'OFF TRACK · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
+    bn.textContent = 'Off track · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
     if (t - ns.lastOffBeep > 30e3) { BEEP.off(); ns.lastOffBeep = t; }
     prog.classList.add('offtrack'); // strip dims, labels freeze — no fake ETA off-route
+    if (S.prog) S.prog.prevIdx = null; // the sequence index freezes — the skipped span will read as missed
     ns.confirmAt = null;            // wandered off after the turn — nothing to congratulate
     ns.cdOn = false; setHud(null); return;
   }
+  progMark(trk, near.idx);
 
   const s = trk.cum[near.idx];
   const dts = ns.lastFixT ? Math.min(5, (t - ns.lastFixT) / 1000) : 0;
@@ -2591,12 +2768,13 @@ function onFix(lat, lon, acc, speed, heading) {
     // if it actually alerted (re-armed / never-approached cues stay quiet)
     const p = ns.lastNext, st = ns.alertStates.get(p);
     // st.done = confirmed this arming — direction-vote wobble at a hairpin apex must not re-confirm
-    if (st && !st.near && !st.done) { st.done = true; ns.confirmAt = ns.dir > 0 ? p.at + 30 : p.at - 30; }
+    if (st && !st.near && !st.done) { st.done = true;
+      const dd = departDist(ns); ns.confirmAt = ns.dir > 0 ? p.at + dd : p.at - dd; }
   }
   ns.lastNext = next;
   if (ns.confirmAt != null && (ns.dir > 0 ? s >= ns.confirmAt : s <= ns.confirmAt)) {
     ns.confirmAt = null; flashCommit();
-    if (S.set.confirm) BEEP.back();
+    if (S.set.confirm) BEEP.done(); // departure chime: turn completed, carry on
   }
   ns.approach = !!next && dTo <= Math.max(farM * ADV('apprMul'), ADV('apprFloor')); // cruiseZoom: frame the turn, release any hold
   autoCompass();
@@ -2609,15 +2787,14 @@ function onFix(lat, lon, acc, speed, heading) {
     let st = ns.alertStates.get(next); if (!st) ns.alertStates.set(next, st = { far: true, near: true });
     if (dTo > farM + 80) { st.far = true; st.near = true; st.done = false; } // re-arm on repeat laps
     const k = kindOf(next);
-    if (dTo <= farM && dTo > nearM && st.far) { st.far = false; nextDanger ? BEEP.danger() : BEEP.far(); }
+    let ty = next.type; if (ns.dir < 0) ty = ty === 'left' ? 'right' : 'left';
+    // deep tone(s) on approach, high tone(s) at the turn — count carries the direction
+    if (dTo <= farM && dTo > nearM && st.far) { st.far = false; nextDanger ? BEEP.danger() : BEEP.appr(ty); }
     if (dTo <= nearM && st.near) {
       st.near = false; st.far = false;
       if (k === 'danger') BEEP.danger();
       else if (k !== 'turn') BEEP.mark(); // obstacle / creek / gate: one neutral bark
-      else {
-        let ty = next.type; if (ns.dir < 0) ty = ty === 'left' ? 'right' : 'left';
-        ty === 'left' ? BEEP.left() : ty === 'straight' ? BEEP.straight() : BEEP.right(); // one beep right, two left
-      }
+      else ty === 'straight' ? BEEP.straight() : BEEP.now(ty);
     }
   }
 }
@@ -2634,17 +2811,18 @@ function setHud(alert, dTo, dir, farM) {
   const win = Math.max((farM || 160) * ADV('apprMul'), ADV('apprFloor'));
   const show = !!alert && dTo <= win;
   box.style.visibility = show || box.classList.contains('commit') ? '' : 'hidden';
-  if (!show) { fill.style.width = '0'; S._turnCue = null; updateBigArrows(); renderMain(); return; }
+  if (!show) { fill.style.width = '0'; S._turnCue = null; S._hudInfo = null; updateBigArrows(); renderMain(); return; }
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
   S._turnCue = type === 'left' || type === 'right' ? type : null; updateBigArrows(); renderMain(); // side arrows are turns-only
   const icons = { left: 'corner-up-left', right: 'corner-up-right', straight: 'arrow-up',
     danger: 'triangle-alert', obstacle: 'construction', gate: 'fence', creek: 'waves' };
-  const labels = { left: 'turn left', right: 'turn right', straight: 'straight ahead',
-    danger: 'DANGER !!!', obstacle: 'obstacle', gate: 'gate', creek: 'creek crossing' };
+  const labels = { left: 'Turn left', right: 'Turn right', straight: 'Straight ahead',
+    danger: 'DANGER !!!', obstacle: 'Obstacle', gate: 'Gate', creek: 'Creek crossing' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
   const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
   const ontoTxt = onto && onto !== from ? ' · onto ' + ((dir > 0 && alert.name) || onto) : '';
+  S._hudInfo = { alert, type, dir };
   // north-up: rotate the arrow to the turn's actual exit bearing; course-up: flat left/right
   const isTurn = type === 'left' || type === 'right' || type === 'straight';
   if (isTurn && S.set.orient === 'north' && alert.outBrg != null) {
@@ -2654,9 +2832,31 @@ function setHud(alert, dTo, dir, farM) {
     setIc(arrow, icons[type] || 'arrow-up'); arrow.className = type; arrow.style.transform = '';
   }
   distEl.innerHTML = (dTo >= 995 ? (dTo / 1000).toFixed(1) + ' <small>km</small>' : Math.round(dTo / 5) * 5 + ' <small>m</small>');
-  typeEl.textContent = (labels[type] || 'turn') + ontoTxt;
+  typeEl.textContent = Date.now() < hudExpandT ? instrText(alert, type, dir)
+    : (labels[type] || 'turn') + ontoTxt;
   fill.style.width = Math.max(0, Math.min(100, dTo / win * 100)) + '%'; // drains to zero at the turn
 }
+/* full spoken-style instruction, mixed case: named road wins, else the surface you
+   turn onto ("Left on to dirt" when leaving sealed), else just the direction */
+const SURF_WORD = { road: 'sealed road', 'fire trail': 'dirt', singletrack: 'Single Track' };
+function instrText(alert, type, dir) {
+  const dirW = type === 'left' ? 'Left' : 'Right';
+  const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
+  const name = dir > 0 && alert.name;
+  if (name) return dirW + ' on to ' + name;
+  if (onto && onto !== from) return dirW + ' on to ' + (SURF_WORD[onto] || onto);
+  return dirW;
+}
+// tap the turn strip → the instruction expands for ~4 s, then back to compact
+let hudExpandT = 0;
+document.getElementById('hudBox').onclick = () => {
+  if (!S._hudInfo) return;
+  hudExpandT = Date.now() + 4000;
+  const box = document.getElementById('hudBox');
+  box.classList.add('expand');
+  document.getElementById('hudType').textContent = instrText(S._hudInfo.alert, S._hudInfo.type, S._hudInfo.dir);
+  setTimeout(() => { if (Date.now() >= hudExpandT) box.classList.remove('expand'); }, 4100);
+};
 
 /* ---------------- progress strip ---------------- */
 const prog = document.getElementById('progress'), progCanvas = document.getElementById('progCanvas');
@@ -2742,29 +2942,24 @@ function drawProgress(force) {
       }
       if (close) { ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); }
     };
-    if (S.set.steep) {
-      // steepness ramp fill: one quad per profile segment, un-ridden remainder dimmed
-      const OP = ns.dir > 0 ? P : [...P].reverse();
-      for (let k = 1; k < OP.length; k++) {
-        const a = OP[k - 1], b = OP[k];
-        ctx.fillStyle = gradeColor(segGrade(a, b));
-        ctx.beginPath();
-        ctx.moveTo(routeX(a.d), eY(a.e)); ctx.lineTo(routeX(b.d), eY(b.e));
-        ctx.lineTo(routeX(b.d), h); ctx.lineTo(routeX(a.d), h); ctx.closePath(); ctx.fill();
-      }
-      ctx.fillStyle = 'rgba(14,18,22,.6)'; ctx.fillRect(posX, 0, w - posX, h);
-    } else {
-      tracePath(true); ctx.fillStyle = '#26313d'; ctx.fill();
-      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, posX, h); ctx.clip();
-      tracePath(true); ctx.fillStyle = 'rgba(0,229,255,.4)'; ctx.fill(); ctx.restore();
+    // steepness ramp fill (the strip keeps the grade ramp — the route line no
+    // longer colours by grade): one quad per profile segment, un-ridden remainder dimmed
+    const OP = ns.dir > 0 ? P : [...P].reverse();
+    for (let k = 1; k < OP.length; k++) {
+      const a = OP[k - 1], b = OP[k];
+      ctx.fillStyle = gradeColor(segGrade(a, b));
+      ctx.beginPath();
+      ctx.moveTo(routeX(a.d), eY(a.e)); ctx.lineTo(routeX(b.d), eY(b.e));
+      ctx.lineTo(routeX(b.d), h); ctx.lineTo(routeX(a.d), h); ctx.closePath(); ctx.fill();
     }
+    ctx.fillStyle = 'rgba(14,18,22,.6)'; ctx.fillRect(posX, 0, w - posX, h);
     tracePath(false); ctx.strokeStyle = '#55677a'; ctx.lineWidth = 1; ctx.stroke();
     let pi = Math.max(0, Math.min(N - 1, Math.round(sRaw / len * (N - 1))));
     dotY = eY(P[pi].e);
   } else {
     const yC = h / 2;
     ctx.fillStyle = '#26313d'; ctx.fillRect(0, yC - 2.5, w, 5);
-    ctx.fillStyle = '#00e5ff'; ctx.fillRect(0, yC - 2.5, posX, 5);
+    ctx.fillStyle = ADV('colRoute'); ctx.fillRect(0, yC - 2.5, posX, 5);
   }
   if (trk.alerts) for (const a of trk.alerts) {
     const x = routeX(a.at);
@@ -2788,7 +2983,9 @@ function drawCountdown(ctx, w, h, ns) {
   const frac = Math.max(0, Math.min(1, d / act));
   const near = d <= (ns.cdNear || 0);
   ctx.fillStyle = '#26313d'; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = near ? '#ffb020' : '#00e5ff'; ctx.fillRect(w - frac * w, 0, frac * w, h);
+  // canvas can't read CSS vars — mirror the day/night accent swap by hand
+  ctx.fillStyle = near ? '#ffb020' : (document.body.classList.contains('daymode') ? '#007AFF' : '#00e5ff');
+  ctx.fillRect(w - frac * w, 0, frac * w, h);
   let txt;
   if (S.set.countUnit === 's') {
     const spd = S.pos && S.pos.speed > 0.5 ? S.pos.speed : null;
@@ -2833,6 +3030,11 @@ function renderMain() {
   }
 }
 /* giant side arrows: solid = upcoming turn on that side; flashing = that indicator is on */
+function applyArrowStyle() { // giant-arrow fill/surround from the registry, via CSS vars
+  const r = document.documentElement.style;
+  r.setProperty('--arrowFill', ADV('arrowFill')); r.setProperty('--arrowOp', ADV('arrowOp'));
+  r.setProperty('--arrowEdge', ADV('arrowEdge')); r.setProperty('--arrowEdgeW', ADV('arrowEdgeW'));
+}
 function updateBigArrows() {
   const L = document.getElementById('bigArrowL'), R = document.getElementById('bigArrowR');
   const live = S.set.varg && varg.state === 'on';
@@ -2851,8 +3053,9 @@ function modePing() {
   const squarish = Math.max(innerWidth, innerHeight) / Math.min(innerWidth, innerHeight) < 1.35;
   if (squarish) modePing.t = setTimeout(() => mb.classList.add('fade'), 4000);
 }
-/* pinch/drag are stop-and-manipulate: disabled above walking speed (with hysteresis
-   so GPS jitter can't flap them). A clean tap still lands — that's TURN MODE. */
+/* finger-zoom is stop-and-manipulate: disabled above walking speed (with hysteresis
+   so GPS jitter can't flap it). Dragging to look around stays live at any speed
+   (2026-07-17 grammar) — a drag just flips the dot/square to dot. */
 let gestLocked = false;
 function applyMoveGestures() {
   if (!mapReady) return;
@@ -2860,28 +3063,35 @@ function applyMoveGestures() {
   const off = S.nav && (gestLocked ? spd > 1.0 : spd > 2.0);
   if (off === gestLocked) return;
   gestLocked = off;
-  if (off) { map.dragPan.disable(); map.touchZoomRotate.disable(); map.doubleClickZoom.disable(); }
-  else {
-    if (!S.lock) map.dragPan.enable();
-    map.touchZoomRotate.enable(); map.doubleClickZoom.enable();
-  }
+  if (off) { map.touchZoomRotate.disable(); map.doubleClickZoom.disable(); }
+  else { map.touchZoomRotate.enable(); map.doubleClickZoom.enable(); }
 }
 
 /* ---------------- TURN MODE ----------------
-   Unmarked intersection, one clean tap on the map: snap zoom in, compass-up to the
-   heading, rider low-third — resolve which fork is the track. MARK TURN drops a point.
-   Tap a point = remove it; tap elsewhere right after = it re-places there. Second tap
-   on empty map (or riding ~60 m past the junction) returns to the previous zoom.
+   Unmarked intersection, double-tap the map: snap zoom in, compass-up to the
+   heading, rider low-third — resolve which fork is the track. Double-tap again
+   (or ride ~60 m past the junction) returns to the riding zoom.
+   MARK TURN is two-step: press to arm, then tap the track to place (a stray tap
+   costs one tap — tap a point to remove it). Tap elsewhere right after removing
+   = the point re-places there (move = delete + place).
    Turn points ARE cues: they ride the existing overlay system, anchored to geometry —
    every pass of every analysed track sharing the segment gets the point. */
+const markTurnBtn = document.getElementById('markTurn');
+function setMarkArm(on) {
+  if (S.turn) S.turn.arming = on;
+  markTurnBtn.textContent = on ? 'Tap track to choose' : 'Add mark';
+  markTurnBtn.classList.toggle('armed', on);
+}
 function enterTurnMode() {
   if (S.turn || !mapReady || !S.pos) return;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
   // remember the target zoom: followCamera keeps re-easing while we move, and each
   // ease without a zoom would freeze the interrupted entry animation mid-flight
   S.turn = { prevZoom: map.getZoom(), zoom: Math.max(16.5, zoomForSpan(presetSpan('min'), la)),
-    ax: S.pos.x, ay: S.pos.y, removed: null };
+    ax: S.pos.x, ay: S.pos.y, removed: null, arming: false };
   document.body.classList.add('turnmode');
+  setMarkArm(false);
+  setFollow(true); S.dotFit = false; // entering centres you — the dot/square shows square
   const brg = S.courseBearing != null ? S.courseBearing : (S.pos.heading || 0);
   map.easeTo({ center: [lo, la], zoom: S.turn.zoom,
     bearing: brg, offset: [0, Math.round(innerHeight * 0.18)], duration: 450 });
@@ -2906,8 +3116,13 @@ function rideTap(lngLat) {
   if (!S.turn) {
     // a direct tap on a point outside turn mode says "this turn is obvious" — remove it,
     // and the auto-zoom it was driving releases with it
-    if (hit) { removeTurnPointAt(hit.x, hit.y); toast('Turn point removed'); vib([60]); return; }
-    enterTurnMode(); return;
+    if (hit) { removeTurnPointAt(hit.x, hit.y); toast('Turn point removed'); vib([60]); }
+    return; // empty taps do nothing — TURN MODE is a double-tap
+  }
+  if (S.turn.arming) { // ADD MARK armed — the tapped spot opens the kind picker
+    if (nearestPass(x, y)) { setMarkArm(false); openMarkPicker(x, y); }
+    else toast('No track there — tap on the route');
+    return;
   }
   if (hit) {
     S.turn.removed = true;
@@ -2918,17 +3133,13 @@ function rideTap(lngLat) {
   if (S.turn.removed) { // move = delete + place
     if (addTurnPointAt(x, y)) { S.turn.removed = null; toast('Turn point moved'); vib([60]); }
     else toast('No track there — tap on the route');
-    return;
   }
-  // tap on the track with no point there: pick what kind of mark goes here
-  if (nearestPass(x, y)) { openMarkPicker(x, y); return; }
-  exitTurnMode(); // second tap on empty map
+  // empty tap otherwise: nothing — double-tap leaves turn mode
 }
-document.getElementById('markTurn').onclick = () => {
-  if (!S.pos) return;
-  const n = addTurnPointAt(S.pos.x, S.pos.y); // one glove-tap = plain turn; the picker is for edit mode
-  if (n) { toast('Turn marked — queued for the pack'); vib([60]); }
-  else toast('No analysed track here to attach a turn to');
+markTurnBtn.onclick = () => {
+  if (!S.turn) return;
+  setMarkArm(!S.turn.arming);
+  toast(S.turn.arming ? 'Tap the track to choose a mark' : 'Placement cancelled');
 };
 /* nearest visible turn point (any analysed track) within R metres */
 function findTurnPointNear(x, y, R) {
@@ -3193,6 +3404,86 @@ setInterval(() => {
   idb.put({ id: 'trail', kind: 'trail', trackId: S.trailTrack || '', pts: S.trail }).catch(() => {});
 }, 60000);
 
+/* ---------------- route progress: sequence-index travelled spans ----------------
+   Travelled = merged sample-index ranges actually ridden on-track. A stretch only
+   counts when consecutive on-track fixes are sequence-continuous (≤ progContM of
+   route between them); off-track periods and index leaps at crossings leave a gap,
+   which renders as 'miss' once riding continues past it. Survives STOP for
+   post-ride review; a different track starts fresh (breadcrumb lifecycle). */
+let progDirty = false, progRefT = null;
+function progMark(trk, idx) {
+  const p = S.prog;
+  if (!p || p.track !== trk.id || idx < 0) return;
+  const prev = p.prevIdx; p.prevIdx = idx;
+  if (prev != null && idx === prev) return;
+  if (prev == null || Math.abs(trk.cum[idx] - trk.cum[prev]) > ADV('progContM'))
+    progAdd(p, idx, idx); // fresh touch-down — the unridden stretch behind stays unmarked
+  else progAdd(p, Math.min(prev, idx), Math.max(prev, idx));
+  progDirty = true;
+  if (!progRefT) progRefT = setTimeout(() => { progRefT = null; refreshRouteFeatures(); }, 1500);
+}
+function progAdd(p, lo, hi) { // insert-merge; spans stay sorted and disjoint
+  const sp = p.spans;
+  let i = 0; while (i < sp.length && sp[i][1] < lo - 1) i++;
+  let j = i;
+  while (j < sp.length && sp[j][0] <= hi + 1) { lo = Math.min(lo, sp[j][0]); hi = Math.max(hi, sp[j][1]); j++; }
+  sp.splice(i, j - i, [lo, hi]);
+}
+function flushProg() {
+  if (!S.prog) return;
+  progDirty = false;
+  idb.put({ id: 'prog', kind: 'prog', track: S.prog.track || '', spans: S.prog.spans }).catch(() => {});
+}
+setInterval(() => { if (progDirty) flushProg(); }, 60000);
+
+/* ---------------- ride archive: STOP → simplified breadcrumb → own-rides heat ----------------
+   Every finished ride joins the local rides store and paints through the existing
+   heat layers as 'own' orange — trails you've actually ridden accumulate on the
+   device with no Dingo round-trip. One record per ride session: re-stopping the
+   same continuing trail updates the same record instead of duplicating it. */
+let rideSessionId = null;
+function simplifyLL(pts, tolM) { // Douglas-Peucker on the local-metres projection
+  const xy = pts.map(p => toXY(p[1], p[0]));
+  const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    const [ax, ay] = xy[a], [bx, by] = xy[b];
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1;
+    let mi = -1, md = tolM;
+    for (let i = a + 1; i < b; i++) {
+      const t = Math.max(0, Math.min(1, ((xy[i][0] - ax) * dx + (xy[i][1] - ay) * dy) / L2));
+      const d = Math.hypot(xy[i][0] - (ax + t * dx), xy[i][1] - (ay + t * dy));
+      if (d > md) { md = d; mi = i; }
+    }
+    if (mi > 0) { keep[mi] = 1; stack.push([a, mi], [mi, b]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+function archiveRide() {
+  if (!S.trail || S.trail.length < 10) return;
+  const pts = simplifyLL(S.trail, ADV('rideSimpM'));
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) { const [ax, ay] = toXY(pts[i - 1][1], pts[i - 1][0]), [bx, by] = toXY(pts[i][1], pts[i][0]); len += Math.hypot(bx - ax, by - ay); }
+  if (len < 300) return; // parking-lot shuffles don't make the map
+  if (!rideSessionId) rideSessionId = 'ride-' + Date.now();
+  const trk = S.tracks[S.sel];
+  const rec = { id: rideSessionId, kind: 'ride', ts: Date.now(), pts,
+    name: (trk ? trk.name : 'Free ride') + ' — ' + new Date().toLocaleDateString('en-CA') }; // local YYYY-MM-DD
+  const at = S.rides.findIndex(r => r.id === rec.id);
+  at >= 0 ? S.rides[at] = rec : S.rides.push(rec);
+  while (S.rides.length > 50) { const old = S.rides.shift(); idb.del(old.id).catch(() => {}); } // cap the archive
+  idb.put(rec).catch(() => {});
+  refreshMapData(); // the new line joins the own-rides heat immediately
+}
+function ridesGPX() {
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const trks = S.rides.map(r => '<trk><name>' + esc(r.name) + '</name><trkseg>'
+    + r.pts.map(p => '<trkpt lat="' + p[1].toFixed(6) + '" lon="' + p[0].toFixed(6) + '"></trkpt>').join('')
+    + '</trkseg></trk>').join('\n');
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="DingoNav" xmlns="http://www.topografix.com/GPX/1/1">\n' + trks + '\n</gpx>';
+}
+
 /* ---------------- glove button + overlay (huge tiles for gloved hands) ---------------- */
 const gloveBtn = document.getElementById('gloveBtn'), gloveOverlay = document.getElementById('gloveOverlay');
 let gloveT = null;
@@ -3288,11 +3579,14 @@ function startDemo() {
   const trk = S.tracks[S.sel]; if (!trk) { toast('Select a track first'); return; }
   stopDemo();
   stopGPS(); // real GPS would fight the simulated fixes
-  let d = 0;
+  let d = 0, tick = 0;
   const SPEED = 8.5; // m/s ≈ 30 km/h
   S.demo = setInterval(() => {
     if (window.__demoJump != null) { d = window.__demoJump; window.__demoJump = null; } // dev: jump along the route
     d += SPEED;
+    // simulate Stark mode changes so the digit, flash card and tap-to-replay work off the bike
+    if (++tick % 25 === 1) { const m = 1 + (((tick / 25) | 0) % 5);
+      vargApplyState({ mode: m, hp: 20 + m * 12, regen: Math.max(0, 100 - m * 18), tc: Math.max(0, 100 - m * 15) }); }
     if (d >= trk.lengthM) { toast('Demo finished'); stopNav(); return; }
     const i = idxAt(trk, d);
     const jitter = () => (Math.random() - 0.5) * 6;
@@ -3363,8 +3657,11 @@ function setBaseStatus(s) { document.getElementById('baseStatus').textContent = 
 function setHillStatus(s) { document.getElementById('hillStatus').textContent = s; }
 function setStravaInfo(s) { document.getElementById('stravaInfo').textContent = s; }
 function applyStrava() {
-  if (map && map.getLayer('strava-heat'))
-    map.setLayoutProperty('strava-heat', 'visibility', S.set.strava === false ? 'none' : 'visible');
+  if (!map) return;
+  if (map.getLayer('strava-ride-heat'))
+    map.setLayoutProperty('strava-ride-heat', 'visibility', S.set.stravaRide === false ? 'none' : 'visible');
+  if (map.getLayer('strava-hike-heat'))
+    map.setLayoutProperty('strava-hike-heat', 'visibility', S.set.stravaHike === false ? 'none' : 'visible');
 }
 function applyHill() {
   if (map && map.getLayer('hillshade'))
@@ -3550,21 +3847,26 @@ async function loadBundleZip(file, ctx) {
     const blob = new Blob([entries['hillshade.pmtiles']], { type: 'application/octet-stream' });
     await idb.put({ id: 'hillshade', name: file.name.replace(/\.(dingonav|zip)$/i, '') + ' hillshade', kind: 'hillshade', blob });
   }
-  // Strava corridor tiles → IDB, keyed for the stravatile:// protocol. Track the
-  // zoom range so the raster source only requests zooms we actually shipped.
-  let zmin = 99, zmax = 0;
-  for (const path in entries) {
-    const m = path.match(/^strava\/(\d+)\/(\d+)\/(\d+)\.png$/);
-    if (!m) continue;
-    const z = +m[1];
-    zmin = Math.min(zmin, z); zmax = Math.max(zmax, z);
-    await idb.put({ id: `stravatile-${m[1]}-${m[2]}-${m[3]}`, kind: 'stravatile',
-      blob: new Blob([entries[path]], { type: 'image/png' }) });
-    stravaTiles++;
-  }
-  if (stravaTiles) {
-    await idb.put({ id: 'strava-meta', kind: 'stravameta', count: stravaTiles, zmin, zmax });
-    if (S.set.strava === undefined) { S.set.strava = true; saveSet(); } // show by default when first shipped
+  // Strava corridor tiles → IDB, split by sport (ride=blue, hike=purple), keyed
+  // for the strava{ride,hike}:// protocols. Track each zoom range so the raster
+  // source only requests zooms we actually shipped.
+  for (const [owner, setKey] of [['ride', 'stravaRide'], ['hike', 'stravaHike']]) {
+    let zmin = 99, zmax = 0, count = 0;
+    const re = new RegExp('^strava-' + owner + '/(\\d+)/(\\d+)/(\\d+)\\.png$');
+    for (const path in entries) {
+      const m = path.match(re);
+      if (!m) continue;
+      const z = +m[1];
+      zmin = Math.min(zmin, z); zmax = Math.max(zmax, z);
+      await idb.put({ id: `strava${owner}tile-${m[1]}-${m[2]}-${m[3]}`, kind: `strava${owner}tile`,
+        blob: new Blob([entries[path]], { type: 'image/png' }) });
+      count++;
+    }
+    if (count) {
+      await idb.put({ id: `strava-${owner}-meta`, kind: `strava${owner}meta`, count, zmin, zmax });
+      if (S.set[setKey] === undefined) { S.set[setKey] = true; saveSet(); } // show by default when first shipped
+      stravaTiles += count;
+    }
   }
   // Satellite (ESRI World Imagery) corridor tiles → IDB, keyed for the
   // sattile:// protocol. Selected via the "Sat" map style.
@@ -3945,6 +4247,8 @@ function vargFlashCard() { // new mode + its curve settings, ~4 s, on every mode
   clearTimeout(varg.flashT); varg.flashT = setTimeout(() => f.classList.remove('on'), 4000);
 }
 
+// tapping the resident mode digit replays the HP/Regen/TC card — same card as a mode change
+document.getElementById('vargModeBig').onclick = () => { if (varg.mode != null) vargFlashCard(); };
 function vargApplyState(st) { // single entry point for the future mode/config decoder
   for (const k of ['hp', 'regen', 'tc']) if (st[k] != null) varg[k] = st[k];
   if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; vargFlashCard(); modePing(); }
@@ -4288,7 +4592,8 @@ const SETTINGS = [
     apply: () => { S.set.codeAuto = 0; saveSet(); startFriends(); } }, // typed by hand — bundles stop overriding it
   // General
   { sec: 'map', k: 'hillshade', t: 'toggle', l: 'Terrain shading', id: 'setHill', apply: applyHill },
-  { sec: 'map', k: 'strava', t: 'toggle', l: 'Strava heatmap overlay', id: 'setStrava', apply: applyStrava },
+  { sec: 'map', k: 'stravaRide', t: 'toggle', l: 'Strava rides (blue)', id: 'setStravaRide', apply: applyStrava },
+  { sec: 'map', k: 'stravaHike', t: 'toggle', l: 'Strava hikes (purple)', id: 'setStravaHike', apply: applyStrava },
   { sec: 'ui', k: 'wake', t: 'toggle', l: 'Keep screen on while navigating', id: 'setWake',
     apply: () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); } },
   { sec: 'ui', k: 'gloveSide', t: 'toggle', l: 'Ride controls button on the right', id: 'setGloveRight',
@@ -4298,7 +4603,7 @@ const SETTINGS = [
   { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tab', id: 'setShowAdv', apply: applyShowAdv },
   // Nav
   { sec: 'nav', k: 'sound', t: 'toggle', l: 'Turn beeps', id: 'setSound', put: v => setSound(v) }, // setSound persists + syncs every mute face
-  { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Turn confirmation chirp', id: 'setConfirm' },
+  { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Departure chime (turn done)', id: 'setConfirm' },
   { sec: 'nav', k: 'vehicle', t: 'seg', l: 'Vehicle (alerts + zoom)', segId: 'vehSeg',
     opts: [['walk', 'Walk'], ['mtb', 'MTB'], ['enduro', 'Enduro'], ['adventure', 'ADV']],
     apply: () => { refreshPresets(); renderSettings('adv'); } }, // presets + adv overrides are per-vehicle
@@ -4307,7 +4612,6 @@ const SETTINGS = [
     opts: [['turns', 'Turns'], ['thresh', 'Zoom'], ['off', 'Off']] },
   { sec: 'nav', k: 'countUnit', t: 'seg', l: 'Countdown units', segId: 'cdSeg',
     opts: [['m', 'Metres'], ['s', 'Seconds']] },
-  { sec: 'nav', k: 'steep', t: 'toggle', l: 'Steepness colouring', id: 'setSteep', apply: () => { refreshMapData(); drawProgress(true); } },
   { sec: 'nav', k: 'surf', t: 'toggle', l: 'Road-surface patterns', id: 'setSurf', apply: () => refreshMapData() },
   { sec: 'nav', k: 'trail', t: 'toggle', l: 'Backtrack trail', id: 'setTrail',
     apply: () => { if (mapReady) map.setLayoutProperty('trail-dots', 'visibility', S.set.trail ? 'visible' : 'none'); } },
@@ -4333,6 +4637,14 @@ const SETTINGS = [
   { k: 'offM', t: 'range', adv: 1, l: 'Off-track beyond (m)', min: 20, max: 200, step: 5 },
   { k: 'onM', t: 'range', adv: 1, l: 'Back on within (m)', min: 10, max: 150, step: 5 },
   { k: 'beepVol', t: 'range', adv: 1, l: 'Beep volume', min: 0, max: 1, step: 0.05 },
+  { k: 'deepHz', t: 'range', adv: 1, l: 'Approach tone (Hz)', min: 200, max: 800, step: 10 },
+  { k: 'highHz', t: 'range', adv: 1, l: 'Turn tone (Hz)', min: 600, max: 1600, step: 10 },
+  { k: 'apprUnit', t: 'seg', adv: 1, l: 'Approach chime by', opts: [['s', 'Seconds'], ['m', 'Metres']] },
+  { k: 'apprS', t: 'range', adv: 1, l: 'Approach seconds before turn', min: 5, max: 40, step: 1 },
+  { k: 'apprM', t: 'range', adv: 1, l: 'Approach metres before turn', min: 50, max: 800, step: 10 },
+  { k: 'departUnit', t: 'seg', adv: 1, l: 'Departure chime by', opts: [['m', 'Metres'], ['s', 'Seconds']] },
+  { k: 'departM', t: 'range', adv: 1, l: 'Departure metres past turn', min: 10, max: 200, step: 5 },
+  { k: 'departS', t: 'range', adv: 1, l: 'Departure seconds past turn', min: 1, max: 20, step: 1 },
   { h: 'Zoom & countdown' },
   { k: 'cdDist', t: 'range', adv: 1, l: 'Countdown from (m)', min: 100, max: 1000, step: 25 },
   { h: 'Rendering & misc' },
@@ -4344,11 +4656,25 @@ const SETTINGS = [
   { k: 'dirtGap', t: 'range', adv: 1, l: 'Dirt gap length (×width)', min: 0.2, max: 8, step: 0.1 },
   { k: 'singleDash', t: 'range', adv: 1, l: 'Singletrack dot length (×width)', min: 0.05, max: 4, step: 0.05 },
   { k: 'singleGap', t: 'range', adv: 1, l: 'Singletrack gap length (×width)', min: 0.2, max: 8, step: 0.1 },
-  { k: 'haloOp', t: 'range', adv: 1, l: 'Route halo opacity', min: 0, max: 1, step: 0.05 },
-  { k: 'haloMul', t: 'range', adv: 1, l: 'Route halo width ×', min: 1.2, max: 4, step: 0.1 },
-  { k: 'chevSize', t: 'range', adv: 1, l: 'Direction arrow size (0 off)', min: 0, max: 30, step: 1 },
-  { k: 'chevGap', t: 'range', adv: 1, l: 'Direction arrow spacing', min: 30, max: 300, step: 10 },
-  { k: 'chevCol', t: 'color', adv: 1, l: 'Direction arrow colour' },
+  { k: 'routeWOut', t: 'range', adv: 1, l: 'Route width zoomed out (px)', min: 2, max: 14, step: 0.5 },
+  { k: 'routeWIn', t: 'range', adv: 1, l: 'Route width zoomed in (px)', min: 4, max: 20, step: 0.5 },
+  { k: 'coreFrac', t: 'range', adv: 1, l: 'Core share of route width', min: 0.4, max: 0.95, step: 0.01 },
+  { k: 'caseMode', t: 'seg', adv: 1, l: 'Route casing', opts: [['auto', 'Auto'], ['dark', 'Dark'], ['white', 'White']] },
+  { k: 'gapStyle', t: 'seg', adv: 1, l: 'Dash gaps', opts: [['case', 'Casing colour'], ['clear', 'See-through']] },
+  { k: 'colDone', t: 'color', adv: 1, l: 'Travelled route core' },
+  { k: 'colDoneCase', t: 'color', adv: 1, l: 'Travelled route casing' },
+  { k: 'progDoneOp', t: 'range', adv: 1, l: 'Travelled route opacity', min: 0.1, max: 1, step: 0.05 },
+  { k: 'progMissOp', t: 'range', adv: 1, l: 'Missed section opacity', min: 0.1, max: 1, step: 0.05 },
+  { k: 'progContM', t: 'range', adv: 1, l: 'Progress continuity gap (m)', min: 50, max: 400, step: 10 },
+  { k: 'recentM', t: 'range', adv: 1, l: 'Recent band length (m)', min: 0, max: 300, step: 5 },
+  { k: 'progRecentOp', t: 'range', adv: 1, l: 'Recent band opacity', min: 0.1, max: 1, step: 0.05 },
+  { k: 'rideSimpM', t: 'range', adv: 1, l: 'Ride archive simplify (m)', min: 2, max: 40, step: 1 },
+  { k: 'chevSize', t: 'range', adv: 1, l: 'Direction V size (0 off)', min: 0, max: 30, step: 1 },
+  { k: 'chevGap', t: 'range', adv: 1, l: 'Direction V spacing', min: 30, max: 300, step: 10 },
+  { k: 'slopeSize', t: 'range', adv: 1, l: 'Slope chevron size (0 off)', min: 0, max: 30, step: 1 },
+  { k: 'slopeGap', t: 'range', adv: 1, l: 'Slope chevron spacing (m)', min: 20, max: 200, step: 10 },
+  { k: 'slopeG1', t: 'range', adv: 1, l: 'Steep grade threshold (%)', min: 4, max: 20, step: 1 },
+  { k: 'slopeG2', t: 'range', adv: 1, l: 'Very steep grade threshold (%)', min: 8, max: 35, step: 1 },
   { k: 'colRoute', t: 'color', adv: 1, l: 'Route colour' },
   { k: 'colOwn', t: 'color', adv: 1, l: 'Heatmap: own rides' },
   { k: 'colOther', t: 'color', adv: 1, l: 'Heatmap: other riders' },
@@ -4356,6 +4682,10 @@ const SETTINGS = [
   { k: 'colTrail', t: 'color', adv: 1, l: 'Basemap minor trails (Trail style)' },
   { k: 'trailProm', t: 'range', adv: 1, l: 'Basemap trail width ×', min: 0.3, max: 3, step: 0.1 },
   { k: 'gpsAcc', t: 'range', adv: 1, l: 'GPS accuracy floor (m, 0 = off)', min: 0, max: 100, step: 5 },
+  { k: 'arrowFill', t: 'color', adv: 1, l: 'Turn arrow fill' },
+  { k: 'arrowOp', t: 'range', adv: 1, l: 'Turn arrow opacity', min: 0.2, max: 1, step: 0.05 },
+  { k: 'arrowEdge', t: 'color', adv: 1, l: 'Turn arrow surround' },
+  { k: 'arrowEdgeW', t: 'range', adv: 1, l: 'Turn arrow surround width (0 off)', min: 0, max: 4, step: 0.2 },
 ];
 function advGet(r) { return r.veh ? vehVal(r.k) : ADV(r.k); }
 function advSet(r, v) {
@@ -4371,35 +4701,54 @@ function advReset(r) {
 let restyleT = null;
 function advApply(k) {
   if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
+  else if (k.startsWith('arrow')) applyArrowStyle();
   else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // surface features bake the colour in
+  else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM') refreshRouteFeatures(); // baked into features
   else if (k === 'heatMask') { heatMaskCache.key = ''; refreshMapData(); } // re-clip with the new radius
   else if (k === 'colTrail' || k === 'trailProm') { clearTimeout(restyleT); restyleT = setTimeout(() => setMapStyle(S.set.mapStyle), 400); }
   else applyAdvPaint();
 }
 function applyAdvPaint() {
   if (!mapReady || !map.getLayer('sel-core')) return;
-  const m = ADV('haloMul');
-  const HW = ['interpolate', ['linear'], ['zoom'], 10, 2.5 * m, 15, 4 * m];
-  const hd = a => a.map(x => +(x / m).toFixed(2));
   map.setPaintProperty('sel-core', 'line-color', ADV('colRoute'));
-  map.setPaintProperty('sel-halo', 'line-color', ADV('colRoute'));
-  map.setPaintProperty('sel-halo', 'line-width', HW);
-  map.setPaintProperty('sel-halo', 'line-opacity', ADV('haloOp'));
+  map.setPaintProperty('sel-core', 'line-width', coreW());
+  map.setPaintProperty('sel-case', 'line-color', caseColor());
+  map.setPaintProperty('sel-case', 'line-width', totalW());
   for (const s of ['sealed', 'dirt', 'single']) {
-    map.setPaintProperty('surf-halo-' + s, 'line-width', HW);
-    map.setPaintProperty('surf-halo-' + s, 'line-opacity', ADV('haloOp'));
+    map.setPaintProperty('surf-' + s, 'line-width', coreW());
+    map.setPaintProperty('surf-case-' + s, 'line-color', caseColor());
+    map.setPaintProperty('surf-case-' + s, 'line-width', totalW());
+    map.setPaintProperty('surf-done-' + s, 'line-color', ADV('colDone'));
+    map.setPaintProperty('surf-done-' + s, 'line-opacity', ADV('progDoneOp'));
+    map.setPaintProperty('surf-done-' + s, 'line-width', coreW());
+    map.setPaintProperty('surf-done-case-' + s, 'line-color', ADV('colDoneCase'));
+    map.setPaintProperty('surf-done-case-' + s, 'line-opacity', ADV('progDoneOp'));
+    map.setPaintProperty('surf-done-case-' + s, 'line-width', totalW());
+    map.setPaintProperty('surf-miss-' + s, 'line-opacity', ADV('progMissOp'));
+    map.setPaintProperty('surf-miss-' + s, 'line-width', coreW());
+    map.setPaintProperty('surf-recent-' + s, 'line-opacity', ADV('progRecentOp'));
+    map.setPaintProperty('surf-recent-' + s, 'line-width', coreW());
   }
   const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
-  map.setPaintProperty('surf-dirt', 'line-dasharray', dashDirt);
-  map.setPaintProperty('surf-single', 'line-dasharray', dashSingle);
-  map.setPaintProperty('surf-halo-dirt', 'line-dasharray', hd(dashDirt));
-  map.setPaintProperty('surf-halo-single', 'line-dasharray', hd(dashSingle));
+  const clear = ADV('gapStyle') === 'clear';
+  for (const [s, d] of [['dirt', dashDirt], ['single', dashSingle]]) {
+    for (const pre of ['surf-', 'surf-done-', 'surf-miss-', 'surf-recent-']) map.setPaintProperty(pre + s, 'line-dasharray', d);
+    for (const pre of ['surf-case-', 'surf-done-case-']) // continuous casing unless gaps are set to clear
+      map.setPaintProperty(pre + s, 'line-dasharray', clear ? caseDash(d) : null);
+  }
   map.setPaintProperty('heat-under', 'line-opacity', ADV('heatUnderOp'));
   map.setPaintProperty('heat-under', 'line-color', clsMatch());
-  map.setLayoutProperty('sel-chevrons', 'visibility', ADV('chevSize') > 0 ? 'visible' : 'none');
-  map.setLayoutProperty('sel-chevrons', 'text-size', Math.max(1, ADV('chevSize')));
-  map.setLayoutProperty('sel-chevrons', 'symbol-spacing', ADV('chevGap'));
-  map.setPaintProperty('sel-chevrons', 'text-color', ADV('chevCol'));
+  for (const l of ['dir-vs-rem', 'dir-vs-done']) {
+    map.setLayoutProperty(l, 'visibility', ADV('chevSize') > 0 ? 'visible' : 'none');
+    map.setLayoutProperty(l, 'text-size', Math.max(1, ADV('chevSize')));
+    map.setLayoutProperty(l, 'symbol-spacing', ADV('chevGap'));
+  }
+  map.setPaintProperty('dir-vs-rem', 'text-color', caseColor());
+  map.setPaintProperty('dir-vs-done', 'text-color', ADV('colDoneCase'));
+  map.setPaintProperty('dir-vs-done', 'text-opacity', ADV('progDoneOp'));
+  map.setLayoutProperty('slope-chevs', 'visibility', ADV('slopeSize') > 0 ? 'visible' : 'none');
+  map.setLayoutProperty('slope-chevs', 'text-size', Math.max(1, ADV('slopeSize')));
+  map.setPaintProperty('slope-chevs', 'text-color', caseColor());
   for (const l of ['heat-halo', 'heat-core']) map.setPaintProperty(l, 'line-color', clsMatch());
   map.setLayoutProperty('trail-dots', 'visibility', S.set.trail !== false ? 'visible' : 'none');
 }
@@ -4421,7 +4770,9 @@ function regRow(r) {
   const idAttr = r.id ? ` id="${r.id}"` : '';
   const rstHtml = (r.adv || r.veh) ? '<span class="advRst" title="reset"><svg class="ic"><use href="#i-rotate-ccw"/></svg></span>' : '';
   if (r.t === 'toggle') {
-    row.innerHTML = `<label>${r.l}</label><span class="sw"><input type="checkbox"${idAttr}><span></span></span>`;
+    // the switch must BE a label — the checkbox is 0x0/invisible, so only native
+    // label association makes the visible slider toggle it on tap
+    row.innerHTML = `<label>${r.l}</label><label class="sw"><input type="checkbox"${idAttr}><span></span></label>`;
     const inp = row.querySelector('input');
     inp.checked = !!regGet(r);
     inp.onchange = () => regSet(r, inp.checked);
@@ -4483,6 +4834,8 @@ document.getElementById('advCopy').onclick = async () => {
   catch (e) { console.log('[tuning]', txt); toast('Clipboard blocked — tuning logged to console'); }
 };
 document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
+document.body.classList.toggle('daymode', !isNightStyle()); // boot: bar/panel scheme follows the saved map style
+applyArrowStyle();
 applyGloveSide();
 // control-button edges: left/right columns (default) or top/bottom rows
 function applyEdges() {
@@ -4561,6 +4914,15 @@ document.getElementById('cfgExportBtn').onclick = async () => {
   toast('Config exported' + (copied ? ' — file downloaded + copied to clipboard' : ' — file downloaded (clipboard blocked, logged to console)'));
 };
 document.getElementById('cfgImportBtn').onclick = () => document.getElementById('cfgInput').click();
+document.getElementById('ridesExportBtn').onclick = () => {
+  if (!S.rides.length) { toast('No archived rides yet — finish a ride first'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ridesGPX()], { type: 'application/gpx+xml' }));
+  a.download = 'dingonav-rides.gpx';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(S.rides.length + ' ride' + (S.rides.length === 1 ? '' : 's') + ' exported as GPX');
+};
 document.getElementById('cfgInput').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
@@ -4588,7 +4950,7 @@ document.getElementById('cfgPasteBtn').onclick = async () => {
 const LO_GRID = { cols: 5, rows: 6, topRes: 64, botRes: 64, edge: 10 };
 const LO_SZ = { S: 0.7, M: 1, L: 1.4 }; // legacy letter sizes — sizes are numeric multipliers now
 const LO_ELS = {
-  orientCtl: { t: 'btn' }, followBtn: { t: 'btn' }, fitBtn: { t: 'btn' }, soundCtl: { t: 'btn' },
+  orientCtl: { t: 'btn' }, followBtn: { t: 'btn' }, soundCtl: { t: 'btn' },
   presetMin: { t: 'btn' }, zoomOut: { t: 'btn' }, zoomIn: { t: 'btn' }, presetMax: { t: 'btn' },
   menuBtn: { t: 'btn', noDock: true }, // docking the way into the menu = softlock
   hudSpeed: { t: 'ro' }, vargPill: { t: 'ro' }, vargModeBig: { t: 'ro' },
@@ -4640,7 +5002,8 @@ function loUndock(id) {
 function loAnchor(id, slot) { // normal-mode placement: viewport-fraction anchors, no stored pixels
   const st = LO_ELS[id].el.style, p = loSlotXY(slot);
   loUndock(id);
-  st.position = 'fixed'; st.top = p.y + 'px'; st.bottom = 'auto';
+  // clamp into the viewport — a stale saved slot must never push chrome off-screen
+  st.position = 'fixed'; st.top = Math.max(40, Math.min(innerHeight - 40, p.y)) + 'px'; st.bottom = 'auto';
   if (p.col === 0) { st.left = LO_GRID.edge + 'px'; st.right = 'auto'; st.transform = 'translateY(-50%)'; }
   else if (p.col === LO_GRID.cols - 1) { st.right = LO_GRID.edge + 'px'; st.left = 'auto'; st.transform = 'translateY(-50%)'; }
   else { st.left = (p.col * 25) + '%'; st.right = 'auto'; st.transform = 'translate(-50%,-50%)'; }
@@ -5000,6 +5363,8 @@ async function boot() {
   }
   // backtrack trail from the last ride survives an app restart
   try { const tr = await idb.get('trail'); if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; } } catch (e) {}
+  try { const pr = await idb.get('prog'); if (pr && pr.spans) S.prog = { track: pr.track || null, spans: pr.spans, prevIdx: null }; } catch (e) {}
+  try { S.rides = (await idb.all()).filter(r => r.kind === 'ride').sort((a, b) => a.ts - b.ts); } catch (e) {}
   if (S.tracks.length && S.sel < 0) S.sel = 0;
   refreshTrackList(); refreshEmpty(); updateBottomBar();
   await initMap(); // cue analysis needs basePM, so it runs after the map boots
