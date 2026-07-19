@@ -27,13 +27,14 @@
   .maplibregl-ctrl-attrib a{color:var(--dim)!important}
 
   /* ---------- top HUD ---------- */
-  /* turn strip: one slim semi-transparent bar across the top; its amber fill
-     drains right-to-nothing as the turn point approaches */
-  #hud{position:fixed; top:0; left:0; right:0; display:none; pointer-events:none; z-index:10}
+  /* turn strip: a centred semi-transparent bar along the top, inset so it sits BETWEEN
+     the two corner buttons (N left, box right); its amber fill drains as the turn nears */
+  #hud{position:fixed; top:0; left:106px; right:106px; display:none; pointer-events:none; z-index:10}
   #hud.on{display:block}
   #hudBox{position:relative; overflow:hidden; display:flex; align-items:center; gap:18px;
     padding:calc(env(safe-area-inset-top) + 14px) 24px 14px;
-    background:rgba(14,18,22,.55); border-bottom:1px solid rgba(42,53,64,.7)}
+    background:rgba(14,18,22,.55); border:1px solid rgba(42,53,64,.7); border-top:none;
+    border-radius:0 0 18px 18px}
   #hudFill{position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,176,32,.22);
     transition:width .9s linear}
   #hudArrow{font-size:68px; line-height:1; width:84px; text-align:center; position:relative}
@@ -59,15 +60,11 @@
   #hudSpeed.on{display:block} #hudSpeed small{font-size:50px; color:var(--fg); font-weight:600}
   #hudSpeed.cd{color:var(--warn)} #hudSpeed.cd small{color:var(--warn)}
   #hudSpeed.low{color:var(--bad)}
-  /* with a route loaded the turn strip owns the very top, so drop the readouts below it */
-  body.navving.hasroute #hudSpeed{top:calc(env(safe-area-inset-top) + 118px)}
-  /* riding: the left/right control clusters own the edges — readouts + pills sit inboard of them */
-  body.navving #hudSpeed{left:112px}
-  body.navving #holdPill, body.navving #lockPill{left:116px}
-  body.navving #holdPill{top:calc(env(safe-area-inset-top) + 128px)}
-  body.navving #lockPill{top:calc(env(safe-area-inset-top) + 164px)}
-  body.navving.hasroute #holdPill{top:calc(env(safe-area-inset-top) + 272px)}
-  body.navving.hasroute #lockPill{top:calc(env(safe-area-inset-top) + 308px)}
+  /* riding: N owns the top-left corner — the speed readout sits below it, slightly inboard,
+     with the hold/lock pills stacked underneath */
+  body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 106px); left:16px}
+  body.navving #holdPill{top:calc(env(safe-area-inset-top) + 256px)}
+  body.navving #lockPill{top:calc(env(safe-area-inset-top) + 292px)}
   /* Stark Varg battery/mode pill — top-right, under the mute button while riding.
      Doubles as the BLE handoff switch: the bike allows ONE connection, so
      tap = release it to the Stark app (tuning), tap again = take it back. */
@@ -97,8 +94,8 @@
     font-variant-numeric:tabular-nums; transition:opacity .6s}
   #vargModeBig.on{display:block}
   #vargModeBig.fade{opacity:0}
-  body.navving.hasroute #vargModeBig{top:calc(env(safe-area-inset-top) + 118px)}
-  body.navving #vargModeBig{right:112px}
+  /* riding: the box button owns the top-right corner — the mode digit sits below it, slightly inboard */
+  body.navving #vargModeBig{top:calc(env(safe-area-inset-top) + 106px); right:16px}
   /* indicator telltales — big translucent glyphs across the top, same visual
      language as the speed/mode readouts. Each hidden until its bit is live, so
      nothing shows unless a blinker/beam is actually on. */
@@ -109,7 +106,7 @@
   #vargInd .blink{display:none !important} /* blinkers now show as the giant side arrows */
   #vargInd .beam{font-size:34px; letter-spacing:3px}
   #vargInd .beam.on{color:rgba(74,168,255,.82)}                    /* translucent blue */
-  body.navving #vargInd{top:calc(env(safe-area-inset-top) + 64px)}
+  body.navving #vargInd{top:calc(env(safe-area-inset-top) + 124px)} /* below the inset turn strip */
   /* giant turn arrows: up to ~¼ screen, anchored on the side of the turn — readable in
      peripheral vision. Solid = turn coming up; flashing = your indicator is on. One vocabulary. */
   /* sized and centred to the free band between the big numbers (top) and the bottom
@@ -137,7 +134,7 @@
     background:var(--bad); color:#fff; font-weight:800; font-size:20px; padding:10px 22px;
     border-radius:12px; display:none; box-shadow:0 4px 20px rgba(0,0,0,.5)}
   #banner.on{display:block}
-  #toast{position:fixed; bottom:110px; left:50%; transform:translateX(-50%); z-index:30;
+  #toast{position:fixed; bottom:calc(var(--chromeB,0px) + 116px); left:50%; transform:translateX(-50%); z-index:30;
     background:var(--panel2); border:1px solid #2a3540; color:var(--fg); font-size:15px; padding:10px 18px;
     border-radius:12px; display:none; max-width:88vw; text-align:center}
   /* one-off explainer dialog (e.g. favourite-zoom tip) */
@@ -153,23 +150,24 @@
   #dlgOk{margin-top:18px; width:100%; padding:13px; border:none; border-radius:12px;
     background:var(--accent); color:#00252b; font-size:16px; font-weight:800; cursor:pointer}
 
-  /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design) ---------- */
-  #demoPick{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+  /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design)
+     (#colourPick shares the chooser look — ☰ Track colour tile) ---------- */
+  #demoPick, #colourPick{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
     width:min(88vw,380px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
     padding:20px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
-  #demoPick.on{display:block}
-  #demoPick h4{font-size:18px; margin-bottom:14px}
+  #demoPick.on, #colourPick.on{display:block}
+  #demoPick h4, #colourPick h4{font-size:18px; margin-bottom:14px}
   .dpBtn{display:flex; flex-direction:column; gap:4px; width:100%; padding:14px; margin-bottom:10px;
     border:1px solid #2a3540; border-radius:12px; background:var(--panel2); color:var(--fg);
     font-size:16px; text-align:left; cursor:pointer}
   .dpBtn b{color:var(--accent)}
   .dpBtn span{font-size:13px; color:var(--dim)}
   .dpBtn:disabled{opacity:.4; cursor:default}
-  #dpCancel{width:100%; padding:10px; border:none; background:none; color:var(--dim); font-size:14px; cursor:pointer}
+  #dpCancel, #cpCancel{width:100%; padding:10px; border:none; background:none; color:var(--dim); font-size:14px; cursor:pointer}
   /* card sits bottom-centre, clear of the dot (right) and progress strip; NO shade —
      the map must stay touchable for the do-the-action lessons. z 27 > glove overlay's 25. */
   #trainCard{position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(env(safe-area-inset-bottom) + 118px); width:min(70vw,400px); z-index:27;
+    bottom:calc(var(--chromeB,0px) + 116px); width:min(70vw,400px); z-index:27;
     background:var(--panel); border:1px solid var(--accent); border-radius:16px; padding:14px 16px;
     display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
   #trainCard.on{display:block}
@@ -189,47 +187,59 @@
     animation:trainPulse 1.2s ease-in-out infinite}
   @keyframes trainPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.55)}}
 
-  /* ---------- side controls (two groups: nav-left, zoom-right; edges configurable) ---------- */
-  .ctlgroup{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:10;
-    display:flex; flex-direction:column; gap:8px}
-  #leftCtl{left:10px} #rightCtl{right:10px}
-  /* riding: same clusters as stopped; with a route the turn strip owns the very top,
-     so both groups drop below it (the edge readouts shift inboard to sit beside them) */
-  body.navving.hasroute .ctlgroup{top:calc(env(safe-area-inset-top) + 118px)}
-  /* edges = top/bottom: horizontal rows, left-anchored — nav group on the top edge, zoom near the bottom */
-  body.edges-tb #leftCtl, body.edges-tb #rightCtl{top:auto; bottom:auto; left:10px; right:auto;
-    transform:none; flex-direction:row}
-  body.edges-tb #leftCtl{top:calc(env(safe-area-inset-top) + 10px)}
-  body.navving.hasroute.edges-tb #leftCtl{top:calc(env(safe-area-inset-top) + 118px)}
-  body.edges-tb #rightCtl{bottom:60px}
+  /* ---------- corner controls (2026-07-19 design): N top-left, ☰ top-right, and a base
+     row along the bottom — box (whole track) · − · + · dot (centre on me). The SAME
+     chrome idle and riding; only the bottom anchor (--chromeB) moves with the bar/strip. ---------- */
   .ctl{width:54px; height:54px; border-radius:14px; background:rgba(22,28,34,.92); border:1px solid #2a3540;
     color:var(--fg); font-size:26px; display:flex; align-items:center; justify-content:center; cursor:pointer}
   .ctl:active{background:var(--panel2)}
   .ctl.active{border-color:var(--accent); color:var(--accent)}
-  /* floating controls: big for gloved hands */
-  .ctlgroup .ctl{width:88px; height:88px; border-radius:24px; font-size:40px}
-  .ctlgroup .ctl.preset{font-size:18px; font-weight:800; color:var(--dim)}
-  .ctlgroup .ctl.preset.set{color:var(--fg)}
-  #soundCtl.off{border-color:var(--bad); color:var(--bad)}
-  /* orientation, sound and the compass now live in the cluster — retire the
-     standalone rose, top-right mute and the rose's mode label */
-  #north{display:none !important} #muteBtn{display:none !important} #orientLabel{display:none !important}
-  /* riding: the clusters stay (same buttons as the stopped screen) but rest dimmed
-     like the other ride chrome; touch brings one to full strength */
-  body.navving .ctlgroup{opacity:var(--navOp,.4)}
-  body.navving .ctlgroup:active{opacity:1}
-  /* the dot/square: square = centred, tap → whole track · dot = panned, tap → re-centre */
-  #dotBtn{position:fixed; right:14px; bottom:96px; z-index:17; width:96px; height:96px; border-radius:50%;
-    background:rgba(22,28,34,.55); border:1px solid #2a3540; display:none; align-items:center;
-    justify-content:center; font-size:44px; color:var(--fg); cursor:pointer; opacity:var(--navOp,.4);
-    touch-action:none}
-  body.navving #dotBtn{display:flex}
-  #dotBtn:active{opacity:1}
+  /* corner + base buttons: big for gloved hands */
+  #orientCtl, #boxBtn, #baseRow .ctl{width:88px; height:88px; border-radius:24px; font-size:40px; flex:none}
+  #orientCtl, #boxBtn{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:16}
+  #orientCtl{left:10px} #boxBtn{right:10px}
+  #baseRow{position:fixed; left:0; right:0; bottom:calc(var(--chromeB,0px) + 8px); z-index:16;
+    display:flex; align-items:flex-end; padding:0 10px; pointer-events:none}
+  #baseRow .ctl{pointer-events:auto}
+  /* landscape: ☰ hard left, dot hard right, − / + together in the centre */
+  #zoomOut{margin-left:auto} #zoomIn{margin-left:10px} #dotBtn{margin-left:auto}
+  /* the dot is the one round face — centre-on-me; wears the centre-lock ring */
+  body:not(.portrait) #baseRow #dotBtn{width:96px; height:96px; border-radius:50%; font-size:44px}
   #dotBtn.locked{border-color:var(--accent); color:var(--accent);
-    box-shadow:0 0 0 4px rgba(0,229,255,.25); opacity:.9}
-  body.navving #north, body.navving #gloveBtn{opacity:var(--navOp,.4)}
-  body.navving #north:active, body.navving #gloveBtn:active{opacity:1}
-  body.navving #cueEditBtn, body.navving #revBtn{display:none !important} /* planning-only */
+    box-shadow:0 0 0 4px rgba(0,229,255,.25)}
+  /* portrait / square: the four butt up edge-to-edge, ¼ of the screen each */
+  body.portrait #baseRow{padding:0; align-items:stretch}
+  body.portrait #baseRow .ctl{flex:1 1 0; width:auto; margin:0; border-radius:0; height:88px}
+  /* turn mode: ADD MARK owns the bottom centre — the zoom pair steps aside */
+  body.turnmode #zoomOut, body.turnmode #zoomIn{display:none}
+  body.portrait.turnmode #baseRow .ctl{flex:0 0 25vw}
+  body.portrait.turnmode #baseRow #dotBtn{margin-left:auto}
+  /* START: green, above the dot, stopped-with-a-track only */
+  #startBtn{position:fixed; right:10px; bottom:calc(var(--chromeB,0px) + 112px); z-index:16;
+    height:68px; padding:0 32px; border:none; border-radius:18px; background:var(--ok); color:#04240f;
+    font-size:22px; font-weight:800; letter-spacing:.03em; cursor:pointer; display:none;
+    box-shadow:0 4px 18px rgba(0,0,0,.45)}
+  body:not(.navving) #startBtn.on{display:block}
+  /* ride-direction toggle: START's twin above ☰ (bottom-left); amber when reversed.
+     Stopped-screen only — never during navigation. */
+  #revToggle{position:fixed; left:10px; bottom:calc(var(--chromeB,0px) + 112px); z-index:16;
+    height:68px; padding:0 24px; border:1px solid #2a3540; border-radius:18px;
+    background:rgba(22,28,34,.92); color:var(--fg); font-size:20px; font-weight:800;
+    letter-spacing:.03em; cursor:pointer; display:none; align-items:center; gap:10px;
+    box-shadow:0 4px 18px rgba(0,0,0,.45)}
+  body:not(.navving) #revToggle.on{display:flex}
+  #revToggle.rev{background:var(--warn); border-color:var(--warn); color:#231a00}
+  body.daymode #revToggle:not(.rev){background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f}
+  /* retired chrome: the standalone rose, top-right mute and the rose's mode label */
+  #north{display:none !important} #muteBtn{display:none !important} #orientLabel{display:none !important}
+  /* riding: same buttons, resting dimmed like the rest of the ride chrome —
+     except ☰: a visibility fix that fades is no fix */
+  body.navving #orientCtl, body.navving #boxBtn, body.navving #baseRow .ctl{opacity:var(--navOp,.4)}
+  body.navving #orientCtl:active, body.navving #boxBtn:active, body.navving #baseRow .ctl:active{opacity:1}
+  body.navving #baseRow #menuBtn{opacity:1}
+  body.navving #gloveBtn{opacity:var(--navOp,.4)}
+  body.navving #gloveBtn:active{opacity:1}
+  body.navving #cueEditBtn{display:none !important} /* planning-only */
   #cueEditBtn.active{border-color:var(--warn); color:var(--warn)}
   /* stacked under the speed readout, clear of the glance card (top centre) */
   #holdPill, #lockPill{position:fixed; top:64px; left:12px; z-index:14;
@@ -264,12 +274,8 @@
   .gtile .gi .gv{font-size:26px; font-weight:800; font-variant-numeric:tabular-nums}
   .gtile .gl{font-size:15px; font-weight:700; color:var(--dim); letter-spacing:.02em}
   .gtile.active .gl{color:var(--accent)}
-  /* tiles declare where they belong: ride grid, idle grid, or both */
-  .gtile[data-m]{display:none}
-  body:not(.navving) .gtile[data-m="idle"], body:not(.navving) .gtile[data-m="both"]{display:flex}
-  body.navving .gtile[data-m="ride"], body.navving .gtile[data-m="both"]{display:flex}
   /* ---------- progress strip ---------- */
-  #progress{position:fixed; left:56px; right:0; z-index:14; display:none;
+  #progress{position:fixed; left:0; right:0; z-index:14; display:none;
     background:rgba(14,18,22,.92); border-top:1px solid #232d38; padding:4px 10px 0}
   #progress.on{display:block}
   #progress.offtrack{opacity:.4}
@@ -285,20 +291,12 @@
   /* ---------- bottom bar ---------- */
   #bottom{position:fixed; left:0; right:0; bottom:0; z-index:15;
     background:rgba(14,18,22,.96); border-top:1px solid #232d38;
-    padding:10px 12px calc(env(safe-area-inset-bottom) + 10px) 58px; display:flex; gap:10px; align-items:center}
+    padding:10px 12px calc(env(safe-area-inset-bottom) + 10px); display:flex; gap:10px; align-items:center}
   body.navving #bottom{display:none} /* riding: bar removed — ☰ opens the ride-controls panel instead */
-  /* ☰ menu: dark-grey plate so it reads on any map, bottom-left; opens Settings when
-     idle, ride controls while riding. Progress strip starts just to its right.
-     Exempt from the routing transparency fade — a visibility fix that fades is no fix. */
-  #menuBtn{position:fixed; left:8px; bottom:8px; z-index:26; width:44px; height:44px; font-size:26px;
-    display:flex; align-items:center; justify-content:center; background:rgba(34,41,48,.85);
-    border:1px solid #2a3540; border-radius:12px;
-    color:var(--fg); text-shadow:0 1px 6px rgba(0,0,0,.8); cursor:pointer}
+  /* ☰ menu: first slot of the base row (bottom-left), glove-sized like its neighbours;
+     slightly lighter plate so it reads as the odd one out */
+  #menuBtn{background:rgba(34,41,48,.85); text-shadow:0 1px 6px rgba(0,0,0,.8)}
   #menuBtn:active{background:rgba(52,62,72,.9)}
-  /* riding: ☰ is one of the three interactive elements — glove-sized, lifted above the
-     full-width progress strip (placeProgress sets its bottom offset) */
-  body.navving #menuBtn{width:88px; height:88px; font-size:44px; border-radius:20px}
-  body.navving #progress{left:0}
   #trackInfo{flex:1; min-width:0; line-height:1.25}
   #trackName{font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   #trackSub{font-size:13px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -311,18 +309,16 @@
   .gtile.stop{background:var(--bad); border-color:var(--bad)}
   .gtile.stop .gi,.gtile.stop .gl{color:#fff}
   .gtile.stop:active{background:#d32f2f}
-  .gtile.go{background:var(--ok); border-color:var(--ok)}
-  .gtile.go .gi,.gtile.go .gl{color:#04240f}
   /* TURN MODE: double-tap the map while riding — zoomed, compass-up; MARK TURN arms, tap places */
   #markTurn{position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(env(safe-area-inset-bottom) + 30px); z-index:18; display:none; padding:0 44px;
+    bottom:calc(var(--chromeB,0px) + 12px); z-index:18; display:none; padding:0 44px;
     height:92px; border:none; border-radius:24px; background:var(--warn); color:#231a00;
     font-size:26px; font-weight:900; letter-spacing:.03em; box-shadow:0 6px 24px rgba(0,0,0,.55);
     cursor:pointer}
   #markTurn.armed{background:var(--accent); color:#00222c}
   body.turnmode #markTurn{display:block}
   #turnHint{position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(env(safe-area-inset-bottom) + 134px); z-index:18; display:none; font-size:13px;
+    bottom:calc(var(--chromeB,0px) + 116px); z-index:18; display:none; font-size:13px;
     color:var(--fg); background:rgba(14,18,22,.75); padding:6px 14px; border-radius:999px;
     pointer-events:none; white-space:nowrap}
   body.turnmode #turnHint{display:block}
@@ -351,10 +347,17 @@
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
   #shade.on{display:block}
   #panel:not(.on){pointer-events:none} /* a sliding-out panel must never eat taps */
-  #panel{position:fixed; left:0; right:0; bottom:0; max-height:78vh; overflow-y:auto; z-index:20;
-    background:var(--panel); border-radius:20px 20px 0 0; padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
+  /* settings are a FULL screen (2026-07-19 design) — the hamburger top-right (same spot
+     as the map ☰) slides it away again */
+  #panel{position:fixed; inset:0; overflow-y:auto; z-index:20;
+    background:var(--panel); padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 16px);
     transform:translateY(105%); transition:transform .22s ease}
   #panel.on{transform:translateY(0)}
+  #panelClose{position:fixed; left:10px; top:calc(env(safe-area-inset-top) + 10px); z-index:22;
+    width:88px; height:88px; font-size:44px; display:flex; align-items:center; justify-content:center;
+    background:rgba(34,41,48,.85); border:1px solid #2a3540; border-radius:24px; color:var(--fg); cursor:pointer}
+  body.daymode #panelClose{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f}
+  #panel > [data-reg="style"]{margin-left:104px} /* first row clears the back arrow */
   #panel h3{font-size:13px; letter-spacing:.06em; color:var(--dim); margin:18px 0 8px}
   /* ---------- Mac-like day theme (2026-07-17 samples review) ----------
      Day map styles flip the chrome light: #f5f5f7 plates with hairline borders
@@ -367,8 +370,6 @@
     background:rgba(245,247,249,.96); border-top-color:#ccd5dd}
   body.daymode .ctl{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f}
   body.daymode .ctl:active{background:#e8e8ed}
-  body.daymode .ctlgroup .ctl.preset{color:#6e6e73}
-  body.daymode .ctlgroup .ctl.preset.set{color:#1d1d1f}
   body.daymode #menuBtn{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f; text-shadow:none}
   body.daymode #menuBtn:active{background:#e8e8ed}
   body.daymode #dotBtn{background:rgba(245,245,247,.92); border-color:#c9c9ce; color:#1d1d1f}
@@ -392,7 +393,6 @@
   body.daymode #panel .sw input:checked + span{background:#34c759}
   #panelNav{display:flex; gap:10px; margin-bottom:6px}
   #panelNav #navBtn{flex:1}
-  #panelNav .ctl{width:56px; height:56px; flex:none}
   #setTabs{display:flex; gap:5px; margin:14px 0 4px}
   #setTabs button{flex:1; padding:10px 0; border-radius:10px; border:1px solid #2a3540; background:var(--panel2);
     color:var(--dim); font-size:13px; font-weight:700; cursor:pointer}
@@ -456,28 +456,23 @@
     #hudDist{font-size:38px} #hudDist small{font-size:20px}
     #hudType{font-size:20px}
     #hudSpeed{font-size:76px; padding:0 6px} #hudSpeed small{font-size:30px}
-    body.navving.hasroute #hudSpeed{top:calc(env(safe-area-inset-top) + 76px)}
-    body.navving #holdPill{top:calc(env(safe-area-inset-top) + 84px)}
-    body.navving #lockPill{top:calc(env(safe-area-inset-top) + 118px)}
-    body.navving.hasroute #holdPill{top:calc(env(safe-area-inset-top) + 168px)}
-    body.navving.hasroute #lockPill{top:calc(env(safe-area-inset-top) + 202px)}
-    #muteBtn{width:40px; height:40px; font-size:19px; top:calc(env(safe-area-inset-top) + 44px)}
+    /* shrunk corner buttons → the readouts tuck under them sooner */
+    body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px); left:12px}
+    body.navving #holdPill{top:calc(env(safe-area-inset-top) + 148px)}
+    body.navving #lockPill{top:calc(env(safe-area-inset-top) + 182px)}
     #vargModeBig{font-size:76px}
-    body.navving.hasroute #vargModeBig{top:calc(env(safe-area-inset-top) + 76px)}
-    body.navving.hasroute .ctlgroup{top:calc(env(safe-area-inset-top) + 76px)}
-    body.navving #hudSpeed{left:78px}
-    body.navving #holdPill, body.navving #lockPill{left:82px}
-    body.navving #vargModeBig{right:78px}
+    body.navving #vargModeBig{top:calc(env(safe-area-inset-top) + 64px); right:12px}
+    body.navving #vargInd{top:calc(env(safe-area-inset-top) + 70px)}
     #vargInd .beam{font-size:26px}
     #progress.countdown #progCanvas{height:52px}
-    /* short viewports (landscape / split-screen): tighten the two-column cluster so
-       all rows (sound/orient, zoom, presets, fit, follow) clear the viewport height */
-    .ctlgroup{gap:7px}
-    .ctlgroup .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
-    .ctlgroup .ctl.preset{font-size:13px}
-    #dotBtn{width:64px; height:64px; font-size:30px; bottom:70px}
+    /* short viewports (landscape / split-screen): shrink the corner + base buttons
+       so the map keeps some height */
+    #orientCtl, #boxBtn, #baseRow .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
+    body:not(.portrait) #baseRow #dotBtn{width:64px; height:64px; border-radius:50%; font-size:30px}
+    body.portrait #baseRow .ctl{height:52px}
+    #startBtn, #revToggle{height:52px; font-size:18px; padding:0 22px; bottom:calc(var(--chromeB,0px) + 68px)}
+    #hud{left:74px; right:74px}
     #markTurn{height:64px; font-size:20px; padding:0 30px}
-    #north{width:56px; height:56px; font-size:20px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
     #progress.expanded #progCanvas{height:44px}
@@ -572,6 +567,7 @@
   <symbol id="i-battery-medium" viewBox="0 0 24 24"><rect width="16" height="10" x="2" y="7" rx="2" ry="2"/><line x1="22" x2="22" y1="11" y2="13"/><line x1="6" x2="6" y1="11" y2="13"/><line x1="10" x2="10" y1="11" y2="13"/></symbol>
   <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
   <symbol id="i-arrow-left-right" viewBox="0 0 24 24"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
   <symbol id="i-corner-up-left" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></symbol>
   <symbol id="i-corner-up-right" viewBox="0 0 24 24"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h16"/></symbol>
   <symbol id="i-arrow-up" viewBox="0 0 24 24"><line x1="12" x2="12" y1="19" y2="5"/><polyline points="5 12 12 5 19 12"/></symbol>
@@ -625,6 +621,11 @@
   <button class="dpBtn" id="dpTrain"><b>Training ride</b><span>learn DingoNav on a guided fake ride — no track needed</span></button>
   <button class="dpBtn" id="dpPlain"><b>Plain demo</b><span id="dpPlainSub">replay the selected track at 30 km/h</span></button>
   <button id="dpCancel">Cancel</button></div>
+<div id="colourPick"><h4>Track colour</h4>
+  <button class="dpBtn" data-tc="none"><b>None</b><span>route blue — dark casing on day maps, white at night</span></button>
+  <button class="dpBtn" data-tc="slope"><b>Slope</b><span>brighter blue = steeper (needs elevation data)</span></button>
+  <button class="dpBtn" data-tc="surface"><b>Surface</b><span>sealed blue · dirt amber · singletrack purple</span></button>
+  <button id="cpCancel">Cancel</button></div>
 <div id="trainCard">
   <div id="trainTop"><span id="trainStep"></span><span id="trainExit">✕ end training</span></div>
   <h4 id="trainTitle"></h4><div id="trainMsg"></div>
@@ -632,18 +633,16 @@
 </div>
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
-<div id="leftCtl" class="ctlgroup">
-  <div class="ctl" id="orientCtl" title="north-up / course-up / compass">N</div>
-  <div class="ctl" id="followBtn" title="dot: re-centre · square: whole track"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
-  <div class="ctl" id="soundCtl" title="sound / mute"><svg class="ic"><use href="#i-volume-2"/></svg></div>
+<div class="ctl" id="orientCtl" title="north-up / course-up / compass">N</div>
+<div class="ctl" id="boxBtn" title="see the whole track"><svg class="ic"><use href="#i-square"/></svg></div>
+<div id="baseRow">
+  <div class="ctl" id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
+  <div class="ctl" id="zoomOut" title="zoom out — hold to save as riding zoom"><svg class="ic"><use href="#i-minus"/></svg></div>
+  <div class="ctl" id="zoomIn" title="zoom in — hold to save as turn zoom"><svg class="ic"><use href="#i-plus"/></svg></div>
+  <div class="ctl" id="dotBtn" title="centre on me"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
 </div>
-<div id="rightCtl" class="ctlgroup">
-  <div class="ctl preset" id="presetMin" data-p="min" title="favourite zoom — tap to jump, hold to set">min</div>
-  <div class="ctl" id="zoomOut"><svg class="ic"><use href="#i-minus"/></svg></div>
-  <div class="ctl" id="zoomIn"><svg class="ic"><use href="#i-plus"/></svg></div>
-  <div class="ctl preset" id="presetMax" data-p="max" title="favourite zoom — tap to jump, hold to set">max</div>
-</div>
-<div id="dotBtn" title="dot: re-centre · square: whole track"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
+<button id="startBtn" title="start navigation">START</button>
+<button id="revToggle" title="ride direction — tap to reverse"><svg class="ic"><use href="#i-arrow-left-right"/></svg><span id="revLbl">FORWARD</span></button>
 <button id="markTurn" title="add a mark on the track">ADD MARK</button>
 <div id="turnHint">ADD MARK then tap the track · tap a point to remove · long-press a point to change it</div>
 <div id="markPicker">
@@ -663,29 +662,26 @@
 </div>
 
 <div id="gloveBtn" class="left" title="ride controls">▦</div>
-<!-- ☰ grid: the whole screen becomes fat tiles. data-m picks the grid a tile belongs to
-     (ride / idle / both); the grid IS the dock — layout-editor buttons land here too. -->
+<!-- ☰ grid: the whole screen becomes fat tiles — ONE grid, same tiles idle and riding
+     (the Demo tile flips to red Stop ride mid-ride). The grid IS the dock — layout-editor
+     buttons land here too. -->
 <div id="gloveOverlay"><div id="gloveGrid">
-  <div class="gtile" data-m="ride" id="gMute"><div class="gi"><svg class="ic"><use href="#i-volume-2"/></svg></div><div class="gl">Mute</div></div>
-  <div class="gtile" data-m="ride" id="gZoomMax"><div class="gi"><svg class="ic"><use href="#i-zoom-out"/></svg></div><div class="gl">Zoom wide</div></div>
-  <div class="gtile" data-m="ride" id="gZoomMin"><div class="gi"><svg class="ic"><use href="#i-zoom-in"/></svg></div><div class="gl">Zoom close</div></div>
-  <div class="gtile" data-m="ride" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
-  <div class="gtile" data-m="ride" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
-  <div class="gtile" data-m="ride" id="gOrient"><div class="gi">N</div><div class="gl">North up</div></div>
-  <div class="gtile" data-m="both" id="gLayers"><div class="gi"><svg class="ic"><use href="#i-layers"/></svg></div><div class="gl">Day</div></div>
-  <div class="gtile" data-m="both" id="gStartStop"><div class="gi"><svg class="ic"><use href="#i-play"/></svg></div><div class="gl">Start</div></div>
-  <div class="gtile" data-m="idle" id="gTracks"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Tracks</div></div>
-  <div class="gtile" data-m="idle" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
-  <div class="gtile" data-m="idle" id="gDemo"><div class="gi"><svg class="ic"><use href="#i-circle-play"/></svg></div><div class="gl">Demo ride</div></div>
-  <div class="gtile" data-m="both" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
+  <div class="gtile" id="gDemo"><div class="gi"><svg class="ic"><use href="#i-circle-play"/></svg></div><div class="gl">Demo</div></div>
+  <div class="gtile" id="gLayers"><div class="gi"><svg class="ic"><use href="#i-layers"/></svg></div><div class="gl">Day</div></div>
+  <div class="gtile" id="gMute"><div class="gi"><svg class="ic"><use href="#i-volume-2"/></svg></div><div class="gl">Mute</div></div>
+  <div class="gtile" id="gTracks"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Tracks</div></div>
+  <div class="gtile" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
+  <div class="gtile" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
+  <div class="gtile" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
+  <div class="gtile" id="gColour"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Track colour</div></div>
+  <div class="gtile" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
 </div></div>
 
 <div id="progress">
   <canvas id="progCanvas"></canvas>
-  <div id="progLabels"><span id="progDone">—</span><span id="progTogo">—</span></div>
+  <div id="progLabels"><span id="progDone">—</span><span id="progNext"></span><span id="progTogo">—</span></div>
 </div>
 
-<div id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
 <div id="bottom">
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
   <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none"><svg class="ic"><use href="#i-pencil"/></svg></div>
@@ -702,9 +698,9 @@
 
 <div id="shade"></div>
 <div id="panel">
+  <div id="panelClose" title="back to the map"><svg class="ic"><use href="#i-arrow-left"/></svg></div>
   <div id="panelNav">
     <button id="navBtn" disabled>Start</button>
-    <div class="ctl" id="revBtn" title="reverse direction" style="display:none"><svg class="ic"><use href="#i-arrow-left-right"/></svg></div>
   </div>
   <div data-reg="style"></div>
 
@@ -713,9 +709,9 @@
     <button data-t="Tracks" class="active">Tracks</button>
     <button data-t="General">General</button>
     <button data-t="Nav">Nav</button>
-    <button data-t="Stark">Stark</button>
-    <button data-t="Keys">Keys</button>
-    <button data-t="Adv" id="advTabBtn" style="display:none">Adv</button>
+    <button data-t="Stark" class="advOnly">Stark</button>
+    <button data-t="Keys" class="advOnly">Keys</button>
+    <button data-t="UI" class="advOnly">UI</button>
   </div>
 
   <div class="tabSec" id="tabAccount">
@@ -750,12 +746,6 @@
     <div class="hint">Optional elevation extract adds hillshade relief under the trails — gullies and ridges readable at a glance, still flat north-up 2D. Cut one with <b>make_hillshade.py</b> (see README).</div>
     <div data-reg="map"></div>
     <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
-    <div data-reg="ui"></div>
-    <div class="btnRow"><button class="btn" id="layoutEditBtn"><svg class="ic"><use href="#i-move"/></svg> Edit screen layout</button></div>
-    <div class="hint">Drag buttons and readouts anywhere; drag the cyan corner dot on a readout to
-      resize it; drop a button on the bottom tray to dock it in this menu. Saved separately for
-      portrait and landscape.</div>
-
     <div class="btnRow"><button class="btn" id="fsBtn"><svg class="ic"><use href="#i-maximize"/></svg> Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
 
@@ -803,7 +793,13 @@
     <div class="row"><label>Map style flip</label><button class="btn keyBtn" data-k="style">default</button></div>
   </div>
 
-  <div class="tabSec" id="tabAdv">
+  <div class="tabSec" id="tabUI">
+    <div data-reg="ui"></div>
+    <div class="btnRow"><button class="btn" id="layoutEditBtn"><svg class="ic"><use href="#i-move"/></svg> Edit screen layout</button></div>
+    <div class="hint">Drag buttons and readouts anywhere; drag the cyan corner dot on a readout to
+      resize it; drop a button on the bottom tray to dock it in this menu. Saved separately for
+      portrait and landscape.</div>
+    <h3>Tuning</h3>
     <div class="hint">Live tuning knobs — changes apply immediately and persist on this device. ↺ resets a row to default.</div>
     <div id="advList"></div>
     <div class="btnRow"><button class="btn" id="advCopy">Copy tuning JSON</button></div>
@@ -871,7 +867,7 @@ const S = {
   friends: new Map(), demo: null,
   trail: [], trailTrack: null, prog: null, rides: [], autoOrient: false, autoBlock: false,
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
-    profile: false, gloveSide: 'left', ctlEdges: 'sides', vehicle: 'enduro', surf: true, trail: true,
+    profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
     varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure' },
 };
@@ -905,6 +901,22 @@ if (!S.set._v4) {
   S.set.layout = {};
   saveSet();
 }
+// v5 migration (2026-07-19 corner-buttons design): dash patterns → Track colour modes,
+// the edges/glove-side layout knobs retire, and removed buttons leave saved layouts.
+// Dead keys are pruned UNCONDITIONALLY — an old cached app version can re-seed them
+// from its defaults after the flag is already stamped (SW cache-first overlap).
+delete S.set.surf; delete S.set.ctlEdges; delete S.set.gloveSide;
+for (const k of ['dirtDash', 'dirtGap', 'singleDash', 'singleGap', 'gapStyle']) delete S.set.adv[k];
+if (!S.set._v5) {
+  S.set._v5 = 1;
+  if (S.set.trackColour == null) S.set.trackColour = 'none';
+  for (const o of ['portrait', 'landscape']) {
+    const m = (S.set.layout || {})[o]; if (!m) continue;
+    if (m.followBtn && !m.dotBtn) m.dotBtn = m.followBtn; // the unified dot inherits the follow button's home
+    delete m.followBtn; delete m.soundCtl; delete m.presetMin; delete m.presetMax;
+  }
+  saveSet();
+}
 
 /* advanced tuning knobs: hand-tuned constants promoted to sliders while the feel is dialled in.
    ADV(k) reads the override or the shipping default; the Adv tab writes S.set.adv. */
@@ -924,8 +936,6 @@ const ADV_D = {
   slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
   colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
   colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
-  dirtDash: 2.4, dirtGap: 1.4, singleDash: 1.2, singleGap: 0.9, // single = denser square dashes, not dots
-  gapStyle: 'case', // dash gaps show the casing colour (continuous case); 'clear' = old transparent gaps
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
@@ -1736,7 +1746,7 @@ async function initMap() {
   // placement) wait out the double-tap window so the two can't collide
   let rideTapT = null;
   map.on('click', e => {
-    if (!S.nav) { if (S.cueEdit) cueEditTap(e.lngLat); return; }
+    if (!S.nav) { S.cueEdit ? cueEditTap(e.lngLat) : trackTap(e.lngLat); return; }
     clearTimeout(rideTapT);
     rideTapT = setTimeout(() => { rideTapT = null; rideTap(e.lngLat); }, 280);
   });
@@ -1758,7 +1768,7 @@ async function initMap() {
     // viewport changes that never fire a resize event (split-screen drags, this dev pane) still re-place the chrome
     if (innerWidth !== lastVW || innerHeight !== lastVH) {
       lastVW = innerWidth; lastVH = innerHeight;
-      placeProgress(); drawProgress(true);
+      applyOrientClass(); placeProgress(); drawProgress(true);
       loViewportChanged(); // custom slots are viewport-fraction based — recompute (rebuilds edit mode too)
     }
   }, 1000);
@@ -1786,9 +1796,6 @@ function caseColor() {
 }
 function totalW() { return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut'), 17, ADV('routeWIn')]; }
 function coreW() { const f = ADV('coreFrac'); return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut') * f, 17, ADV('routeWIn') * f]; }
-// dash lengths are in line-widths — rescale for the wider case layer so its dashes
-// stay in step with the core's (gaps remain fully transparent)
-function caseDash(a) { const f = ADV('coreFrac'); return a.map(x => +(x * f).toFixed(2)); }
 /* typed-mark dot radius: zoomed out it shrinks to half the route core width
    (reads as a blip ON the line), snapping up to the full 8 px dot at the
    old alert minzoom. Tracks the routeW sliders via applyAdvPaint. */
@@ -1852,47 +1859,32 @@ function addOverlays() {
   map.addLayer({ id: 'trail-dots', type: 'line', source: 'trail',
     layout: { 'line-cap': 'round' },
     paint: { 'line-color': '#9fb4c6', 'line-opacity': 0.85, 'line-width': 3.5, 'line-dasharray': [0.1, 2] } });
-  /* route rendering: one flat core colour, pattern = surface (solid sealed / dashed
-     dirt / dotted singletrack), casing = day/night shadow/glow (caseColor()).
-     Case layers sit under the cores at totalW; dash patterns rescaled (caseDash) so
-     the gaps stay fully transparent. Steepness is no longer a colour channel. */
+  /* route rendering (2026-07-19 track-colour design): one solid cased line — the
+     dirt/sealed dash patterns are gone. Interior colour is baked per feature ('c'):
+     route blue by default, or slope/surface colouring picked from the ☰ Track colour
+     tile. Travelled sections use the per-feature dimmed variant ('cd') so slope and
+     surface still read behind you. Casing = day/night shadow/glow (caseColor()). */
   map.addSource('selSurf', { type: 'geojson', data: EMPTY });
-  const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
-  const dashOf = { sealed: null, dirt: dashDirt, single: dashSingle };
-  // dashes are square-ended (butt caps) — only the continuous sealed line gets round ends
-  const capOf = { sealed: { 'line-join': 'round', 'line-cap': 'round' }, dirt: { 'line-join': 'round' },
-    single: { 'line-join': 'round' } };
-  const sf = (s, st) => ['all', ['==', ['get', 's'], s], ['==', ['get', 'state'], st]];
-  const dashed = (base, d) => d ? { ...base, 'line-dasharray': d } : base;
-  // casing is CONTINUOUS by default — dash gaps in the core read as casing colour
-  // (Grant's mock-up). gapStyle 'clear' restores dashed casing = transparent gaps.
-  const caseDashOf = s => ADV('gapStyle') === 'clear' && dashOf[s] ? caseDash(dashOf[s]) : null;
-  /* progress ladder, bottom→top: travelled (grey, reduced dark case) → missed
+  const rnd = { 'line-join': 'round', 'line-cap': 'round' };
+  const sf = st => ['==', ['get', 'state'], st];
+  /* progress ladder, bottom→top: travelled (dimmed, reduced dark case) → missed
      (half-strength colour, NO case — casing is the exclusive route-ahead signal)
-     → remaining (full colour, cased). Patterns survive every state. */
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-done-case-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'done'), layout: capOf[s],
-      paint: dashed({ 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() }, caseDashOf(s)) });
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-done-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'done'), layout: capOf[s],
-      paint: dashed({ 'line-color': ADV('colDone'), 'line-opacity': ADV('progDoneOp'), 'line-width': coreW() }, dashOf[s]) });
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-miss-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'miss'), layout: capOf[s],
-      paint: dashed({ 'line-color': ['get', 'c'], 'line-opacity': ADV('progMissOp'), 'line-width': coreW() }, dashOf[s]) });
-  for (const s of ['sealed', 'dirt', 'single']) // just-ridden tail — bright, uncased, hugs the marker
-    map.addLayer({ id: 'surf-recent-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'recent'), layout: capOf[s],
-      paint: dashed({ 'line-color': ['get', 'c'], 'line-opacity': ADV('progRecentOp'), 'line-width': coreW() }, dashOf[s]) });
-  map.addLayer({ id: 'sel-case', type: 'line', source: 'selTrack',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
+     → remaining (full colour, cased). */
+  map.addLayer({ id: 'surf-done-case', type: 'line', source: 'selSurf', filter: sf('done'), layout: rnd,
+    paint: { 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() } });
+  map.addLayer({ id: 'surf-done', type: 'line', source: 'selSurf', filter: sf('done'), layout: rnd,
+    paint: { 'line-color': ['get', 'cd'], 'line-opacity': ADV('progDoneOp'), 'line-width': coreW() } });
+  map.addLayer({ id: 'surf-miss', type: 'line', source: 'selSurf', filter: sf('miss'), layout: rnd,
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('progMissOp'), 'line-width': coreW() } });
+  map.addLayer({ id: 'surf-recent', type: 'line', source: 'selSurf', filter: sf('recent'), layout: rnd, // just-ridden tail — bright, uncased, hugs the marker
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('progRecentOp'), 'line-width': coreW() } });
+  map.addLayer({ id: 'sel-case', type: 'line', source: 'selTrack', layout: rnd,
     paint: { 'line-color': caseColor(), 'line-width': totalW() } });
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-case-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'rem'), layout: capOf[s],
-      paint: dashed({ 'line-color': caseColor(), 'line-width': totalW() }, caseDashOf(s)) });
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'rem'), layout: capOf[s],
-      paint: dashed({ 'line-color': ['get', 'c'], 'line-width': coreW() }, dashOf[s]) });
-  map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
+  map.addLayer({ id: 'surf-case', type: 'line', source: 'selSurf', filter: sf('rem'), layout: rnd,
+    paint: { 'line-color': caseColor(), 'line-width': totalW() } });
+  map.addLayer({ id: 'surf-core', type: 'line', source: 'selSurf', filter: sf('rem'), layout: rnd,
+    paint: { 'line-color': ['get', 'c'], 'line-width': coreW() } });
+  map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack', layout: rnd,
     paint: { 'line-color': ADV('colRoute'), 'line-width': coreW() } });
   /* direction Vs: case-coloured overlay glyphs along the line (the cutout look
      without the cutout — reads on solid, dashed and dotted alike). They follow the
@@ -2120,6 +2112,10 @@ function refreshMapData() {
   map.getSource('tracksOther').setData({ type: 'FeatureCollection',
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
       geometry: { type: 'LineString', coordinates: t.coordsLL } })) });
+  // stopped-screen track picker: with nothing selected every track reads clearly;
+  // once one is picked (nav colours) the rest drop to a translucent underlay
+  map.setPaintProperty('tracks-other', 'line-opacity', S.sel >= 0 ? 0.3 : 0.85);
+  map.setPaintProperty('tracks-other', 'line-width', S.sel >= 0 ? 2 : 3.5);
   const trk = S.tracks[S.sel];
   const dir = S.navState ? S.navState.dir : (trk && trk.reverse ? -1 : 1);
   map.getSource('selTrack').setData(trk ? { type: 'Feature', properties: {},
@@ -2156,26 +2152,52 @@ function progClassAt(trk) {
     return k > 0 && k < sp.length ? 'miss' : 'rem';
   };
 }
+/* ---------------- track colouring (☰ Track colour tile: none / slope / surface) ---------------- */
+const SLOPE_RAMP = ['#1C4670', '#215D92', '#2A77B5', '#3B95D8', '#57B6F2', '#7FD4FF']; // flat → steepest, ≥4% steps
+const SURF_COLOURS = { sealed: null, dirt: '#E2A13C', single: '#C65BD6' }; // sealed = route blue
+function dimColour(hex) { // travelled variant: same hue dropped toward the dark — steeper still reads lighter
+  const n = parseInt(hex.slice(1), 16), f = v => Math.round(v * 0.42);
+  return 'rgb(' + f((n >> 16) & 255) + ',' + f((n >> 8) & 255) + ',' + f(n & 255) + ')';
+}
+/* per-point |grade| buckets, cached per track. Grades come from the smoothed profile
+   so GPS elevation noise doesn't shred the line into confetti. */
+function slopeBuckets(trk) {
+  if (trk._slopeB) return trk._slopeB;
+  const b = new Int8Array(trk.n);
+  if (!trk.hasEle || !trk.profile || trk.profile.length < 2) { b.fill(-1); return trk._slopeB = b; }
+  const P = trk.profile;
+  let k = 1;
+  for (let i = 0; i < trk.n; i++) {
+    while (k < P.length - 1 && P[k].d < trk.cum[i]) k++;
+    const g = Math.abs(P[k].e - P[k - 1].e) / Math.max(1, P[k].d - P[k - 1].d) * 100;
+    b[i] = Math.min(5, (g / 4) | 0);
+  }
+  return trk._slopeB = b;
+}
 function refreshRouteFeatures() {
   if (!mapReady) return;
   const trk = S.tracks[S.sel];
-  // surface segments: consecutive same-(surface × progress-class) runs of the resampled
-  // track (unmapped = dirt, the safe guess out there). End point shared with the next
-  // run so the line never gaps.
+  // route segments: consecutive same-(progress-class × colour) runs of the resampled
+  // track. End point shared with the next run so the line never gaps.
   const surfFeats = [];
-  if (trk && trk.wayCls) {
-    const surfOf = c => c === 1 ? 'sealed' : c === 3 ? 'single' : 'dirt';
+  if (trk) {
+    const mode = S.set.trackColour || 'none';
+    const surfOf = c => c === 1 ? 'sealed' : c === 3 ? 'single' : 'dirt'; // unmapped = dirt, the safe guess out there
+    const sb = mode === 'slope' && trk.hasEle ? slopeBuckets(trk) : null;
+    const colAt = i => sb ? (sb[i] < 0 ? ADV('colRoute') : SLOPE_RAMP[sb[i]])
+      : mode === 'surface' && trk.wayCls ? (SURF_COLOURS[surfOf(trk.wayCls[i])] || ADV('colRoute'))
+      : ADV('colRoute');
     const cls = progClassAt(trk);
-    let s0 = 0, st0 = cls(0);
+    let s0 = 0, st0 = cls(0), c0 = colAt(0);
     for (let i = 1; i <= trk.n; i++) {
       const st = i < trk.n ? cls(i) : null;
-      if (i < trk.n && surfOf(trk.wayCls[i]) === surfOf(trk.wayCls[s0]) && st === st0) continue;
+      if (i < trk.n && colAt(i) === c0 && st === st0) continue;
       const coords = [];
       for (let j = s0; j <= Math.min(i, trk.n - 1); j++) { const [la, lo] = toLL(trk.xy[j * 2], trk.xy[j * 2 + 1]); coords.push([lo, la]); }
       if (coords.length > 1) surfFeats.push({ type: 'Feature',
-        properties: { s: surfOf(trk.wayCls[s0]), c: ADV('colRoute'), state: st0 },
+        properties: { c: c0, cd: mode === 'none' ? ADV('colDone') : dimColour(c0), state: st0 },
         geometry: { type: 'LineString', coordinates: coords } });
-      s0 = i; st0 = st;
+      s0 = i; st0 = st; if (i < trk.n) c0 = colAt(i);
     }
   }
   map.getSource('selSurf').setData({ type: 'FeatureCollection', features: surfFeats });
@@ -2222,13 +2244,12 @@ function segGrade(a, b) { return Math.abs(b.e - a.e) / Math.max(1, Math.abs(b.d 
 function applyRouteVis() {
   if (!mapReady || !map.getLayer('sel-core')) return;
   const trk = S.tracks[S.sel];
-  // arbitration: surface patterns carry the route when way-class data exists;
-  // sel-core/-case cover surface-off and no-way-class tracks
-  const surfOn = S.set.surf !== false && trk && trk._hasSurf;
+  // arbitration: segment features carry the route whenever a track is selected;
+  // sel-core/-case are the no-track / no-features fallback
+  const surfOn = trk && trk._hasSurf;
   const vis = (l, on) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none');
   vis('sel-core', !surfOn); vis('sel-case', !surfOn);
-  for (const s of ['sealed', 'dirt', 'single'])
-    for (const pre of ['surf-', 'surf-case-', 'surf-done-', 'surf-done-case-', 'surf-miss-', 'surf-recent-']) vis(pre + s, surfOn);
+  for (const l of ['surf-core', 'surf-case', 'surf-done', 'surf-done-case', 'surf-miss', 'surf-recent']) vis(l, surfOn);
 }
 function refreshPosLayers() {
   if (!mapReady || !S.pos) return;
@@ -2349,12 +2370,10 @@ function manualZoom(dir) {
   dir > 0 ? map.zoomIn() : map.zoomOut();
   if (S.nav && S.set.autoZoom) setTimeout(() => setHold(map.getZoom()), 350); // after the ease settles
 }
-document.getElementById('zoomIn').onclick = () => manualZoom(1);
-document.getElementById('zoomOut').onclick = () => manualZoom(-1);
-
-/* preset buttons: tap = jump there & lock (same semantics as a manual nudge),
-   hold ~600 ms = capture the current zoom as that preset. Labels show the stored level. */
-const PRESET_LABEL = { min: 'min', med: 'med', max: 'max' };
+/* the − / + base-row buttons: tap = step zoom · hold ≈600 ms = save the current zoom
+   as a favourite. + saves the CLOSE (turn) level, − saves the WIDE (riding) level —
+   auto-zoom flips between the two. Wired below, after presetSet is defined. */
+const PRESET_LABEL = { min: 'turn', med: 'med', max: 'riding' };
 function centerLat() { return mapReady ? map.getCenter().lat : -33; }
 function refreshPresets() {
   for (const b of document.querySelectorAll('.ctl.preset')) {
@@ -2370,7 +2389,7 @@ function showDialog(title, html) {
   document.getElementById('dlgShade').classList.add('on');
   document.getElementById('dlg').classList.add('on');
 }
-function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); }
+function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
 document.getElementById('dlgOk').onclick = closeDialog;
 document.getElementById('dlgShade').onclick = closeDialog;
 // first tap/hold of min or max explains favourite zoom; the gesture that triggered it is consumed
@@ -2378,18 +2397,10 @@ function zoomTipGate() {
   if (S.set.seenZoomTip) return false;
   S.set.seenZoomTip = true; saveSet();
   showDialog('Favourite zoom',
-    'The <b>min</b> and <b>max</b> buttons are your two favourite zoom levels.<br><br>' +
-    '• <b>Tap</b> one to jump to that zoom.<br>' +
-    '• <b>Press &amp; hold</b> to save the current zoom as that favourite.');
+    '<b>Tap</b> − / + to zoom the map.<br><br>' +
+    '• <b>Hold +</b> to save the current zoom as your <b>turn</b> zoom — auto-zoom dives to it at junctions.<br>' +
+    '• <b>Hold −</b> to save your <b>riding</b> zoom — where auto-zoom returns between turns.');
   return true;
-}
-function presetTap(k) {
-  if (zoomTipGate()) return;
-  if (!mapReady) return;
-  const z = zoomForSpan(presetSpan(k), centerLat());
-  map.easeTo({ zoom: z, duration: 350 });
-  if (S.nav && S.set.autoZoom) setTimeout(() => setHold(z), 400);
-  trainEvent('preset');
 }
 function presetSet(k) {
   if (zoomTipGate()) return;
@@ -2398,13 +2409,15 @@ function presetSet(k) {
   const zp = S.set.zoomPresets[S.set.vehicle] = S.set.zoomPresets[S.set.vehicle] || {};
   zp[k] = Math.round(spanForZoom(z, centerLat()));
   saveSet(); vib([40]); refreshPresets();
-  toast(PRESET_LABEL[k] + ' zoom set to L' + z.toFixed(1) + ' (' + S.set.vehicle + ')');
+  toast((k === 'min' ? 'Turn' : 'Riding') + ' zoom saved — L' + z.toFixed(1) + ' (' + S.set.vehicle + ')');
+  trainEvent('preset');
 }
-for (const b of document.querySelectorAll('.ctl.preset')) {
-  const k = b.dataset.p;
+/* − / + : tap steps the zoom; hold saves the favourite (+ → turn/close, − → riding/wide) */
+for (const [id, k, dir] of [['zoomIn', 'min', 1], ['zoomOut', 'max', -1]]) {
+  const b = document.getElementById(id);
   let t = null, held = false;
   const down = () => { held = false; clearTimeout(t); t = setTimeout(() => { held = true; presetSet(k); }, 600); };
-  const up = () => { clearTimeout(t); if (!held) presetTap(k); held = false; };
+  const up = () => { clearTimeout(t); if (!held) manualZoom(dir); held = false; };
   b.addEventListener('touchstart', e => { e.preventDefault(); down(); }, { passive: false }); // no synthetic mouse double-fire
   b.addEventListener('touchend', up);
   b.addEventListener('touchcancel', () => clearTimeout(t));
@@ -2412,25 +2425,21 @@ for (const b of document.querySelectorAll('.ctl.preset')) {
   b.addEventListener('mouseup', up);
   b.addEventListener('mouseleave', () => clearTimeout(t));
 }
-/* dot/square: one stateful re-centre control (merges the old ● and ▢ buttons).
-   Centred → square icon, tap = whole track. Panned away (any drag) → dot icon,
-   tap = re-centre, back to square. Same grammar on the control button and the
-   big riding button. */
-function dotSquareTap() {
-  if (!S.follow || S.dotFit) { // dot: come home, centre on me
-    S.dotFit = false; setFollow(true);
-    if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 450 }); }
-    trainEvent('recentre');
-  } else { // square: zoom out to the whole track
-    S.dotFit = true; setFollow(false); fitSelected();
-  }
+/* box + dot: the old two-state dot/square button split into its two jobs —
+   box (bottom-left) always fits the whole track, dot (bottom-right) always comes home */
+function recentreTap() { // dot: come home, centre on me
+  S.dotFit = false; setFollow(true);
+  if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 450 }); }
+  trainEvent('recentre');
 }
-document.getElementById('followBtn').onclick = dotSquareTap;
+function fitTap() { // box: zoom out to the whole track
+  S.dotFit = true; setFollow(false); fitSelected();
+  trainEvent('fit');
+}
+document.getElementById('boxBtn').onclick = fitTap;
 function setFollow(on) {
   S.follow = on;
-  document.getElementById('followBtn').classList.toggle('active', on);
-  for (const id of ['followBtn', 'dotBtn']) // the icon IS the state: square = centred, dot = panned away
-    document.getElementById(id).querySelector('use').setAttribute('href', on ? '#i-square' : '#i-locate-fixed');
+  document.getElementById('dotBtn').classList.toggle('active', on); // lit = centred on you
 }
 setFollow(true);
 
@@ -2446,9 +2455,9 @@ function setLock(on) {
 }
 lockPill.onclick = () => { setLock(false); toast('Centre lock off'); };
 
-/* the big riding button shares the dot/square grammar; hold-to-lock is gone
+/* the dot button always comes home; hold-to-lock is gone
    (2026-07-17 design) — centre lock lives on the map long-press only. */
-document.getElementById('dotBtn').onclick = dotSquareTap;
+document.getElementById('dotBtn').onclick = recentreTap;
 function initLockGesture() {
   const el = map.getContainer();
   let timer = null, start = null;
@@ -2496,15 +2505,12 @@ function setSound(on) {
   document.getElementById('setSound').checked = on;
   setIc(muteBtn, on ? 'volume-2' : 'volume-x');
   muteBtn.classList.toggle('muted', !on);
-  const sc = document.getElementById('soundCtl');
-  if (sc) { setIc(sc, on ? 'volume-2' : 'volume-x'); sc.classList.toggle('off', !on); }
   const gm = document.getElementById('gMute');
   if (gm) { setIc(gm.querySelector('.gi'), on ? 'volume-2' : 'volume-x');
     gm.querySelector('.gl').textContent = on ? 'Mute' : 'Muted'; gm.classList.toggle('active', !on); }
   trainEvent(on ? 'unmute' : 'mute');
 }
 muteBtn.onclick = () => { setSound(!S.set.sound); toast(S.set.sound ? 'Sound on' : 'Muted'); };
-document.getElementById('soundCtl').onclick = () => muteBtn.onclick(); // cluster sound = mute toggle
 
 /* fullscreen: auto while navigating, manual toggle in the menu (iOS Safari lacks the API) */
 const fsBtn = document.getElementById('fsBtn'), fsOK = !!(document.documentElement.requestFullscreen && document.fullscreenEnabled);
@@ -2692,7 +2698,14 @@ function fitSelected() {
   // framing a ride and matches the deepest baked satellite tiles.
   const opt = { padding: 60, duration: 600, maxZoom: 16 };
   if (S.sel >= 0) map.fitBounds(S.tracks[S.sel].llBounds, opt);
-  else if (S.tracks.length) map.fitBounds(S.tracks[0].llBounds, opt);
+  else if (S.tracks.length) {
+    // nothing selected: frame ALL loaded tracks (the map is the track picker)
+    const u = [[180, 90], [-180, -90]];
+    for (const t of S.tracks) { const b = t.llBounds;
+      u[0][0] = Math.min(u[0][0], b[0][0]); u[0][1] = Math.min(u[0][1], b[0][1]);
+      u[1][0] = Math.max(u[1][0], b[1][0]); u[1][1] = Math.max(u[1][1], b[1][1]); }
+    map.fitBounds(u, opt);
+  }
   else if (S.heat) {
     let minLo = 180, minLa = 90, maxLo = -180, maxLa = -90;
     for (const f of S.heat.geojson.features) {
@@ -2805,6 +2818,7 @@ function stopNav() {
   archiveRide(); // the ridden path joins the own-rides heat + GPX archive
 }
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
+document.getElementById('startBtn').onclick = () => { if (!S.nav) startNav(); }; // on-map START — stopping lives in ☰
 // START/STOP is one plain-tap tile in the ☰ grid — the two-tap path (☰ → tile) is the
 // mis-tap protection, so the old hold-to-stop ring is gone.
 
@@ -2971,9 +2985,16 @@ document.getElementById('hudBox').onclick = () => {
 /* ---------------- progress strip ---------------- */
 const prog = document.getElementById('progress'), progCanvas = document.getElementById('progCanvas');
 const progDone = document.getElementById('progDone'), progTogo = document.getElementById('progTogo');
+const progNext = document.getElementById('progNext');
+/* portrait vs landscape: ONE predicate for CSS and JS — the same width>height test the
+   layout editor keys its saved slots by (loOrient, hoisted). 720×720 counts as portrait. */
+function applyOrientClass() { document.body.classList.toggle('portrait', loOrient() === 'portrait'); }
+applyOrientClass();
 function placeProgress() {
   const b = document.getElementById('bottom').offsetHeight;
   prog.style.bottom = b + 'px';
+  // one number for everything bottom-anchored: idle bar height + progress-strip height
+  document.documentElement.style.setProperty('--chromeB', (b + prog.offsetHeight) + 'px');
   // riding: the strip runs full width, so ☰ lifts above it
   document.getElementById('menuBtn').style.bottom = S.nav ? (b + prog.offsetHeight + 12) + 'px' : '';
   const gb = document.getElementById('gloveBtn');
@@ -2984,7 +3005,7 @@ function placeProgress() {
   gb.style.bottom = above ? above + 'px' : '';
 }
 window.addEventListener('resize', () => {
-  placeProgress(); drawProgress(true);
+  applyOrientClass(); placeProgress(); drawProgress(true);
   // media-query flips (bar hide/show, canvas height) can apply after this event — settle once more
   setTimeout(() => { placeProgress(); drawProgress(true); }, 80);
 });
@@ -3084,6 +3105,12 @@ function drawProgress(force) {
   const rem = Math.max(0, len - done);
   progTogo.innerHTML = '<b>' + (rem / 1000).toFixed(1) + ' km</b> · ' +
     (ns.avgSpd > 0.5 ? '~' + fmtTime(rem / ns.avgSpd) : '—');
+  // centre: distance to the next cue — the strip is windowed to the map, so at rider
+  // zoom the next turn is usually off the right edge; this is the number that matters
+  const nd = ns.cdD;
+  progNext.innerHTML = isFinite(nd) && nd != null && !ns.off
+    ? '→ <b>' + (nd < 1000 ? Math.max(10, Math.round(nd / 10) * 10) + ' m' : (nd / 1000).toFixed(1) + ' km') + '</b>'
+    : '';
 }
 /* countdown bar: fixed full width, fills left→right as the next cue closes in; big number
    in metres or seconds (settings). Seconds freeze at the last value when stopped — never ∞. */
@@ -3113,7 +3140,8 @@ function drawCountdown(ctx, w, h, ns) {
    One edge readout — speed (adventure profile) or battery (Stark). On a turn approach the
    countdown borrows the slot in amber, then the number returns. Nothing is ever centred. */
 function primaryIsBattery() {
-  return (S.set.rideProfile || 'adventure') === 'stark';
+  const base = (S.set.rideProfile || 'adventure') === 'stark';
+  return S.set.swapMain ? !base : base; // UI-tab "Swap main number" flips speed ↔ battery
 }
 function cdMain(ns) { // distance or seconds, per the countdown-units setting; seconds freeze when stopped
   const d = Math.max(0, ns.cdD || 0);
@@ -3615,19 +3643,18 @@ function refreshGlove() {
   setIc(g('gMute').querySelector('.gi'), S.set.sound ? 'volume-2' : 'volume-x');
   g('gMute').querySelector('.gl').textContent = S.set.sound ? 'Mute' : 'Muted';
   g('gMute').classList.toggle('active', !S.set.sound);
-  const o = effOrient();
-  orientFace(g('gOrient').querySelector('.gi'), o);
-  g('gOrient').querySelector('.gl').textContent = ORIENT_LABEL[o] || 'north up';
-  const ss = g('gStartStop');
-  ss.classList.toggle('stop', S.nav);
-  ss.classList.toggle('go', !S.nav);
-  setIc(ss.querySelector('.gi'), S.nav ? 'square' : 'play');
-  ss.querySelector('.gl').textContent = S.nav ? 'Stop ride' : 'Start';
   g('gTracks').querySelector('.gl').textContent = trk ? trk.name.slice(0, 16) : 'Tracks';
   setIc(g('gRideProf').querySelector('.gi'), S.set.rideProfile === 'stark' ? 'zap' : 'bike');
   g('gRideProf').querySelector('.gl').textContent = S.set.rideProfile === 'stark' ? 'Stark' : 'Adventure';
-  g('gDemo').classList.toggle('active', !!S.demo);
-  g('gDemo').querySelector('.gl').textContent = S.demo ? 'Stop demo' : 'Demo ride';
+  // the Demo tile is also the STOP: mid-ride (real or demo) it flips red and ends the ride
+  const gd = g('gDemo');
+  gd.classList.toggle('stop', S.nav);
+  gd.classList.toggle('active', !!S.demo && !S.nav);
+  setIc(gd.querySelector('.gi'), S.nav ? 'square' : 'circle-play');
+  gd.querySelector('.gl').textContent = S.nav ? 'Stop ride' : 'Demo';
+  const gc = g('gColour'), tcm = S.set.trackColour || 'none';
+  gc.querySelector('.gl').textContent = tcm === 'none' ? 'Track colour' : 'Colour: ' + tcm;
+  gc.classList.toggle('active', tcm !== 'none');
 }
 function gloveTap(fn) { return () => { fn(); refreshGlove(); gloveArm(); }; } // act, reflect, re-arm dismiss
 document.getElementById('gZoom').onclick = gloveTap(() => {
@@ -3639,11 +3666,7 @@ document.getElementById('gLayers').onclick = gloveTap(() => {
   setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]);
 });
 document.getElementById('gMute').onclick = gloveTap(() => setSound(!S.set.sound));
-document.getElementById('gOrient').onclick = gloveTap(() => northBtn.onclick());
 document.getElementById('gMark').onclick = () => { closeGlove(); markSpot(); };
-document.getElementById('gZoomMin').onclick = () => { closeGlove(); presetTap('min'); };
-document.getElementById('gZoomMax').onclick = () => { closeGlove(); presetTap('max'); };
-document.getElementById('gStartStop').onclick = () => { closeGlove(); S.nav ? stopNav() : startNav(); };
 document.getElementById('gTracks').onclick = () => { closeGlove(); openPanel();
   document.querySelector('#setTabs button[data-t="Tracks"]').click(); };
 document.getElementById('gSettings').onclick = () => { closeGlove(); openPanel();
@@ -3652,12 +3675,26 @@ document.getElementById('gRideProf').onclick = gloveTap(() => {
   S.set.rideProfile = S.set.rideProfile === 'stark' ? 'adventure' : 'stark';
   saveSet(); renderMain();
 });
-document.getElementById('gDemo').onclick = () => { closeGlove(); S.demo ? (stopDemo(), stopNav()) : demoChoice(); };
-function applyGloveSide() {
-  gloveBtn.classList.toggle('right', S.set.gloveSide === 'right');
-  gloveBtn.classList.toggle('left', S.set.gloveSide !== 'right');
-  placeProgress();
-}
+/* Demo tile doubles as STOP: any active ride (real or demo) ends here — the two-tap
+   ☰ → tile path is the mis-tap protection that used to guard gStartStop */
+document.getElementById('gDemo').onclick = () => { closeGlove(); S.nav ? stopNav() : demoChoice(); };
+/* Track colour: ☰ tile → chooser (none / slope / surface). Slope greys out without elevation. */
+document.getElementById('gColour').onclick = () => {
+  closeGlove();
+  const trk = S.tracks[S.sel];
+  document.querySelector('#colourPick [data-tc="slope"]').disabled = !(trk && trk.hasEle);
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('colourPick').classList.add('on');
+};
+for (const b of document.querySelectorAll('#colourPick [data-tc]'))
+  b.onclick = () => {
+    S.set.trackColour = b.dataset.tc; saveSet(); closeDialog();
+    refreshRouteFeatures(); refreshGlove();
+    toast(b.dataset.tc === 'none' ? 'Track colour: plain route blue'
+      : b.dataset.tc === 'slope' ? 'Track colour: slope — brighter blue is steeper'
+      : 'Track colour: surface — blue sealed, amber dirt');
+  };
+document.getElementById('cpCancel').onclick = closeDialog;
 
 /* ---------------- GPS ---------------- */
 let watchId = null;
@@ -3690,6 +3727,22 @@ function startDemo() {
   // plain demo ticks at 10 Hz so the route plays back 10×; training keeps 1 Hz —
   // its lessons, off-track acts and card pacing are tuned to real time
   const SPEED = 8.5, TICK_MS = TRAIN.active ? 1000 : 100; // m/s ≈ 30 km/h reported to nav
+  /* plain demo = highlight reel (2026-07-19): sprint any boring gap so the next audible
+     cue is ~3 s away, then drop to ride pace ~250 m out so the auto-zoom dive, countdown
+     and beeps play out in real time (~3 s), carry a little past the turn, sprint again.
+     Sprint steps cap just under progContM so the travelled spans stay continuous. */
+  const APPR_M = 250, PAST_M = 40, SPRINT_TICKS = 30, MAX_STEP = 145;
+  let sprintV = null; // constant per-sprint velocity — recomputing per tick would decay asymptotically
+  const demoStep = () => {
+    if (TRAIN.active) return SPEED;
+    const A = trk.alerts; if (!A || !A.length) return MAX_STEP; // no cues at all — just get through it
+    let next = null;
+    for (const a of A) if (a.at > d - PAST_M && !SILENT_KINDS[kindOf(a)]) { next = a.at; break; }
+    const gap = (next == null ? trk.lengthM : next) - d;
+    if (gap <= APPR_M) { sprintV = null; return SPEED; } // inside the window: ride it for real
+    if (sprintV == null) sprintV = Math.min(MAX_STEP, Math.max(SPEED, (gap - APPR_M) / SPRINT_TICKS));
+    return sprintV;
+  };
   // one synthetic fix through the same entry real GPS uses. Training's off-track act
   // displaces the fix ~90 m sideways (past offM) for TRAIN.offT ticks — the real
   // banner, growl and back-on chirp all fire on their own.
@@ -3717,7 +3770,7 @@ function startDemo() {
     // lesson pause: hold the spot and feed speed-0 fixes — the app genuinely reads
     // "stopped", so pinch-zoom unlocks (the real stop-and-manipulate grammar)
     if (TRAIN.active && TRAIN.holdD != null) { feed(TRAIN.holdD, 0); return; }
-    d += SPEED;
+    d += demoStep();
     // simulate Stark mode changes so the digit and mode ping work off the bike
     if (++tick % 25 === 1 && !TRAIN.active) { const m = 1 + (((tick / 25) | 0) % 5);
       vargApplyState({ mode: m, hp: 20 + m * 12, regen: Math.max(0, 100 - m * 18), tc: Math.max(0, 100 - m * 15) }); }
@@ -3726,14 +3779,14 @@ function startDemo() {
     feed(d, TRAIN.active && TRAIN.holdD != null ? 0 : SPEED);
   }, TICK_MS);
   if (!S.nav) startNav();
-  if (!TRAIN.active) toast('Demo ride at 30 km/h, 10× playback — listen for beeps');
+  if (!TRAIN.active) toast('Demo: fast-forwards between turns — each approach plays out for real');
 }
 function stopDemo() {
   if (!S.demo) return;
   clearInterval(S.demo); S.demo = null; startGPS(); // resume real GPS
   if (TRAIN.active) endTraining(false); // every exit path funnels through cleanup
 }
-document.getElementById('demoBtn').onclick = () => { closePanel(); S.demo ? (stopDemo(), stopNav()) : demoChoice(); };
+document.getElementById('demoBtn').onclick = () => { closePanel(); S.nav ? stopNav() : demoChoice(); };
 document.getElementById('testBeep').onclick = () => { audio(); BEEP.turn(); };
 
 /* ---------------- training ride (2026-07-19 design) ----------------
@@ -3828,7 +3881,7 @@ const TRAIN_STEPS = [
       '<b>High</b> pitch = turn NOW.<br>That\'s the whole language — here are all four:' },
   { at: () => 60, title: 'Your riding screen', target: '#hud', advance: { ack: true },
     html: 'Top strip: the <b>next turn</b> with a countdown. Bottom: <b>ride progress</b>. ' +
-      'Top centre: <b>speed</b>. Everything else is map. Tap Got it and we\'ll roll.' },
+      '<b>Speed</b> sits below the N button, top left. Everything else is map. Tap Got it and we\'ll roll.' },
   { at: t => t.alerts[0].at - 160, title: 'Just listen', advance: { ack: true },
     html: 'A <b>right turn</b> is coming up. You\'ll hear the <b>deep beep</b> first — get ready — ' +
       'then the <b>high beep</b> at the turn itself, with a giant arrow on screen. ' +
@@ -3838,19 +3891,26 @@ const TRAIN_STEPS = [
       'If you never hear it after a turn, you probably took the wrong fork.' },
   { at: t => t.alerts[1].at - 140, title: 'Look around', advance: { ev: 'drag' },
     html: '<b>Drag the map</b> with a finger — looking around is always allowed, even mid-ride.' },
+  { title: 'The whole track', target: '#boxBtn', advance: { ev: 'fit' },
+    html: 'Tap the <b>box button</b> (top right) — the map zooms right out to frame the whole ride.' },
   { title: 'Come home', target: '#dotBtn', advance: { ev: 'recentre' },
-    html: 'You\'re panned away, so the big round button became a <b>dot</b>. <b>Tap it</b> to snap back onto yourself.' },
+    html: 'And the <b>dot button</b> (bottom right) snaps you back onto yourself. <b>Tap it</b> to carry on.' },
   { title: 'Zoom when stopped', advance: { ev: 'zoom-gesture' },
     html: 'You\'re stopped right now, so <b>pinch to zoom</b> works (on a computer: scroll). ' +
-      'Above walking pace finger-zoom locks so a glove brush can\'t wreck the view — riding, you zoom from the menu.' },
+      'Above walking pace finger-zoom locks so a glove brush can\'t wreck the view — riding, use the − / + buttons.' },
+  { title: 'Favourite zooms', target: '#zoomIn', advance: { ev: 'preset' },
+    html: 'The <b>− / +</b> buttons zoom the map any time. Now <b>hold +</b> for a second — that saves ' +
+      'this zoom as your <b>turn zoom</b>, where auto-zoom dives at junctions. (Hold <b>−</b> to save ' +
+      'your cruising <b>riding zoom</b>.)' },
+  { title: 'North, course, compass', target: '#orientCtl', advance: { ack: true },
+    html: 'The <b>N button</b> (top left) cycles <b>north-up → course-up → compass</b>. Compass turns ' +
+      'the map as your bars turn — the fastest way to read a confusing junction.' },
   { title: 'The glove menu', target: '#menuBtn', advance: { ev: 'glove' },
-    html: 'Tap the <b>☰ button</b> — the whole screen becomes giant glove-sized tiles. Every ride control lives here.' },
+    html: 'Tap the <b>☰ button</b> (bottom left) — the whole screen becomes giant glove-sized tiles: ' +
+      '<b>Mute, Mark spot, Auto zoom, map layers, track colour, Stop</b>.' },
   { title: 'Mute', target: '#gMute', advance: { ev: 'unmute' },
     html: 'Tap <b>Mute</b>, then tap it <b>again</b> to un-mute. Muted, all beeps stop — ' +
       'except <b>danger barks, which always sound</b>.' },
-  { title: 'Favourite zooms', target: '#gZoomMin', advance: { ev: 'preset' },
-    html: 'Tap <b>Zoom close</b> — your saved tight zoom for junctions. <b>Zoom wide</b> is the overview. ' +
-      '(On the stopped screen, hold a preset button to save the current zoom as that favourite.)' },
   { at: t => t.alerts[2].at - 45, title: 'Turn mode', advance: { ev: 'turnmode' },
     html: 'Unmarked fork ahead. <b>Double-tap the map</b>: it snap-zooms in and turns track-up ' +
       'so you can read which fork is yours.' },
@@ -4347,8 +4407,8 @@ async function handleFiles(files) {
     }
     catch (e) { errs++; console.warn('load failed', f.name, e); }
   }
-  if (S.sel < 0 && S.tracks.length) selectTrack(0);
-  refreshTrackList(); refreshEmpty(); refreshMapData();
+  // freshly loaded files stay UNSELECTED — every track shows on the map, tap one to pick it
+  refreshTrackList(); refreshEmpty(); refreshMapData(); updateBottomBar();
   if (nT || nH) fitSelected();
   const extra = stravaTiles ? ` + ${stravaTiles} Strava tiles` : '';
   toast(`Loaded ${nT} track${nT === 1 ? '' : 's'}${nH ? ' + heatmap' : ''}${extra}${errs ? ' · ' + errs + ' failed' : ''}`);
@@ -4495,6 +4555,28 @@ async function swapHeatToPack(pack) {
     document.getElementById('heatInfo').textContent = 'Heatmap: ' + rec.name + ' — ' + S.heat.count + ' tracks';
   } catch (e) { console.warn('heatmap swap failed', e); }
 }
+/* stopped-screen: tap a track line on the map to select it; tap the selected one again
+   to deselect (back to the all-tracks view). Tap radius ~24 px, floor 20 m. */
+function trackTap(lngLat) {
+  if (!S.tracks.length || !mapReady) return;
+  const [x, y] = toXY(lngLat.lat, lngLat.lng);
+  const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
+  const tapR = Math.max(20, mpp * 24);
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < S.tracks.length; i++) {
+    const n = nearestOnTrack(S.tracks[i], x, y);
+    if (n.d < bd) { bd = n.d; best = i; }
+  }
+  if (best < 0 || bd > tapR) return; // tapped empty map — no change
+  if (best === S.sel) deselectTrack();
+  else { selectTrack(best); toast(S.tracks[best].name); }
+}
+function deselectTrack() {
+  if (S.cueEdit) setCueEdit(false);
+  S.sel = -1;
+  refreshTrackList(); updateBottomBar(); refreshMapData();
+  toast('Track deselected — all tracks shown');
+}
 function selectTrack(i) {
   if (S.cueEdit) setCueEdit(false);
   S.sel = i;
@@ -4508,8 +4590,9 @@ function selectTrack(i) {
 }
 function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
-  const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revBtn');
-  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap ☰ to pick a track, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.style.display = 'none'; return; }
+  const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revToggle');
+  document.getElementById('startBtn').classList.toggle('on', !S.nav); // on-map START (free-ride works trackless)
+  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap a track on the map, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.classList.remove('on'); return; }
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
@@ -4517,10 +4600,11 @@ function updateBottomBar() {
   sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' cues' + (nE ? ' (' + nE + ' edited)' : '') + (t.reverse ? ' · reversed' : '');
   nb.disabled = false;
   eb.style.display = t.alerts ? 'flex' : 'none';
-  rb.style.display = 'flex'; rb.classList.toggle('active', !!t.reverse);
+  rb.classList.add('on'); rb.classList.toggle('rev', !!t.reverse);
+  document.getElementById('revLbl').textContent = t.reverse ? 'REVERSE' : 'FORWARD';
 }
-// reverse toggle: pick which way to ride the track before starting nav
-document.getElementById('revBtn').onclick = () => {
+// on-map ride-direction toggle: pick which way to ride the track before starting nav
+document.getElementById('revToggle').onclick = () => {
   const t = S.tracks[S.sel]; if (!t) return;
   t.reverse = !t.reverse;
   updateBottomBar(); refreshMapData(); drawProgress(true);
@@ -4631,11 +4715,14 @@ for (const b of document.querySelectorAll('#setTabs button'))
   b.onclick = () => {
     for (const b2 of document.querySelectorAll('#setTabs button')) b2.classList.toggle('active', b2 === b);
     for (const s of document.querySelectorAll('.tabSec')) s.classList.toggle('on', s.id === 'tab' + b.dataset.t);
-    if (b.dataset.t === 'Adv') renderSettings('adv');
+    if (b.dataset.t === 'UI') renderSettings('adv');
   };
+document.getElementById('panelClose').onclick = () => closePanel();
 function applyShowAdv() {
-  document.getElementById('advTabBtn').style.display = S.set.showAdv ? '' : 'none';
-  if (!S.set.showAdv && document.getElementById('tabAdv').classList.contains('on'))
+  // one gate for all three power-user tabs: Stark, Keys, UI (tuning + layout)
+  for (const b of document.querySelectorAll('#setTabs .advOnly')) b.style.display = S.set.showAdv ? '' : 'none';
+  const cur = document.querySelector('#setTabs button.active');
+  if (!S.set.showAdv && cur && cur.classList.contains('advOnly'))
     document.querySelector('#setTabs button[data-t="Tracks"]').click();
 }
 applyShowAdv();
@@ -5063,11 +5150,8 @@ const SETTINGS = [
   { sec: 'map', k: 'stravaHike', t: 'toggle', l: 'Strava hikes (purple)', id: 'setStravaHike', apply: applyStrava },
   { sec: 'ui', k: 'wake', t: 'toggle', l: 'Keep screen on while navigating', id: 'setWake',
     apply: () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); } },
-  { sec: 'ui', k: 'gloveSide', t: 'toggle', l: 'Ride controls button on the right', id: 'setGloveRight',
-    get: () => S.set.gloveSide === 'right', put: v => { S.set.gloveSide = v ? 'right' : 'left'; }, apply: () => applyGloveSide() },
-  { sec: 'ui', k: 'ctlEdges', t: 'seg', l: 'Control buttons on', segId: 'edgesSeg',
-    opts: [['sides', 'Left & right'], ['tb', 'Top & bottom']], apply: () => applyEdges() },
-  { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tab', id: 'setShowAdv', apply: applyShowAdv },
+  { sec: 'ui', k: 'swapMain', t: 'toggle', l: 'Swap main number (speed ↔ battery)', id: 'setSwapMain', apply: () => renderMain() },
+  { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tabs (UI, Stark, Keys)', id: 'setShowAdv', apply: applyShowAdv },
   // Nav
   { sec: 'nav', k: 'sound', t: 'toggle', l: 'Turn beeps', id: 'setSound', put: v => setSound(v) }, // setSound persists + syncs every mute face
   { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Departure chime (turn done)', id: 'setConfirm' },
@@ -5079,7 +5163,6 @@ const SETTINGS = [
     opts: [['turns', 'Turns'], ['thresh', 'Zoom'], ['off', 'Off']] },
   { sec: 'nav', k: 'countUnit', t: 'seg', l: 'Countdown units', segId: 'cdSeg',
     opts: [['m', 'Metres'], ['s', 'Seconds']] },
-  { sec: 'nav', k: 'surf', t: 'toggle', l: 'Road-surface patterns', id: 'setSurf', apply: () => refreshMapData() },
   { sec: 'nav', k: 'trail', t: 'toggle', l: 'Backtrack trail', id: 'setTrail',
     apply: () => { if (mapReady) map.setLayoutProperty('trail-dots', 'visibility', S.set.trail ? 'visible' : 'none'); } },
   // Stark
@@ -5119,15 +5202,10 @@ const SETTINGS = [
   { k: 'trailGap', t: 'range', adv: 1, l: 'Trail dot spacing (m)', min: 5, max: 100, step: 5 },
   { k: 'heatMask', t: 'range', adv: 1, l: 'Heatmap knockout along route (m, 0 = off)', min: 0, max: 60, step: 2 },
   { k: 'heatUnderOp', t: 'range', adv: 1, l: 'Heatmap under route opacity', min: 0, max: 0.5, step: 0.02 },
-  { k: 'dirtDash', t: 'range', adv: 1, l: 'Dirt dash length (×width)', min: 0.5, max: 8, step: 0.1 },
-  { k: 'dirtGap', t: 'range', adv: 1, l: 'Dirt gap length (×width)', min: 0.2, max: 8, step: 0.1 },
-  { k: 'singleDash', t: 'range', adv: 1, l: 'Singletrack dot length (×width)', min: 0.05, max: 4, step: 0.05 },
-  { k: 'singleGap', t: 'range', adv: 1, l: 'Singletrack gap length (×width)', min: 0.2, max: 8, step: 0.1 },
   { k: 'routeWOut', t: 'range', adv: 1, l: 'Route width zoomed out (px)', min: 2, max: 14, step: 0.5 },
   { k: 'routeWIn', t: 'range', adv: 1, l: 'Route width zoomed in (px)', min: 4, max: 20, step: 0.5 },
   { k: 'coreFrac', t: 'range', adv: 1, l: 'Core share of route width', min: 0.4, max: 0.95, step: 0.01 },
   { k: 'caseMode', t: 'seg', adv: 1, l: 'Route casing', opts: [['auto', 'Auto'], ['dark', 'Dark'], ['white', 'White']] },
-  { k: 'gapStyle', t: 'seg', adv: 1, l: 'Dash gaps', opts: [['case', 'Casing colour'], ['clear', 'See-through']] },
   { k: 'colDone', t: 'color', adv: 1, l: 'Travelled route core' },
   { k: 'colDoneCase', t: 'color', adv: 1, l: 'Travelled route casing' },
   { k: 'progDoneOp', t: 'range', adv: 1, l: 'Travelled route opacity', min: 0.1, max: 1, step: 0.05 },
@@ -5169,8 +5247,8 @@ let restyleT = null;
 function advApply(k) {
   if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   else if (k.startsWith('arrow')) applyArrowStyle();
-  else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // surface features bake the colour in
-  else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM') refreshRouteFeatures(); // baked into features
+  else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // segment features bake the colour in
+  else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM' || k === 'colDone') refreshRouteFeatures(); // baked into features
   else if (k === 'heatMask') { heatMaskCache.key = ''; refreshMapData(); } // re-clip with the new radius
   else if (k === 'colTrail' || k === 'trailProm') { clearTimeout(restyleT); restyleT = setTimeout(() => setMapStyle(S.set.mapStyle), 400); }
   else applyAdvPaint();
@@ -5181,28 +5259,18 @@ function applyAdvPaint() {
   map.setPaintProperty('sel-core', 'line-width', coreW());
   map.setPaintProperty('sel-case', 'line-color', caseColor());
   map.setPaintProperty('sel-case', 'line-width', totalW());
-  for (const s of ['sealed', 'dirt', 'single']) {
-    map.setPaintProperty('surf-' + s, 'line-width', coreW());
-    map.setPaintProperty('surf-case-' + s, 'line-color', caseColor());
-    map.setPaintProperty('surf-case-' + s, 'line-width', totalW());
-    map.setPaintProperty('surf-done-' + s, 'line-color', ADV('colDone'));
-    map.setPaintProperty('surf-done-' + s, 'line-opacity', ADV('progDoneOp'));
-    map.setPaintProperty('surf-done-' + s, 'line-width', coreW());
-    map.setPaintProperty('surf-done-case-' + s, 'line-color', ADV('colDoneCase'));
-    map.setPaintProperty('surf-done-case-' + s, 'line-opacity', ADV('progDoneOp'));
-    map.setPaintProperty('surf-done-case-' + s, 'line-width', totalW());
-    map.setPaintProperty('surf-miss-' + s, 'line-opacity', ADV('progMissOp'));
-    map.setPaintProperty('surf-miss-' + s, 'line-width', coreW());
-    map.setPaintProperty('surf-recent-' + s, 'line-opacity', ADV('progRecentOp'));
-    map.setPaintProperty('surf-recent-' + s, 'line-width', coreW());
-  }
-  const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
-  const clear = ADV('gapStyle') === 'clear';
-  for (const [s, d] of [['dirt', dashDirt], ['single', dashSingle]]) {
-    for (const pre of ['surf-', 'surf-done-', 'surf-miss-', 'surf-recent-']) map.setPaintProperty(pre + s, 'line-dasharray', d);
-    for (const pre of ['surf-case-', 'surf-done-case-']) // continuous casing unless gaps are set to clear
-      map.setPaintProperty(pre + s, 'line-dasharray', clear ? caseDash(d) : null);
-  }
+  map.setPaintProperty('surf-core', 'line-width', coreW());
+  map.setPaintProperty('surf-case', 'line-color', caseColor());
+  map.setPaintProperty('surf-case', 'line-width', totalW());
+  map.setPaintProperty('surf-done', 'line-opacity', ADV('progDoneOp')); // colour is baked per feature ('cd')
+  map.setPaintProperty('surf-done', 'line-width', coreW());
+  map.setPaintProperty('surf-done-case', 'line-color', ADV('colDoneCase'));
+  map.setPaintProperty('surf-done-case', 'line-opacity', ADV('progDoneOp'));
+  map.setPaintProperty('surf-done-case', 'line-width', totalW());
+  map.setPaintProperty('surf-miss', 'line-opacity', ADV('progMissOp'));
+  map.setPaintProperty('surf-miss', 'line-width', coreW());
+  map.setPaintProperty('surf-recent', 'line-opacity', ADV('progRecentOp'));
+  map.setPaintProperty('surf-recent', 'line-width', coreW());
   // keep the tiny mark-dot tier matched to the route width sliders
   if (!S.cueEdit) map.setPaintProperty('mark-dots', 'circle-radius', markDotR());
   map.setPaintProperty('heat-under', 'line-opacity', ADV('heatUnderOp'));
@@ -5305,15 +5373,7 @@ document.getElementById('advCopy').onclick = async () => {
 document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
 document.body.classList.toggle('daymode', !isNightStyle()); // boot: bar/panel scheme follows the saved map style
 applyArrowStyle();
-applyGloveSide();
-// control-button edges: left/right columns (default) or top/bottom rows
-function applyEdges() {
-  const tb = S.set.ctlEdges === 'tb';
-  document.body.classList.toggle('edges-tb', tb);
-  for (const b of document.querySelectorAll('#edgesSeg button')) b.classList.toggle('active', b.dataset.v === (tb ? 'tb' : 'sides'));
-  placeProgress();
-}
-applyEdges();
+placeProgress(); // boot: seed --chromeB before the first paint settles
 /* turn-point contribution export: the whole outbox as JSON — paste into Dingo to bake
    the edits into the pack, so every future download carries them */
 document.getElementById('turnExportBtn').onclick = async () => {
@@ -5339,7 +5399,7 @@ function applyAllSettings() {
   saveSet();
   renderSettings();
   setSound(S.set.sound);
-  refreshKeyBtns(); refreshPresets(); applyShowAdv(); applyGloveSide(); applyEdges(); applyLayout();
+  refreshKeyBtns(); refreshPresets(); applyShowAdv(); applyOrientClass(); placeProgress(); applyLayout();
   applyOrient(); applyStrava(); applyHill(); applyVarg();
   document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   if (S.nav) S.set.wake ? requestWake() : releaseWake();
@@ -5419,8 +5479,8 @@ document.getElementById('cfgPasteBtn').onclick = async () => {
 const LO_GRID = { cols: 5, rows: 6, topRes: 64, botRes: 64, edge: 10 };
 const LO_SZ = { S: 0.7, M: 1, L: 1.4 }; // legacy letter sizes — sizes are numeric multipliers now
 const LO_ELS = {
-  orientCtl: { t: 'btn' }, followBtn: { t: 'btn' }, soundCtl: { t: 'btn' },
-  presetMin: { t: 'btn' }, zoomOut: { t: 'btn' }, zoomIn: { t: 'btn' }, presetMax: { t: 'btn' },
+  orientCtl: { t: 'btn' }, boxBtn: { t: 'btn' }, dotBtn: { t: 'btn' },
+  zoomOut: { t: 'btn' }, zoomIn: { t: 'btn' },
   menuBtn: { t: 'btn', noDock: true }, // docking the way into the menu = softlock
   hudSpeed: { t: 'ro' }, vargPill: { t: 'ro' }, vargModeBig: { t: 'ro' },
   indL: { t: 'ro' }, indBeam: { t: 'ro' }, indR: { t: 'ro' }, // telltales place individually
@@ -5847,7 +5907,7 @@ async function boot() {
   try { const tr = await idb.get('trail'); if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; } } catch (e) {}
   try { const pr = await idb.get('prog'); if (pr && pr.spans) S.prog = { track: pr.track || null, spans: pr.spans, prevIdx: null }; } catch (e) {}
   try { S.rides = (await idb.all()).filter(r => r.kind === 'ride').sort((a, b) => a.ts - b.ts); } catch (e) {}
-  if (S.tracks.length && S.sel < 0) S.sel = 0;
+  // boot: nothing pre-selected — all tracks show on the map, tap one to pick it
   refreshTrackList(); refreshEmpty(); updateBottomBar();
   await initMap(); // cue analysis needs basePM, so it runs after the map boots
   if (S.sel >= 0 && !S.tracks[S.sel].alerts)
