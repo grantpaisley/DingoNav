@@ -167,7 +167,7 @@
   /* card sits bottom-centre, clear of the dot (right) and progress strip; NO shade —
      the map must stay touchable for the do-the-action lessons. z 27 > glove overlay's 25. */
   #trainCard{position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(env(safe-area-inset-bottom) + 118px); width:min(70vw,400px); z-index:27;
+    bottom:calc(var(--chromeB,0px) + 116px); width:min(70vw,400px); z-index:27;
     background:var(--panel); border:1px solid var(--accent); border-radius:16px; padding:14px 16px;
     display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
   #trainCard.on{display:block}
@@ -2387,14 +2387,6 @@ function zoomTipGate() {
     '• <b>Hold −</b> to save your <b>riding</b> zoom — where auto-zoom returns between turns.');
   return true;
 }
-function presetTap(k) {
-  if (zoomTipGate()) return;
-  if (!mapReady) return;
-  const z = zoomForSpan(presetSpan(k), centerLat());
-  map.easeTo({ zoom: z, duration: 350 });
-  if (S.nav && S.set.autoZoom) setTimeout(() => setHold(z), 400);
-  trainEvent('preset');
-}
 function presetSet(k) {
   if (zoomTipGate()) return;
   if (!mapReady) return;
@@ -2403,6 +2395,7 @@ function presetSet(k) {
   zp[k] = Math.round(spanForZoom(z, centerLat()));
   saveSet(); vib([40]); refreshPresets();
   toast((k === 'min' ? 'Turn' : 'Riding') + ' zoom saved — L' + z.toFixed(1) + ' (' + S.set.vehicle + ')');
+  trainEvent('preset');
 }
 /* − / + : tap steps the zoom; hold saves the favourite (+ → turn/close, − → riding/wide) */
 for (const [id, k, dir] of [['zoomIn', 'min', 1], ['zoomOut', 'max', -1]]) {
@@ -3843,7 +3836,7 @@ const TRAIN_STEPS = [
       '<b>High</b> pitch = turn NOW.<br>That\'s the whole language — here are all four:' },
   { at: () => 60, title: 'Your riding screen', target: '#hud', advance: { ack: true },
     html: 'Top strip: the <b>next turn</b> with a countdown. Bottom: <b>ride progress</b>. ' +
-      'Top centre: <b>speed</b>. Everything else is map. Tap Got it and we\'ll roll.' },
+      '<b>Speed</b> sits below the N button, top left. Everything else is map. Tap Got it and we\'ll roll.' },
   { at: t => t.alerts[0].at - 160, title: 'Just listen', advance: { ack: true },
     html: 'A <b>right turn</b> is coming up. You\'ll hear the <b>deep beep</b> first — get ready — ' +
       'then the <b>high beep</b> at the turn itself, with a giant arrow on screen. ' +
@@ -3853,19 +3846,26 @@ const TRAIN_STEPS = [
       'If you never hear it after a turn, you probably took the wrong fork.' },
   { at: t => t.alerts[1].at - 140, title: 'Look around', advance: { ev: 'drag' },
     html: '<b>Drag the map</b> with a finger — looking around is always allowed, even mid-ride.' },
+  { title: 'The whole track', target: '#boxBtn', advance: { ev: 'fit' },
+    html: 'Tap the <b>box button</b> (bottom left) — the map zooms right out to frame the whole ride.' },
   { title: 'Come home', target: '#dotBtn', advance: { ev: 'recentre' },
-    html: 'You\'re panned away, so the big round button became a <b>dot</b>. <b>Tap it</b> to snap back onto yourself.' },
+    html: 'And the <b>dot button</b> (bottom right) snaps you back onto yourself. <b>Tap it</b> to carry on.' },
   { title: 'Zoom when stopped', advance: { ev: 'zoom-gesture' },
     html: 'You\'re stopped right now, so <b>pinch to zoom</b> works (on a computer: scroll). ' +
-      'Above walking pace finger-zoom locks so a glove brush can\'t wreck the view — riding, you zoom from the menu.' },
+      'Above walking pace finger-zoom locks so a glove brush can\'t wreck the view — riding, use the − / + buttons.' },
+  { title: 'Favourite zooms', target: '#zoomIn', advance: { ev: 'preset' },
+    html: 'The <b>− / +</b> buttons zoom the map any time. Now <b>hold +</b> for a second — that saves ' +
+      'this zoom as your <b>turn zoom</b>, where auto-zoom dives at junctions. (Hold <b>−</b> to save ' +
+      'your cruising <b>riding zoom</b>.)' },
+  { title: 'North, course, compass', target: '#orientCtl', advance: { ack: true },
+    html: 'The <b>N button</b> (top left) cycles <b>north-up → course-up → compass</b>. Compass turns ' +
+      'the map as your bars turn — the fastest way to read a confusing junction.' },
   { title: 'The glove menu', target: '#menuBtn', advance: { ev: 'glove' },
-    html: 'Tap the <b>☰ button</b> — the whole screen becomes giant glove-sized tiles. Every ride control lives here.' },
+    html: 'Tap the <b>☰ button</b> (top right) — the whole screen becomes giant glove-sized tiles: ' +
+      '<b>Mute, Mark spot, Auto zoom, map layers, track colour, Stop</b>.' },
   { title: 'Mute', target: '#gMute', advance: { ev: 'unmute' },
     html: 'Tap <b>Mute</b>, then tap it <b>again</b> to un-mute. Muted, all beeps stop — ' +
       'except <b>danger barks, which always sound</b>.' },
-  { title: 'Favourite zooms', target: '#gZoomMin', advance: { ev: 'preset' },
-    html: 'Tap <b>Zoom close</b> — your saved tight zoom for junctions. <b>Zoom wide</b> is the overview. ' +
-      '(On the stopped screen, hold a preset button to save the current zoom as that favourite.)' },
   { at: t => t.alerts[2].at - 45, title: 'Turn mode', advance: { ev: 'turnmode' },
     html: 'Unmarked fork ahead. <b>Double-tap the map</b>: it snap-zooms in and turns track-up ' +
       'so you can read which fork is yours.' },
