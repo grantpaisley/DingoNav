@@ -37,21 +37,23 @@
     border-radius:0 0 18px 18px}
   #hudFill{position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,176,32,.22);
     transition:width .9s linear}
-  #hudArrow{font-size:68px; line-height:1; width:84px; text-align:center; position:relative}
-  #hudArrow svg.ic{display:block; margin:0 auto; vertical-align:0}
   #hudSpeed svg.ic{width:.85em; height:.85em; vertical-align:-0.06em}
-  #hudArrow.left{color:var(--warn)} #hudArrow.right{color:var(--warn)}
   #hudBox.commit{border-bottom-color:var(--ok)}
-  #hudBox.commit #hudArrow{color:var(--ok)}
   #hudBox.commit #hudFill{background:rgba(56,209,120,.22)}
   #hudDist{font-size:60px; font-weight:800; font-variant-numeric:tabular-nums; margin-left:auto;
     position:relative; white-space:nowrap; flex:none}
   #hudDist small{font-size:30px; font-weight:600; color:var(--dim)}
-  #hudType{font-size:28px; color:var(--fg); letter-spacing:.02em; position:relative;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0}
-  /* tap the strip → the instruction briefly expands ("Left on to Arcadia Rd") */
+  /* no arrow glyph — the strip reads as words: "Right" over the road name */
+  #hudTxt{flex:1; min-width:0; position:relative; line-height:1.15}
+  #hudType{font-size:34px; font-weight:800; color:var(--fg); letter-spacing:.02em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  #hudType.left, #hudType.right{color:var(--warn)}
+  #hudType.danger{color:var(--bad)}
+  #hudRoad{font-size:19px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  /* tap the strip → the full instruction in large writing; tap again to shrink */
   #hudBox{pointer-events:auto; cursor:pointer}
-  #hudBox.expand #hudType{font-size:36px; font-weight:800; white-space:normal; line-height:1.15}
+  #hudBox.expand #hudType{font-size:38px; white-space:normal; line-height:1.15}
+  #hudBox.expand #hudRoad{display:none}
   /* main number: one edge readout (speed or battery, by ride profile), never centred —
      top-centre is the direction of travel. The turn countdown borrows this slot (amber). */
   #hudSpeed{position:fixed; top:calc(env(safe-area-inset-top) + 12px); left:12px; z-index:10;
@@ -198,6 +200,12 @@
   #orientCtl, #boxBtn, #baseRow .ctl{width:88px; height:88px; border-radius:24px; font-size:40px; flex:none}
   #orientCtl, #boxBtn{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:16}
   #orientCtl{left:10px} #boxBtn{right:10px}
+  /* red needle riding the N button's edge — counter-rotates with the map so it ALWAYS
+     points at true north (straight up in north-up mode) */
+  #orientNeedle{position:absolute; inset:0; display:flex; justify-content:center;
+    pointer-events:none; will-change:transform}
+  #orientNeedle::before{content:''; width:0; height:0; border:7px solid transparent;
+    border-bottom:12px solid var(--bad); margin-top:4px}
   #baseRow{position:fixed; left:0; right:0; bottom:calc(var(--chromeB,0px) + 8px); z-index:16;
     display:flex; align-items:flex-end; padding:0 10px; pointer-events:none}
   #baseRow .ctl{pointer-events:auto}
@@ -287,6 +295,14 @@
   /* turn-approach countdown: strip becomes a fixed full-width bar with a big number */
   #progress.countdown #progCanvas{height:80px}
   #progress.countdown #progLabels{display:none}
+  /* SOLID amber turn arrows flanking the countdown bar — peripheral-vision direction,
+     unlike the translucent giant arrow mid-map */
+  .cdArrow{position:fixed; bottom:calc(env(safe-area-inset-bottom) + 12px); z-index:16;
+    display:none; color:var(--warn); pointer-events:none;
+    filter:drop-shadow(0 2px 8px rgba(0,0,0,.45))}
+  .cdArrow.on{display:block}
+  .cdArrow svg.ic{display:block; width:60px; height:60px; fill:currentColor; stroke:none}
+  #cdArrowL{left:14px} #cdArrowR{right:14px}
 
   /* ---------- bottom bar ---------- */
   #bottom{position:fixed; left:0; right:0; bottom:0; z-index:15;
@@ -309,6 +325,10 @@
   .gtile.stop{background:var(--bad); border-color:var(--bad)}
   .gtile.stop .gi,.gtile.stop .gl{color:#fff}
   .gtile.stop:active{background:#d32f2f}
+  /* explicit way out of the glove grid: a ☰ in the same bottom-left spot that opened it */
+  #gloveClose{position:fixed; left:10px; bottom:calc(var(--chromeB,0px) + 8px);
+    width:88px; height:88px; border-radius:24px; font-size:40px;
+    background:rgba(34,41,48,.95); text-shadow:0 1px 6px rgba(0,0,0,.8)}
   /* TURN MODE: double-tap the map while riding — zoomed, compass-up; MARK TURN arms, tap places */
   #markTurn{position:fixed; left:50%; transform:translateX(-50%);
     bottom:calc(var(--chromeB,0px) + 12px); z-index:18; display:none; padding:0 44px;
@@ -381,7 +401,8 @@
   body.daymode #hudBox{background:rgba(255,255,255,.72); border-bottom-color:#d0d5db}
   body.daymode #hudType, body.daymode #hudDist{color:#15202b}
   body.daymode #hudDist small{color:#5a6a78}
-  body.daymode #hudArrow.left, body.daymode #hudArrow.right{color:#b45309}
+  body.daymode #hudType.left, body.daymode #hudType.right{color:#b45309}
+  body.daymode #hudRoad{color:#5a6a78}
   body.daymode #panel{--fg:#15202b; --dim:#5a6a78; --panel:#eef1f4; --panel2:#ffffff; --bg:#e4e9ee;
     background:#eef1f4; color:var(--fg)}
   body.daymode #panel .btn{border-color:#c9c9ce}
@@ -452,9 +473,8 @@
   /* ---------- responsive: landscape / split-screen (short viewports) ---------- */
   @media (max-height: 500px) {
     #hudBox{padding:calc(env(safe-area-inset-top) + 6px) 14px 6px; gap:12px}
-    #hudArrow{font-size:44px; width:54px}
     #hudDist{font-size:38px} #hudDist small{font-size:20px}
-    #hudType{font-size:20px}
+    #hudType{font-size:24px} #hudRoad{font-size:14px}
     #hudSpeed{font-size:76px; padding:0 6px} #hudSpeed small{font-size:30px}
     /* shrunk corner buttons → the readouts tuck under them sooner */
     body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px); left:12px}
@@ -594,8 +614,7 @@
 
 <div id="hud"><div id="hudBox">
   <div id="hudFill"></div>
-  <div id="hudArrow"><svg class="ic"><use href="#i-arrow-up"/></svg></div>
-  <div id="hudType">next turn</div>
+  <div id="hudTxt"><div id="hudType">next turn</div><div id="hudRoad"></div></div>
   <div id="hudDist">— <small>m</small></div>
 </div></div>
 <div id="hudSpeed">0 <small>km/h</small></div>
@@ -633,7 +652,7 @@
 </div>
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
-<div class="ctl" id="orientCtl" title="north-up / course-up / compass">N</div>
+<div class="ctl" id="orientCtl" title="north-up / course-up / compass"><span id="orientNeedle"></span><span id="orientGlyph">N</span></div>
 <div class="ctl" id="boxBtn" title="see the whole track"><svg class="ic"><use href="#i-square"/></svg></div>
 <div id="baseRow">
   <div class="ctl" id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
@@ -675,12 +694,14 @@
   <div class="gtile" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
   <div class="gtile" id="gColour"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Track colour</div></div>
   <div class="gtile" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
-</div></div>
+</div><div class="ctl" id="gloveClose" title="close menu"><svg class="ic"><use href="#i-menu"/></svg></div></div>
 
 <div id="progress">
   <canvas id="progCanvas"></canvas>
   <div id="progLabels"><span id="progDone">—</span><span id="progNext"></span><span id="progTogo">—</span></div>
 </div>
+<div id="cdArrowL" class="cdArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div>
+<div id="cdArrowR" class="cdArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div>
 
 <div id="bottom">
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
@@ -1757,6 +1778,9 @@ async function initMap() {
     S.turn ? exitTurnMode() : enterTurnMode();
   });
   initLockGesture();
+  // the N button's red needle counter-rotates with the map — always pointing true north
+  map.on('rotate', () => { const n = document.getElementById('orientNeedle');
+    if (n) n.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
   map.on('mousedown', closeGlove); map.on('touchstart', closeGlove); // tap the map = dismiss glove overlay
   window.__map = map;
   // MapLibre's own ResizeObserver doesn't fire in hidden/background tabs — watchdog it,
@@ -1851,9 +1875,11 @@ function addOverlays() {
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': clsMatch(), 'line-opacity': ADV('heatUnderOp'),
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
+  // every loaded track rides in route blue WITHOUT casing — the casing is the
+  // selection signal (the selected track alone gets the cased nav treatment)
   map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
-    layout: { 'line-join': 'round' },
-    paint: { 'line-color': '#b4c8d7', 'line-opacity': 0.4, 'line-width': 1.6 } });
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': ADV('colRoute'), 'line-opacity': 1, 'line-width': coreW() } });
   // backtrack trail: muted dotted thread of where you've actually been, under the route
   map.addSource('trail', { type: 'geojson', data: EMPTY });
   map.addLayer({ id: 'trail-dots', type: 'line', source: 'trail',
@@ -2112,10 +2138,9 @@ function refreshMapData() {
   map.getSource('tracksOther').setData({ type: 'FeatureCollection',
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
       geometry: { type: 'LineString', coordinates: t.coordsLL } })) });
-  // stopped-screen track picker: with nothing selected every track reads clearly;
-  // once one is picked (nav colours) the rest drop to a translucent underlay
-  map.setPaintProperty('tracks-other', 'line-opacity', S.sel >= 0 ? 0.3 : 0.85);
-  map.setPaintProperty('tracks-other', 'line-width', S.sel >= 0 ? 2 : 3.5);
+  // stopped-screen track picker: all tracks in uncased route blue; picking one gives
+  // IT the casing and dims the rest only slightly — the casing carries the selection
+  map.setPaintProperty('tracks-other', 'line-opacity', S.sel >= 0 ? 0.65 : 1);
   const trk = S.tracks[S.sel];
   const dir = S.navState ? S.navState.dir : (trk && trk.reverse ? -1 : 1);
   map.getSource('selTrack').setData(trk ? { type: 'Feature', properties: {},
@@ -2670,8 +2695,8 @@ function applyOrient() {
   northBtn.classList.toggle('course', o === 'course');
   northBtn.classList.toggle('oriented', o === 'oriented');
   northInner.textContent = ORIENT_GLYPH[o] || 'N';
-  const oc = document.getElementById('orientCtl'); // cluster orientation button mirrors the mode
-  if (oc) { orientFace(oc, o); oc.classList.toggle('active', o !== 'north'); }
+  const oc = document.getElementById('orientCtl'); // the N button mirrors the mode (glyph child — the needle survives)
+  if (oc) { orientFace(document.getElementById('orientGlyph'), o); oc.classList.toggle('active', o !== 'north'); }
   document.getElementById('orientLabel').textContent = (ORIENT_LABEL[o] || 'north up') + (S.autoOrient ? ' · auto' : '');
   if (o === 'oriented') enableCompass(false); else disableCompass();
   if (!mapReady) return;
@@ -2930,34 +2955,32 @@ function flashCommit() {
 }
 function setHud(alert, dTo, dir, farM) {
   const box = document.getElementById('hudBox'), fill = document.getElementById('hudFill');
-  const arrow = document.getElementById('hudArrow'), distEl = document.getElementById('hudDist'), typeEl = document.getElementById('hudType');
+  const distEl = document.getElementById('hudDist'), typeEl = document.getElementById('hudType');
+  const roadEl = document.getElementById('hudRoad');
   // the strip slides in at the far warning, not permanently (design: minimal riding screen)
   const win = Math.max((farM || 160) * ADV('apprMul'), ADV('apprFloor'));
   const show = !!alert && dTo <= win;
   box.style.visibility = show || box.classList.contains('commit') ? '' : 'hidden';
-  if (!show) { fill.style.width = '0'; S._turnCue = null; S._hudInfo = null; updateBigArrows(); renderMain(); return; }
+  if (!show) { fill.style.width = '0'; S._turnCue = null; S._hudInfo = null; updateBigArrows(); applyCdArrows(); renderMain(); return; }
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
-  S._turnCue = type === 'left' || type === 'right' ? type : null; updateBigArrows(); renderMain(); // side arrows are turns-only
-  const icons = { left: 'corner-up-left', right: 'corner-up-right', straight: 'arrow-up',
-    danger: 'triangle-alert', obstacle: 'construction', gate: 'fence', creek: 'waves' };
-  const labels = { left: 'Turn left', right: 'Turn right', straight: 'Straight ahead',
+  S._turnCue = type === 'left' || type === 'right' ? type : null; updateBigArrows(); applyCdArrows(); renderMain(); // side arrows are turns-only
+  const labels = { left: 'Left', right: 'Right', straight: 'Straight',
     danger: 'DANGER !!!', obstacle: 'Obstacle', gate: 'Gate', creek: 'Creek crossing' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
   const from = dir > 0 ? alert.from : alert.onto, onto = dir > 0 ? alert.onto : alert.from;
-  const ontoTxt = onto && onto !== from ? ' · onto ' + ((dir > 0 && alert.name) || onto) : '';
   S._hudInfo = { alert, type, dir };
-  // north-up: rotate the arrow to the turn's actual exit bearing; course-up: flat left/right
-  const isTurn = type === 'left' || type === 'right' || type === 'straight';
-  if (isTurn && S.set.orient === 'north' && alert.outBrg != null) {
-    const exit = dir > 0 ? alert.outBrg : (alert.inBrg + 180) % 360;
-    setIc(arrow, 'arrow-up'); arrow.className = type; arrow.style.transform = 'rotate(' + exit + 'deg)';
-  } else {
-    setIc(arrow, icons[type] || 'arrow-up'); arrow.className = type; arrow.style.transform = '';
-  }
   distEl.innerHTML = (dTo >= 995 ? (dTo / 1000).toFixed(1) + ' <small>km</small>' : Math.round(dTo / 5) * 5 + ' <small>m</small>');
-  typeEl.textContent = Date.now() < hudExpandT ? instrText(alert, type, dir)
-    : (labels[type] || 'turn') + ontoTxt;
+  if (box.classList.contains('expand')) {
+    typeEl.textContent = instrText(alert, type, dir);
+  } else {
+    // words carry the whole message: "Right" over "Arcadia Rd" — no arrow glyph
+    typeEl.textContent = labels[type] || 'Turn';
+    const road = (dir > 0 && alert.name) || (onto && onto !== from ? (SURF_WORD[onto] || onto) : '');
+    roadEl.textContent = road || '';
+    roadEl.style.display = road ? '' : 'none';
+  }
+  typeEl.className = type;
   fill.style.width = Math.max(0, Math.min(100, dTo / win * 100)) + '%'; // drains to zero at the turn
 }
 /* full spoken-style instruction, mixed case: named road wins, else the surface you
@@ -2971,15 +2994,14 @@ function instrText(alert, type, dir) {
   if (onto && onto !== from) return dirW + ' on to ' + (SURF_WORD[onto] || onto);
   return dirW;
 }
-// tap the turn strip → the instruction expands for ~4 s, then back to compact
-let hudExpandT = 0;
+// tap the turn strip → the full instruction in large writing; tap again to shrink
 document.getElementById('hudBox').onclick = () => {
   if (!S._hudInfo) return;
-  hudExpandT = Date.now() + 4000;
   const box = document.getElementById('hudBox');
-  box.classList.add('expand');
-  document.getElementById('hudType').textContent = instrText(S._hudInfo.alert, S._hudInfo.type, S._hudInfo.dir);
-  setTimeout(() => { if (Date.now() >= hudExpandT) box.classList.remove('expand'); }, 4100);
+  const on = !box.classList.contains('expand');
+  box.classList.toggle('expand', on);
+  if (on) document.getElementById('hudType').textContent = instrText(S._hudInfo.alert, S._hudInfo.type, S._hudInfo.dir);
+  // collapsing: the next GPS fix re-renders the compact two-line form (≤1 s)
 };
 
 /* ---------------- progress strip ---------------- */
@@ -3042,7 +3064,7 @@ function drawProgress(force) {
   if (!trk || !ns) return;
   // turn approach: the strip flips to a fixed-length countdown bar (fills toward the turn)
   const cdOn = !!ns.cdOn;
-  if (cdOn !== prog.classList.contains('countdown')) { prog.classList.toggle('countdown', cdOn); placeProgress(); force = true; }
+  if (cdOn !== prog.classList.contains('countdown')) { prog.classList.toggle('countdown', cdOn); placeProgress(); applyCdArrows(); force = true; }
   const dpr = window.devicePixelRatio || 1, w = progCanvas.clientWidth, h = progCanvas.clientHeight;
   if (!w || !h) return;
   if (force || progCanvas.width !== ((w * dpr) | 0) || progCanvas.height !== ((h * dpr) | 0)) {
@@ -3164,6 +3186,17 @@ function renderMain() {
   } else {
     el.classList.remove('low');
     el.innerHTML = Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' <small>km/h</small>';
+  }
+}
+/* countdown-bar flank arrows: SOLID amber, both ends of the bar, pointing the turn
+   direction — on only while the countdown bar is up and the cue is a turn */
+function applyCdArrows() {
+  const ty = S._turnCue;
+  const on = prog.classList.contains('countdown') && (ty === 'left' || ty === 'right');
+  for (const id of ['cdArrowL', 'cdArrowR']) {
+    const el = document.getElementById(id);
+    el.classList.toggle('on', on);
+    if (on) el.querySelector('use').setAttribute('href', ty === 'left' ? '#i-arrow-big-left' : '#i-arrow-big-right');
   }
 }
 /* giant side arrows: solid = upcoming turn on that side; flashing = that indicator is on */
@@ -3635,6 +3668,7 @@ gloveBtn.onclick = () => gloveOverlay.classList.contains('on') ? closeGlove() : 
 gloveOverlay.addEventListener('click', e => {
   if (e.target === gloveOverlay || e.target === document.getElementById('gloveGrid')) closeGlove();
 });
+document.getElementById('gloveClose').onclick = closeGlove; // same spot as the ☰ that opened it
 function refreshGlove() {
   const trk = S.tracks[S.sel];
   const g = id => document.getElementById(id);
@@ -5259,6 +5293,8 @@ function applyAdvPaint() {
   map.setPaintProperty('sel-core', 'line-width', coreW());
   map.setPaintProperty('sel-case', 'line-color', caseColor());
   map.setPaintProperty('sel-case', 'line-width', totalW());
+  map.setPaintProperty('tracks-other', 'line-color', ADV('colRoute'));
+  map.setPaintProperty('tracks-other', 'line-width', coreW());
   map.setPaintProperty('surf-core', 'line-width', coreW());
   map.setPaintProperty('surf-case', 'line-color', caseColor());
   map.setPaintProperty('surf-case', 'line-width', totalW());
