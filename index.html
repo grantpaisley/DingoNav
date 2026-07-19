@@ -337,10 +337,17 @@
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
   #shade.on{display:block}
   #panel:not(.on){pointer-events:none} /* a sliding-out panel must never eat taps */
-  #panel{position:fixed; left:0; right:0; bottom:0; max-height:78vh; overflow-y:auto; z-index:20;
-    background:var(--panel); border-radius:20px 20px 0 0; padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);
+  /* settings are a FULL screen (2026-07-19 design) — the hamburger top-right (same spot
+     as the map ☰) slides it away again */
+  #panel{position:fixed; inset:0; overflow-y:auto; z-index:20;
+    background:var(--panel); padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 16px);
     transform:translateY(105%); transition:transform .22s ease}
   #panel.on{transform:translateY(0)}
+  #panelClose{position:fixed; right:10px; top:calc(env(safe-area-inset-top) + 10px); z-index:22;
+    width:88px; height:88px; font-size:44px; display:flex; align-items:center; justify-content:center;
+    background:rgba(34,41,48,.85); border:1px solid #2a3540; border-radius:24px; color:var(--fg); cursor:pointer}
+  body.daymode #panelClose{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f}
+  #panel > [data-reg="style"]{margin-right:104px} /* first row clears the close hamburger */
   #panel h3{font-size:13px; letter-spacing:.06em; color:var(--dim); margin:18px 0 8px}
   /* ---------- Mac-like day theme (2026-07-17 samples review) ----------
      Day map styles flip the chrome light: #f5f5f7 plates with hairline borders
@@ -681,6 +688,7 @@
 
 <div id="shade"></div>
 <div id="panel">
+  <div id="panelClose" title="close settings"><svg class="ic"><use href="#i-menu"/></svg></div>
   <div id="panelNav">
     <button id="navBtn" disabled>Start</button>
     <div class="ctl" id="revBtn" title="reverse direction" style="display:none"><svg class="ic"><use href="#i-arrow-left-right"/></svg></div>
@@ -692,9 +700,9 @@
     <button data-t="Tracks" class="active">Tracks</button>
     <button data-t="General">General</button>
     <button data-t="Nav">Nav</button>
-    <button data-t="Stark">Stark</button>
-    <button data-t="Keys">Keys</button>
-    <button data-t="Adv" id="advTabBtn" style="display:none">Adv</button>
+    <button data-t="Stark" class="advOnly">Stark</button>
+    <button data-t="Keys" class="advOnly">Keys</button>
+    <button data-t="UI" class="advOnly">UI</button>
   </div>
 
   <div class="tabSec" id="tabAccount">
@@ -729,12 +737,6 @@
     <div class="hint">Optional elevation extract adds hillshade relief under the trails — gullies and ridges readable at a glance, still flat north-up 2D. Cut one with <b>make_hillshade.py</b> (see README).</div>
     <div data-reg="map"></div>
     <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
-    <div data-reg="ui"></div>
-    <div class="btnRow"><button class="btn" id="layoutEditBtn"><svg class="ic"><use href="#i-move"/></svg> Edit screen layout</button></div>
-    <div class="hint">Drag buttons and readouts anywhere; drag the cyan corner dot on a readout to
-      resize it; drop a button on the bottom tray to dock it in this menu. Saved separately for
-      portrait and landscape.</div>
-
     <div class="btnRow"><button class="btn" id="fsBtn"><svg class="ic"><use href="#i-maximize"/></svg> Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
     <div class="hint" id="fsHint">Fullscreen also engages automatically while navigating.</div>
 
@@ -782,7 +784,13 @@
     <div class="row"><label>Map style flip</label><button class="btn keyBtn" data-k="style">default</button></div>
   </div>
 
-  <div class="tabSec" id="tabAdv">
+  <div class="tabSec" id="tabUI">
+    <div data-reg="ui"></div>
+    <div class="btnRow"><button class="btn" id="layoutEditBtn"><svg class="ic"><use href="#i-move"/></svg> Edit screen layout</button></div>
+    <div class="hint">Drag buttons and readouts anywhere; drag the cyan corner dot on a readout to
+      resize it; drop a button on the bottom tray to dock it in this menu. Saved separately for
+      portrait and landscape.</div>
+    <h3>Tuning</h3>
     <div class="hint">Live tuning knobs — changes apply immediately and persist on this device. ↺ resets a row to default.</div>
     <div id="advList"></div>
     <div class="btnRow"><button class="btn" id="advCopy">Copy tuning JSON</button></div>
@@ -3110,7 +3118,8 @@ function drawCountdown(ctx, w, h, ns) {
    One edge readout — speed (adventure profile) or battery (Stark). On a turn approach the
    countdown borrows the slot in amber, then the number returns. Nothing is ever centred. */
 function primaryIsBattery() {
-  return (S.set.rideProfile || 'adventure') === 'stark';
+  const base = (S.set.rideProfile || 'adventure') === 'stark';
+  return S.set.swapMain ? !base : base; // UI-tab "Swap main number" flips speed ↔ battery
 }
 function cdMain(ns) { // distance or seconds, per the countdown-units setting; seconds freeze when stopped
   const d = Math.max(0, ns.cdD || 0);
@@ -3664,11 +3673,6 @@ for (const b of document.querySelectorAll('#colourPick [data-tc]'))
       : 'Track colour: surface — blue sealed, amber dirt');
   };
 document.getElementById('cpCancel').onclick = closeDialog;
-function applyGloveSide() {
-  gloveBtn.classList.toggle('right', S.set.gloveSide === 'right');
-  gloveBtn.classList.toggle('left', S.set.gloveSide !== 'right');
-  placeProgress();
-}
 
 /* ---------------- GPS ---------------- */
 let watchId = null;
@@ -4643,11 +4647,14 @@ for (const b of document.querySelectorAll('#setTabs button'))
   b.onclick = () => {
     for (const b2 of document.querySelectorAll('#setTabs button')) b2.classList.toggle('active', b2 === b);
     for (const s of document.querySelectorAll('.tabSec')) s.classList.toggle('on', s.id === 'tab' + b.dataset.t);
-    if (b.dataset.t === 'Adv') renderSettings('adv');
+    if (b.dataset.t === 'UI') renderSettings('adv');
   };
+document.getElementById('panelClose').onclick = () => closePanel();
 function applyShowAdv() {
-  document.getElementById('advTabBtn').style.display = S.set.showAdv ? '' : 'none';
-  if (!S.set.showAdv && document.getElementById('tabAdv').classList.contains('on'))
+  // one gate for all three power-user tabs: Stark, Keys, UI (tuning + layout)
+  for (const b of document.querySelectorAll('#setTabs .advOnly')) b.style.display = S.set.showAdv ? '' : 'none';
+  const cur = document.querySelector('#setTabs button.active');
+  if (!S.set.showAdv && cur && cur.classList.contains('advOnly'))
     document.querySelector('#setTabs button[data-t="Tracks"]').click();
 }
 applyShowAdv();
@@ -5075,11 +5082,8 @@ const SETTINGS = [
   { sec: 'map', k: 'stravaHike', t: 'toggle', l: 'Strava hikes (purple)', id: 'setStravaHike', apply: applyStrava },
   { sec: 'ui', k: 'wake', t: 'toggle', l: 'Keep screen on while navigating', id: 'setWake',
     apply: () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); } },
-  { sec: 'ui', k: 'gloveSide', t: 'toggle', l: 'Ride controls button on the right', id: 'setGloveRight',
-    get: () => S.set.gloveSide === 'right', put: v => { S.set.gloveSide = v ? 'right' : 'left'; }, apply: () => applyGloveSide() },
-  { sec: 'ui', k: 'ctlEdges', t: 'seg', l: 'Control buttons on', segId: 'edgesSeg',
-    opts: [['sides', 'Left & right'], ['tb', 'Top & bottom']], apply: () => applyEdges() },
-  { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tab', id: 'setShowAdv', apply: applyShowAdv },
+  { sec: 'ui', k: 'swapMain', t: 'toggle', l: 'Swap main number (speed ↔ battery)', id: 'setSwapMain', apply: () => renderMain() },
+  { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tabs (UI, Stark, Keys)', id: 'setShowAdv', apply: applyShowAdv },
   // Nav
   { sec: 'nav', k: 'sound', t: 'toggle', l: 'Turn beeps', id: 'setSound', put: v => setSound(v) }, // setSound persists + syncs every mute face
   { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Departure chime (turn done)', id: 'setConfirm' },
@@ -5301,15 +5305,7 @@ document.getElementById('advCopy').onclick = async () => {
 document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
 document.body.classList.toggle('daymode', !isNightStyle()); // boot: bar/panel scheme follows the saved map style
 applyArrowStyle();
-applyGloveSide();
-// control-button edges: left/right columns (default) or top/bottom rows
-function applyEdges() {
-  const tb = S.set.ctlEdges === 'tb';
-  document.body.classList.toggle('edges-tb', tb);
-  for (const b of document.querySelectorAll('#edgesSeg button')) b.classList.toggle('active', b.dataset.v === (tb ? 'tb' : 'sides'));
-  placeProgress();
-}
-applyEdges();
+placeProgress(); // boot: seed --chromeB before the first paint settles
 /* turn-point contribution export: the whole outbox as JSON — paste into Dingo to bake
    the edits into the pack, so every future download carries them */
 document.getElementById('turnExportBtn').onclick = async () => {
@@ -5335,7 +5331,7 @@ function applyAllSettings() {
   saveSet();
   renderSettings();
   setSound(S.set.sound);
-  refreshKeyBtns(); refreshPresets(); applyShowAdv(); applyGloveSide(); applyEdges(); applyLayout();
+  refreshKeyBtns(); refreshPresets(); applyShowAdv(); applyOrientClass(); placeProgress(); applyLayout();
   applyOrient(); applyStrava(); applyHill(); applyVarg();
   document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   if (S.nav) S.set.wake ? requestWake() : releaseWake();
