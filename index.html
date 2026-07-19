@@ -260,10 +260,6 @@
   .gtile .gi .gv{font-size:26px; font-weight:800; font-variant-numeric:tabular-nums}
   .gtile .gl{font-size:15px; font-weight:700; color:var(--dim); letter-spacing:.02em}
   .gtile.active .gl{color:var(--accent)}
-  /* tiles declare where they belong: ride grid, idle grid, or both */
-  .gtile[data-m]{display:none}
-  body:not(.navving) .gtile[data-m="idle"], body:not(.navving) .gtile[data-m="both"]{display:flex}
-  body.navving .gtile[data-m="ride"], body.navving .gtile[data-m="both"]{display:flex}
   /* ---------- progress strip ---------- */
   #progress{position:fixed; left:0; right:0; z-index:14; display:none;
     background:rgba(14,18,22,.92); border-top:1px solid #232d38; padding:4px 10px 0}
@@ -302,8 +298,6 @@
   .gtile.stop{background:var(--bad); border-color:var(--bad)}
   .gtile.stop .gi,.gtile.stop .gl{color:#fff}
   .gtile.stop:active{background:#d32f2f}
-  .gtile.go{background:var(--ok); border-color:var(--ok)}
-  .gtile.go .gi,.gtile.go .gl{color:#04240f}
   /* TURN MODE: double-tap the map while riding — zoomed, compass-up; MARK TURN arms, tap places */
   #markTurn{position:fixed; left:50%; transform:translateX(-50%);
     bottom:calc(var(--chromeB,0px) + 12px); z-index:18; display:none; padding:0 44px;
@@ -644,21 +638,19 @@
 </div>
 
 <div id="gloveBtn" class="left" title="ride controls">▦</div>
-<!-- ☰ grid: the whole screen becomes fat tiles. data-m picks the grid a tile belongs to
-     (ride / idle / both); the grid IS the dock — layout-editor buttons land here too. -->
+<!-- ☰ grid: the whole screen becomes fat tiles — ONE grid, same tiles idle and riding
+     (the Demo tile flips to red Stop ride mid-ride). The grid IS the dock — layout-editor
+     buttons land here too. -->
 <div id="gloveOverlay"><div id="gloveGrid">
-  <div class="gtile" data-m="ride" id="gMute"><div class="gi"><svg class="ic"><use href="#i-volume-2"/></svg></div><div class="gl">Mute</div></div>
-  <div class="gtile" data-m="ride" id="gZoomMax"><div class="gi"><svg class="ic"><use href="#i-zoom-out"/></svg></div><div class="gl">Zoom wide</div></div>
-  <div class="gtile" data-m="ride" id="gZoomMin"><div class="gi"><svg class="ic"><use href="#i-zoom-in"/></svg></div><div class="gl">Zoom close</div></div>
-  <div class="gtile" data-m="ride" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
-  <div class="gtile" data-m="ride" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
-  <div class="gtile" data-m="ride" id="gOrient"><div class="gi">N</div><div class="gl">North up</div></div>
-  <div class="gtile" data-m="both" id="gLayers"><div class="gi"><svg class="ic"><use href="#i-layers"/></svg></div><div class="gl">Day</div></div>
-  <div class="gtile" data-m="both" id="gStartStop"><div class="gi"><svg class="ic"><use href="#i-play"/></svg></div><div class="gl">Start</div></div>
-  <div class="gtile" data-m="idle" id="gTracks"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Tracks</div></div>
-  <div class="gtile" data-m="idle" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
-  <div class="gtile" data-m="idle" id="gDemo"><div class="gi"><svg class="ic"><use href="#i-circle-play"/></svg></div><div class="gl">Demo ride</div></div>
-  <div class="gtile" data-m="both" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
+  <div class="gtile" id="gDemo"><div class="gi"><svg class="ic"><use href="#i-circle-play"/></svg></div><div class="gl">Demo</div></div>
+  <div class="gtile" id="gLayers"><div class="gi"><svg class="ic"><use href="#i-layers"/></svg></div><div class="gl">Day</div></div>
+  <div class="gtile" id="gMute"><div class="gi"><svg class="ic"><use href="#i-volume-2"/></svg></div><div class="gl">Mute</div></div>
+  <div class="gtile" id="gTracks"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Tracks</div></div>
+  <div class="gtile" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
+  <div class="gtile" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
+  <div class="gtile" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
+  <div class="gtile" id="gColour"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Track colour</div></div>
+  <div class="gtile" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
 </div></div>
 
 <div id="progress">
@@ -3595,19 +3587,18 @@ function refreshGlove() {
   setIc(g('gMute').querySelector('.gi'), S.set.sound ? 'volume-2' : 'volume-x');
   g('gMute').querySelector('.gl').textContent = S.set.sound ? 'Mute' : 'Muted';
   g('gMute').classList.toggle('active', !S.set.sound);
-  const o = effOrient();
-  orientFace(g('gOrient').querySelector('.gi'), o);
-  g('gOrient').querySelector('.gl').textContent = ORIENT_LABEL[o] || 'north up';
-  const ss = g('gStartStop');
-  ss.classList.toggle('stop', S.nav);
-  ss.classList.toggle('go', !S.nav);
-  setIc(ss.querySelector('.gi'), S.nav ? 'square' : 'play');
-  ss.querySelector('.gl').textContent = S.nav ? 'Stop ride' : 'Start';
   g('gTracks').querySelector('.gl').textContent = trk ? trk.name.slice(0, 16) : 'Tracks';
   setIc(g('gRideProf').querySelector('.gi'), S.set.rideProfile === 'stark' ? 'zap' : 'bike');
   g('gRideProf').querySelector('.gl').textContent = S.set.rideProfile === 'stark' ? 'Stark' : 'Adventure';
-  g('gDemo').classList.toggle('active', !!S.demo);
-  g('gDemo').querySelector('.gl').textContent = S.demo ? 'Stop demo' : 'Demo ride';
+  // the Demo tile is also the STOP: mid-ride (real or demo) it flips red and ends the ride
+  const gd = g('gDemo');
+  gd.classList.toggle('stop', S.nav);
+  gd.classList.toggle('active', !!S.demo && !S.nav);
+  setIc(gd.querySelector('.gi'), S.nav ? 'square' : 'circle-play');
+  gd.querySelector('.gl').textContent = S.nav ? 'Stop ride' : 'Demo';
+  const gc = g('gColour');
+  gc.querySelector('.gl').textContent = 'Track colour';
+  gc.classList.toggle('active', (S.set.trackColour || 'none') !== 'none');
 }
 function gloveTap(fn) { return () => { fn(); refreshGlove(); gloveArm(); }; } // act, reflect, re-arm dismiss
 document.getElementById('gZoom').onclick = gloveTap(() => {
@@ -3619,11 +3610,7 @@ document.getElementById('gLayers').onclick = gloveTap(() => {
   setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]);
 });
 document.getElementById('gMute').onclick = gloveTap(() => setSound(!S.set.sound));
-document.getElementById('gOrient').onclick = gloveTap(() => northBtn.onclick());
 document.getElementById('gMark').onclick = () => { closeGlove(); markSpot(); };
-document.getElementById('gZoomMin').onclick = () => { closeGlove(); presetTap('min'); };
-document.getElementById('gZoomMax').onclick = () => { closeGlove(); presetTap('max'); };
-document.getElementById('gStartStop').onclick = () => { closeGlove(); S.nav ? stopNav() : startNav(); };
 document.getElementById('gTracks').onclick = () => { closeGlove(); openPanel();
   document.querySelector('#setTabs button[data-t="Tracks"]').click(); };
 document.getElementById('gSettings').onclick = () => { closeGlove(); openPanel();
@@ -3632,7 +3619,9 @@ document.getElementById('gRideProf').onclick = gloveTap(() => {
   S.set.rideProfile = S.set.rideProfile === 'stark' ? 'adventure' : 'stark';
   saveSet(); renderMain();
 });
-document.getElementById('gDemo').onclick = () => { closeGlove(); S.demo ? (stopDemo(), stopNav()) : demoChoice(); };
+/* Demo tile doubles as STOP: any active ride (real or demo) ends here — the two-tap
+   ☰ → tile path is the mis-tap protection that used to guard gStartStop */
+document.getElementById('gDemo').onclick = () => { closeGlove(); S.nav ? stopNav() : demoChoice(); };
 function applyGloveSide() {
   gloveBtn.classList.toggle('right', S.set.gloveSide === 'right');
   gloveBtn.classList.toggle('left', S.set.gloveSide !== 'right');
@@ -3713,7 +3702,7 @@ function stopDemo() {
   clearInterval(S.demo); S.demo = null; startGPS(); // resume real GPS
   if (TRAIN.active) endTraining(false); // every exit path funnels through cleanup
 }
-document.getElementById('demoBtn').onclick = () => { closePanel(); S.demo ? (stopDemo(), stopNav()) : demoChoice(); };
+document.getElementById('demoBtn').onclick = () => { closePanel(); S.nav ? stopNav() : demoChoice(); };
 document.getElementById('testBeep').onclick = () => { audio(); BEEP.turn(); };
 
 /* ---------------- training ride (2026-07-19 design) ----------------
