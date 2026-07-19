@@ -35,11 +35,8 @@
     padding:calc(env(safe-area-inset-top) + 14px) 24px 14px;
     background:rgba(14,18,22,.55); border:1px solid rgba(42,53,64,.7); border-top:none;
     border-radius:0 0 18px 18px}
-  #hudFill{position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,176,32,.22);
-    transition:width .9s linear}
   #hudSpeed svg.ic{width:.85em; height:.85em; vertical-align:-0.06em}
   #hudBox.commit{border-bottom-color:var(--ok)}
-  #hudBox.commit #hudFill{background:rgba(56,209,120,.22)}
   #hudDist{font-size:60px; font-weight:800; font-variant-numeric:tabular-nums; margin-left:auto;
     position:relative; white-space:nowrap; flex:none}
   #hudDist small{font-size:30px; font-weight:600; color:var(--dim)}
@@ -109,18 +106,6 @@
   #vargInd .beam{font-size:34px; letter-spacing:3px}
   #vargInd .beam.on{color:rgba(74,168,255,.82)}                    /* translucent blue */
   body.navving #vargInd{top:calc(env(safe-area-inset-top) + 124px)} /* below the inset turn strip */
-  /* giant turn arrows: up to ~¼ screen, anchored on the side of the turn — readable in
-     peripheral vision. Solid = turn coming up; flashing = your indicator is on. One vocabulary. */
-  /* sized and centred to the free band between the big numbers (top) and the bottom
-     bar / MARK TURN chrome — the arrow never overlaps a readout */
-  .bigArrow{position:fixed; top:60%; transform:translateY(-50%); z-index:9; display:none;
-    font-size:min(70vw,44vh); line-height:1; color:var(--arrowFill,#ffb020); opacity:var(--arrowOp,.55);
-    filter:drop-shadow(0 4px 20px rgba(0,0,0,.5)); pointer-events:none}
-  .bigArrow svg.ic{display:block; fill:currentColor; vertical-align:0;
-    stroke:var(--arrowEdge,#101820); stroke-width:var(--arrowEdgeW,0)}
-  #bigArrowL{left:2vw} #bigArrowR{right:2vw}
-  .bigArrow.on{display:block}
-  .bigArrow.blink{display:block; animation:vgPulse .8s ease-in-out infinite}
   /* mute: one tap on the riding screen, ghosted like the other ride controls */
   #muteBtn{position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:10px; z-index:12;
     width:96px; height:96px; border-radius:28px; background:rgba(22,28,34,.5); border:1px solid #2a3540;
@@ -295,14 +280,16 @@
   /* turn-approach countdown: strip becomes a fixed full-width bar with a big number */
   #progress.countdown #progCanvas{height:80px}
   #progress.countdown #progLabels{display:none}
-  /* SOLID amber turn arrows flanking the countdown bar — peripheral-vision direction,
-     unlike the translucent giant arrow mid-map */
-  .cdArrow{position:fixed; bottom:calc(env(safe-area-inset-bottom) + 12px); z-index:16;
+  /* SOLID amber arrow INSIDE the progress bar, vertically centred, on the side of the
+     turn — one arrow, one meaning. Doubles as the Varg indicator telltale (flashing). */
+  .cdArrow{position:absolute; top:50%; transform:translateY(-50%); z-index:2;
     display:none; color:var(--warn); pointer-events:none;
     filter:drop-shadow(0 2px 8px rgba(0,0,0,.45))}
   .cdArrow.on{display:block}
-  .cdArrow svg.ic{display:block; width:60px; height:60px; fill:currentColor; stroke:none}
+  .cdArrow.blink{display:block; animation:vgPulse .8s ease-in-out infinite}
+  .cdArrow svg.ic{display:block; width:54px; height:54px; fill:currentColor; stroke:none}
   #cdArrowL{left:14px} #cdArrowR{right:14px}
+  #progress.countdown .cdArrow svg.ic{width:64px; height:64px}
 
   /* ---------- bottom bar ---------- */
   #bottom{position:fixed; left:0; right:0; bottom:0; z-index:15;
@@ -613,7 +600,6 @@
 <div id="map"></div>
 
 <div id="hud"><div id="hudBox">
-  <div id="hudFill"></div>
   <div id="hudTxt"><div id="hudType">next turn</div><div id="hudRoad"></div></div>
   <div id="hudDist">— <small>m</small></div>
 </div></div>
@@ -626,8 +612,7 @@
   <span class="ind blink" id="indR" title="right indicator">▶</span>
 </div>
 <div id="vargModeBig"><span id="vargModeNum">—</span></div>
-<div id="bigArrowL" class="bigArrow"><svg class="ic"><use href="#i-arrow-big-left"/></svg></div>
-<div id="bigArrowR" class="bigArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div><div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
+<div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
   <rect width="100%" height="100%" fill="#fff"/>
   <text id="vargOverTxt" x="50%" y="50%" text-anchor="middle" dominant-baseline="central" fill="#000">REVERSE</text>
 </mask></defs><rect id="vargOverBg" width="100%" height="100%" fill="#ff4545" fill-opacity=".45" mask="url(#vgMask)"/></svg></div>
@@ -699,9 +684,9 @@
 <div id="progress">
   <canvas id="progCanvas"></canvas>
   <div id="progLabels"><span id="progDone">—</span><span id="progNext"></span><span id="progTogo">—</span></div>
+  <div id="cdArrowL" class="cdArrow"><svg class="ic"><use href="#i-arrow-big-left"/></svg></div>
+  <div id="cdArrowR" class="cdArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div>
 </div>
-<div id="cdArrowL" class="cdArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div>
-<div id="cdArrowR" class="cdArrow"><svg class="ic"><use href="#i-arrow-big-right"/></svg></div>
 
 <div id="bottom">
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
@@ -945,7 +930,6 @@ const ADV_D = {
   headDamp: 0.12, headDead: 2, rotHz: 4, easeMs: 900, zoomThresh: 15,
   apprMul: 1.5, apprFloor: 250, offM: 60, onM: 40, beepVol: 0.5, cdDist: 300,
   deepHz: 460, highHz: 990, // pitch = phase: deep approaching, high at the turn
-  arrowFill: '#ffb020', arrowOp: 0.55, arrowEdge: '#101820', arrowEdgeW: 0, // giant turn arrow: fill + optional surround (0 = off, the as-is look)
   apprUnit: 's', apprS: 15, apprM: 250, departUnit: 'm', departM: 30, departS: 4,
   btnOp: 0.4, trailGap: 20,
   routeWOut: 6, routeWIn: 11, coreFrac: 0.67, caseMode: 'auto', // route width px at overview/nav zoom; core share; casing auto = dark day / white night
@@ -1539,12 +1523,15 @@ function tone(freq, dur, when, vol) {
    beeps left), pitch = phase (deep = approaching, high = turn here). The old
    direction-less 660 Hz far beep is gone — the approach already tells you which way. */
 const BEEP = {
+  // LEFT = two short pips with a clear gap; RIGHT = one longer tone. Same-pitch pips
+  // 100 ms apart merged into "one long beep" through a helmet, so the two beeps are
+  // now shorter than the single one AND separated by more silence than their own length.
   appr(ty)   { if (!S.set.sound) return; const f = ADV('deepHz');
-    tone(f, .2, 0); if (ty === 'left') tone(f, .2, .3);
-    vib(ty === 'left' ? [120, 80, 120] : [120]); console.log('[beep] approach ' + ty); },
+    if (ty === 'left') { tone(f, .14, 0); tone(f, .14, .36); } else tone(f, .26, 0);
+    vib(ty === 'left' ? [120, 160, 120] : [220]); console.log('[beep] approach ' + ty); },
   now(ty)    { if (!S.set.sound) return; const f = ADV('highHz');
-    tone(f, .16, 0); if (ty === 'left') tone(f, .16, .24);
-    vib(ty === 'left' ? [90, 60, 90] : [100]); console.log('[beep] turn ' + ty); },
+    if (ty === 'left') { tone(f, .12, 0); tone(f, .12, .3); } else tone(f, .22, 0);
+    vib(ty === 'left' ? [90, 130, 90] : [180]); console.log('[beep] turn ' + ty); },
   turn()     { if (!S.set.sound) return; const f = ADV('highHz'); tone(f, .15, 0); tone(f, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
   done()     { if (!S.set.sound) return; tone(700, .09, 0); tone(1050, .12, .12); console.log('[beep] turn done'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
@@ -2823,7 +2810,7 @@ function startNav() {
 function stopNav() {
   S.nav = false;
   exitTurnMode(false);
-  S._turnCue = null; updateBigArrows(); applyMoveGestures();
+  S._turnCue = null; applyCdArrows(); applyMoveGestures();
   S.autoOrient = false; S.autoBlock = false; applyOrient(); // hand orientation back to the rider's mode
   document.body.classList.remove('navving', 'hasroute');
   document.getElementById('hud').classList.remove('on');
@@ -2954,17 +2941,17 @@ function flashCommit() {
   clearTimeout(commitT); commitT = setTimeout(() => box.classList.remove('commit'), 1200);
 }
 function setHud(alert, dTo, dir, farM) {
-  const box = document.getElementById('hudBox'), fill = document.getElementById('hudFill');
+  const box = document.getElementById('hudBox');
   const distEl = document.getElementById('hudDist'), typeEl = document.getElementById('hudType');
   const roadEl = document.getElementById('hudRoad');
   // the strip slides in at the far warning, not permanently (design: minimal riding screen)
   const win = Math.max((farM || 160) * ADV('apprMul'), ADV('apprFloor'));
   const show = !!alert && dTo <= win;
   box.style.visibility = show || box.classList.contains('commit') ? '' : 'hidden';
-  if (!show) { fill.style.width = '0'; S._turnCue = null; S._hudInfo = null; updateBigArrows(); applyCdArrows(); renderMain(); return; }
+  if (!show) { S._turnCue = null; S._hudInfo = null; applyCdArrows(); renderMain(); return; }
   let type = alert.type;
   if (dir < 0 && type === 'left') type = 'right'; else if (dir < 0 && type === 'right') type = 'left';
-  S._turnCue = type === 'left' || type === 'right' ? type : null; updateBigArrows(); applyCdArrows(); renderMain(); // side arrows are turns-only
+  S._turnCue = type === 'left' || type === 'right' ? type : null; applyCdArrows(); renderMain(); // side arrows are turns-only
   const labels = { left: 'Left', right: 'Right', straight: 'Straight',
     danger: 'DANGER !!!', obstacle: 'Obstacle', gate: 'Gate', creek: 'Creek crossing' };
   // riding the route backwards approaches the cue from the other side — swap the surfaces
@@ -2981,7 +2968,6 @@ function setHud(alert, dTo, dir, farM) {
     roadEl.style.display = road ? '' : 'none';
   }
   typeEl.className = type;
-  fill.style.width = Math.max(0, Math.min(100, dTo / win * 100)) + '%'; // drains to zero at the turn
 }
 /* full spoken-style instruction, mixed case: named road wins, else the surface you
    turn onto ("Left on to dirt" when leaving sealed), else just the direction */
@@ -3188,28 +3174,14 @@ function renderMain() {
     el.innerHTML = Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' <small>km/h</small>';
   }
 }
-/* countdown-bar flank arrows: SOLID amber, both ends of the bar, pointing the turn
-   direction — on only while the countdown bar is up and the cue is a turn */
+/* the ONLY turn arrows: solid amber, inside the progress bar, on the side of the turn —
+   left arrow left for a left turn, right arrow right for a right. They double as the Varg
+   indicator telltales (flashing beats solid, since a live blinker outranks a coming turn). */
 function applyCdArrows() {
-  const ty = S._turnCue;
-  const on = prog.classList.contains('countdown') && (ty === 'left' || ty === 'right');
-  for (const id of ['cdArrowL', 'cdArrowR']) {
-    const el = document.getElementById(id);
-    el.classList.toggle('on', on);
-    if (on) el.querySelector('use').setAttribute('href', ty === 'left' ? '#i-arrow-big-left' : '#i-arrow-big-right');
-  }
-}
-/* giant side arrows: solid = upcoming turn on that side; flashing = that indicator is on */
-function applyArrowStyle() { // giant-arrow fill/surround from the registry, via CSS vars
-  const r = document.documentElement.style;
-  r.setProperty('--arrowFill', ADV('arrowFill')); r.setProperty('--arrowOp', ADV('arrowOp'));
-  r.setProperty('--arrowEdge', ADV('arrowEdge')); r.setProperty('--arrowEdgeW', ADV('arrowEdgeW'));
-}
-function updateBigArrows() {
-  const L = document.getElementById('bigArrowL'), R = document.getElementById('bigArrowR');
   const live = S.set.varg && varg.state === 'on';
-  const indL = live && varg.ind.L, indR = live && varg.ind.R;
-  const turn = S.nav ? S._turnCue : null;
+  const indL = !!(live && varg.ind.L), indR = !!(live && varg.ind.R);
+  const turn = S.nav && prog.classList.contains('countdown') ? S._turnCue : null;
+  const L = document.getElementById('cdArrowL'), R = document.getElementById('cdArrowR');
   L.classList.toggle('on', indL || turn === 'left');
   R.classList.toggle('on', indR || turn === 'right');
   L.classList.toggle('blink', indL);
@@ -5028,7 +5000,7 @@ function vargIndUI() {
   l.classList.toggle('on', show && i.L); l.classList.toggle('warn', i.warnL);
   r.classList.toggle('on', show && i.R); r.classList.toggle('warn', i.warnR);
   b.classList.toggle('on', show && i.beam);
-  updateBigArrows(); // blinkers show as the giant side arrows, flashing
+  applyCdArrows(); // blinkers flash the progress-bar arrows
 }
 setInterval(() => { // blinker watchdog + self-cancel nag
   const i = varg.ind, now = Date.now(); let ch = false;
@@ -5261,10 +5233,6 @@ const SETTINGS = [
   { k: 'colTrail', t: 'color', adv: 1, l: 'Basemap minor trails (Trail style)' },
   { k: 'trailProm', t: 'range', adv: 1, l: 'Basemap trail width ×', min: 0.3, max: 3, step: 0.1 },
   { k: 'gpsAcc', t: 'range', adv: 1, l: 'GPS accuracy floor (m, 0 = off)', min: 0, max: 100, step: 5 },
-  { k: 'arrowFill', t: 'color', adv: 1, l: 'Turn arrow fill' },
-  { k: 'arrowOp', t: 'range', adv: 1, l: 'Turn arrow opacity', min: 0.2, max: 1, step: 0.05 },
-  { k: 'arrowEdge', t: 'color', adv: 1, l: 'Turn arrow surround' },
-  { k: 'arrowEdgeW', t: 'range', adv: 1, l: 'Turn arrow surround width (0 off)', min: 0, max: 4, step: 0.2 },
 ];
 function advGet(r) { return r.veh ? vehVal(r.k) : ADV(r.k); }
 function advSet(r, v) {
@@ -5280,7 +5248,6 @@ function advReset(r) {
 let restyleT = null;
 function advApply(k) {
   if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
-  else if (k.startsWith('arrow')) applyArrowStyle();
   else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // segment features bake the colour in
   else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM' || k === 'colDone') refreshRouteFeatures(); // baked into features
   else if (k === 'heatMask') { heatMaskCache.key = ''; refreshMapData(); } // re-clip with the new radius
@@ -5408,7 +5375,6 @@ document.getElementById('advCopy').onclick = async () => {
 };
 document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
 document.body.classList.toggle('daymode', !isNightStyle()); // boot: bar/panel scheme follows the saved map style
-applyArrowStyle();
 placeProgress(); // boot: seed --chromeB before the first paint settles
 /* turn-point contribution export: the whole outbox as JSON — paste into Dingo to bake
    the edits into the pack, so every future download carries them */
