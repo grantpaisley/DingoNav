@@ -893,12 +893,14 @@ if (!S.set._v4) {
   saveSet();
 }
 // v5 migration (2026-07-19 corner-buttons design): dash patterns → Track colour modes,
-// the edges/glove-side layout knobs retire, and removed buttons leave saved layouts
+// the edges/glove-side layout knobs retire, and removed buttons leave saved layouts.
+// Dead keys are pruned UNCONDITIONALLY — an old cached app version can re-seed them
+// from its defaults after the flag is already stamped (SW cache-first overlap).
+delete S.set.surf; delete S.set.ctlEdges; delete S.set.gloveSide;
+for (const k of ['dirtDash', 'dirtGap', 'singleDash', 'singleGap', 'gapStyle']) delete S.set.adv[k];
 if (!S.set._v5) {
   S.set._v5 = 1;
   if (S.set.trackColour == null) S.set.trackColour = 'none';
-  delete S.set.surf; delete S.set.ctlEdges; delete S.set.gloveSide;
-  for (const k of ['dirtDash', 'dirtGap', 'singleDash', 'singleGap', 'gapStyle']) delete S.set.adv[k];
   for (const o of ['portrait', 'landscape']) {
     const m = (S.set.layout || {})[o]; if (!m) continue;
     if (m.followBtn && !m.dotBtn) m.dotBtn = m.followBtn; // the unified dot inherits the follow button's home
