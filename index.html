@@ -3700,6 +3700,22 @@ function startDemo() {
   // plain demo ticks at 10 Hz so the route plays back 10×; training keeps 1 Hz —
   // its lessons, off-track acts and card pacing are tuned to real time
   const SPEED = 8.5, TICK_MS = TRAIN.active ? 1000 : 100; // m/s ≈ 30 km/h reported to nav
+  /* plain demo = highlight reel (2026-07-19): sprint any boring gap so the next audible
+     cue is ~3 s away, then drop to ride pace ~250 m out so the auto-zoom dive, countdown
+     and beeps play out in real time (~3 s), carry a little past the turn, sprint again.
+     Sprint steps cap just under progContM so the travelled spans stay continuous. */
+  const APPR_M = 250, PAST_M = 40, SPRINT_TICKS = 30, MAX_STEP = 145;
+  let sprintV = null; // constant per-sprint velocity — recomputing per tick would decay asymptotically
+  const demoStep = () => {
+    if (TRAIN.active) return SPEED;
+    const A = trk.alerts; if (!A || !A.length) return MAX_STEP; // no cues at all — just get through it
+    let next = null;
+    for (const a of A) if (a.at > d - PAST_M && !SILENT_KINDS[kindOf(a)]) { next = a.at; break; }
+    const gap = (next == null ? trk.lengthM : next) - d;
+    if (gap <= APPR_M) { sprintV = null; return SPEED; } // inside the window: ride it for real
+    if (sprintV == null) sprintV = Math.min(MAX_STEP, Math.max(SPEED, (gap - APPR_M) / SPRINT_TICKS));
+    return sprintV;
+  };
   // one synthetic fix through the same entry real GPS uses. Training's off-track act
   // displaces the fix ~90 m sideways (past offM) for TRAIN.offT ticks — the real
   // banner, growl and back-on chirp all fire on their own.
@@ -3727,7 +3743,7 @@ function startDemo() {
     // lesson pause: hold the spot and feed speed-0 fixes — the app genuinely reads
     // "stopped", so pinch-zoom unlocks (the real stop-and-manipulate grammar)
     if (TRAIN.active && TRAIN.holdD != null) { feed(TRAIN.holdD, 0); return; }
-    d += SPEED;
+    d += demoStep();
     // simulate Stark mode changes so the digit and mode ping work off the bike
     if (++tick % 25 === 1 && !TRAIN.active) { const m = 1 + (((tick / 25) | 0) % 5);
       vargApplyState({ mode: m, hp: 20 + m * 12, regen: Math.max(0, 100 - m * 18), tc: Math.max(0, 100 - m * 15) }); }
@@ -3736,7 +3752,7 @@ function startDemo() {
     feed(d, TRAIN.active && TRAIN.holdD != null ? 0 : SPEED);
   }, TICK_MS);
   if (!S.nav) startNav();
-  if (!TRAIN.active) toast('Demo ride at 30 km/h, 10× playback — listen for beeps');
+  if (!TRAIN.active) toast('Demo: fast-forwards between turns — each approach plays out for real');
 }
 function stopDemo() {
   if (!S.demo) return;
