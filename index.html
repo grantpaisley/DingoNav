@@ -150,19 +150,20 @@
   #dlgOk{margin-top:18px; width:100%; padding:13px; border:none; border-radius:12px;
     background:var(--accent); color:#00252b; font-size:16px; font-weight:800; cursor:pointer}
 
-  /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design) ---------- */
-  #demoPick{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+  /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design)
+     (#colourPick shares the chooser look — ☰ Track colour tile) ---------- */
+  #demoPick, #colourPick{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
     width:min(88vw,380px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
     padding:20px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
-  #demoPick.on{display:block}
-  #demoPick h4{font-size:18px; margin-bottom:14px}
+  #demoPick.on, #colourPick.on{display:block}
+  #demoPick h4, #colourPick h4{font-size:18px; margin-bottom:14px}
   .dpBtn{display:flex; flex-direction:column; gap:4px; width:100%; padding:14px; margin-bottom:10px;
     border:1px solid #2a3540; border-radius:12px; background:var(--panel2); color:var(--fg);
     font-size:16px; text-align:left; cursor:pointer}
   .dpBtn b{color:var(--accent)}
   .dpBtn span{font-size:13px; color:var(--dim)}
   .dpBtn:disabled{opacity:.4; cursor:default}
-  #dpCancel{width:100%; padding:10px; border:none; background:none; color:var(--dim); font-size:14px; cursor:pointer}
+  #dpCancel, #cpCancel{width:100%; padding:10px; border:none; background:none; color:var(--dim); font-size:14px; cursor:pointer}
   /* card sits bottom-centre, clear of the dot (right) and progress strip; NO shade —
      the map must stay touchable for the do-the-action lessons. z 27 > glove overlay's 25. */
   #trainCard{position:fixed; left:50%; transform:translateX(-50%);
@@ -604,6 +605,11 @@
   <button class="dpBtn" id="dpTrain"><b>Training ride</b><span>learn DingoNav on a guided fake ride — no track needed</span></button>
   <button class="dpBtn" id="dpPlain"><b>Plain demo</b><span id="dpPlainSub">replay the selected track at 30 km/h</span></button>
   <button id="dpCancel">Cancel</button></div>
+<div id="colourPick"><h4>Track colour</h4>
+  <button class="dpBtn" data-tc="none"><b>None</b><span>route blue — dark casing on day maps, white at night</span></button>
+  <button class="dpBtn" data-tc="slope"><b>Slope</b><span>brighter blue = steeper (needs elevation data)</span></button>
+  <button class="dpBtn" data-tc="surface"><b>Surface</b><span>sealed blue · dirt amber · singletrack purple</span></button>
+  <button id="cpCancel">Cancel</button></div>
 <div id="trainCard">
   <div id="trainTop"><span id="trainStep"></span><span id="trainExit">✕ end training</span></div>
   <h4 id="trainTitle"></h4><div id="trainMsg"></div>
@@ -844,7 +850,7 @@ const S = {
   friends: new Map(), demo: null,
   trail: [], trailTrack: null, prog: null, rides: [], autoOrient: false, autoBlock: false,
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
-    profile: false, gloveSide: 'left', ctlEdges: 'sides', vehicle: 'enduro', surf: true, trail: true,
+    profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
     varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure' },
 };
@@ -878,6 +884,20 @@ if (!S.set._v4) {
   S.set.layout = {};
   saveSet();
 }
+// v5 migration (2026-07-19 corner-buttons design): dash patterns → Track colour modes,
+// the edges/glove-side layout knobs retire, and removed buttons leave saved layouts
+if (!S.set._v5) {
+  S.set._v5 = 1;
+  if (S.set.trackColour == null) S.set.trackColour = 'none';
+  delete S.set.surf; delete S.set.ctlEdges; delete S.set.gloveSide;
+  for (const k of ['dirtDash', 'dirtGap', 'singleDash', 'singleGap', 'gapStyle']) delete S.set.adv[k];
+  for (const o of ['portrait', 'landscape']) {
+    const m = (S.set.layout || {})[o]; if (!m) continue;
+    if (m.followBtn && !m.dotBtn) m.dotBtn = m.followBtn; // the unified dot inherits the follow button's home
+    delete m.followBtn; delete m.soundCtl; delete m.presetMin; delete m.presetMax;
+  }
+  saveSet();
+}
 
 /* advanced tuning knobs: hand-tuned constants promoted to sliders while the feel is dialled in.
    ADV(k) reads the override or the shipping default; the Adv tab writes S.set.adv. */
@@ -897,8 +917,6 @@ const ADV_D = {
   slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
   colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
   colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
-  dirtDash: 2.4, dirtGap: 1.4, singleDash: 1.2, singleGap: 0.9, // single = denser square dashes, not dots
-  gapStyle: 'case', // dash gaps show the casing colour (continuous case); 'clear' = old transparent gaps
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
@@ -1759,9 +1777,6 @@ function caseColor() {
 }
 function totalW() { return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut'), 17, ADV('routeWIn')]; }
 function coreW() { const f = ADV('coreFrac'); return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut') * f, 17, ADV('routeWIn') * f]; }
-// dash lengths are in line-widths — rescale for the wider case layer so its dashes
-// stay in step with the core's (gaps remain fully transparent)
-function caseDash(a) { const f = ADV('coreFrac'); return a.map(x => +(x * f).toFixed(2)); }
 /* typed-mark dot radius: zoomed out it shrinks to half the route core width
    (reads as a blip ON the line), snapping up to the full 8 px dot at the
    old alert minzoom. Tracks the routeW sliders via applyAdvPaint. */
@@ -1825,47 +1840,32 @@ function addOverlays() {
   map.addLayer({ id: 'trail-dots', type: 'line', source: 'trail',
     layout: { 'line-cap': 'round' },
     paint: { 'line-color': '#9fb4c6', 'line-opacity': 0.85, 'line-width': 3.5, 'line-dasharray': [0.1, 2] } });
-  /* route rendering: one flat core colour, pattern = surface (solid sealed / dashed
-     dirt / dotted singletrack), casing = day/night shadow/glow (caseColor()).
-     Case layers sit under the cores at totalW; dash patterns rescaled (caseDash) so
-     the gaps stay fully transparent. Steepness is no longer a colour channel. */
+  /* route rendering (2026-07-19 track-colour design): one solid cased line — the
+     dirt/sealed dash patterns are gone. Interior colour is baked per feature ('c'):
+     route blue by default, or slope/surface colouring picked from the ☰ Track colour
+     tile. Travelled sections use the per-feature dimmed variant ('cd') so slope and
+     surface still read behind you. Casing = day/night shadow/glow (caseColor()). */
   map.addSource('selSurf', { type: 'geojson', data: EMPTY });
-  const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
-  const dashOf = { sealed: null, dirt: dashDirt, single: dashSingle };
-  // dashes are square-ended (butt caps) — only the continuous sealed line gets round ends
-  const capOf = { sealed: { 'line-join': 'round', 'line-cap': 'round' }, dirt: { 'line-join': 'round' },
-    single: { 'line-join': 'round' } };
-  const sf = (s, st) => ['all', ['==', ['get', 's'], s], ['==', ['get', 'state'], st]];
-  const dashed = (base, d) => d ? { ...base, 'line-dasharray': d } : base;
-  // casing is CONTINUOUS by default — dash gaps in the core read as casing colour
-  // (Grant's mock-up). gapStyle 'clear' restores dashed casing = transparent gaps.
-  const caseDashOf = s => ADV('gapStyle') === 'clear' && dashOf[s] ? caseDash(dashOf[s]) : null;
-  /* progress ladder, bottom→top: travelled (grey, reduced dark case) → missed
+  const rnd = { 'line-join': 'round', 'line-cap': 'round' };
+  const sf = st => ['==', ['get', 'state'], st];
+  /* progress ladder, bottom→top: travelled (dimmed, reduced dark case) → missed
      (half-strength colour, NO case — casing is the exclusive route-ahead signal)
-     → remaining (full colour, cased). Patterns survive every state. */
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-done-case-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'done'), layout: capOf[s],
-      paint: dashed({ 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() }, caseDashOf(s)) });
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-done-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'done'), layout: capOf[s],
-      paint: dashed({ 'line-color': ADV('colDone'), 'line-opacity': ADV('progDoneOp'), 'line-width': coreW() }, dashOf[s]) });
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-miss-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'miss'), layout: capOf[s],
-      paint: dashed({ 'line-color': ['get', 'c'], 'line-opacity': ADV('progMissOp'), 'line-width': coreW() }, dashOf[s]) });
-  for (const s of ['sealed', 'dirt', 'single']) // just-ridden tail — bright, uncased, hugs the marker
-    map.addLayer({ id: 'surf-recent-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'recent'), layout: capOf[s],
-      paint: dashed({ 'line-color': ['get', 'c'], 'line-opacity': ADV('progRecentOp'), 'line-width': coreW() }, dashOf[s]) });
-  map.addLayer({ id: 'sel-case', type: 'line', source: 'selTrack',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
+     → remaining (full colour, cased). */
+  map.addLayer({ id: 'surf-done-case', type: 'line', source: 'selSurf', filter: sf('done'), layout: rnd,
+    paint: { 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() } });
+  map.addLayer({ id: 'surf-done', type: 'line', source: 'selSurf', filter: sf('done'), layout: rnd,
+    paint: { 'line-color': ['get', 'cd'], 'line-opacity': ADV('progDoneOp'), 'line-width': coreW() } });
+  map.addLayer({ id: 'surf-miss', type: 'line', source: 'selSurf', filter: sf('miss'), layout: rnd,
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('progMissOp'), 'line-width': coreW() } });
+  map.addLayer({ id: 'surf-recent', type: 'line', source: 'selSurf', filter: sf('recent'), layout: rnd, // just-ridden tail — bright, uncased, hugs the marker
+    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('progRecentOp'), 'line-width': coreW() } });
+  map.addLayer({ id: 'sel-case', type: 'line', source: 'selTrack', layout: rnd,
     paint: { 'line-color': caseColor(), 'line-width': totalW() } });
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-case-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'rem'), layout: capOf[s],
-      paint: dashed({ 'line-color': caseColor(), 'line-width': totalW() }, caseDashOf(s)) });
-  for (const s of ['sealed', 'dirt', 'single'])
-    map.addLayer({ id: 'surf-' + s, type: 'line', source: 'selSurf', filter: sf(s, 'rem'), layout: capOf[s],
-      paint: dashed({ 'line-color': ['get', 'c'], 'line-width': coreW() }, dashOf[s]) });
-  map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
+  map.addLayer({ id: 'surf-case', type: 'line', source: 'selSurf', filter: sf('rem'), layout: rnd,
+    paint: { 'line-color': caseColor(), 'line-width': totalW() } });
+  map.addLayer({ id: 'surf-core', type: 'line', source: 'selSurf', filter: sf('rem'), layout: rnd,
+    paint: { 'line-color': ['get', 'c'], 'line-width': coreW() } });
+  map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack', layout: rnd,
     paint: { 'line-color': ADV('colRoute'), 'line-width': coreW() } });
   /* direction Vs: case-coloured overlay glyphs along the line (the cutout look
      without the cutout — reads on solid, dashed and dotted alike). They follow the
@@ -2129,26 +2129,52 @@ function progClassAt(trk) {
     return k > 0 && k < sp.length ? 'miss' : 'rem';
   };
 }
+/* ---------------- track colouring (☰ Track colour tile: none / slope / surface) ---------------- */
+const SLOPE_RAMP = ['#1C4670', '#215D92', '#2A77B5', '#3B95D8', '#57B6F2', '#7FD4FF']; // flat → steepest, ≥4% steps
+const SURF_COLOURS = { sealed: null, dirt: '#E2A13C', single: '#C65BD6' }; // sealed = route blue
+function dimColour(hex) { // travelled variant: same hue dropped toward the dark — steeper still reads lighter
+  const n = parseInt(hex.slice(1), 16), f = v => Math.round(v * 0.42);
+  return 'rgb(' + f((n >> 16) & 255) + ',' + f((n >> 8) & 255) + ',' + f(n & 255) + ')';
+}
+/* per-point |grade| buckets, cached per track. Grades come from the smoothed profile
+   so GPS elevation noise doesn't shred the line into confetti. */
+function slopeBuckets(trk) {
+  if (trk._slopeB) return trk._slopeB;
+  const b = new Int8Array(trk.n);
+  if (!trk.hasEle || !trk.profile || trk.profile.length < 2) { b.fill(-1); return trk._slopeB = b; }
+  const P = trk.profile;
+  let k = 1;
+  for (let i = 0; i < trk.n; i++) {
+    while (k < P.length - 1 && P[k].d < trk.cum[i]) k++;
+    const g = Math.abs(P[k].e - P[k - 1].e) / Math.max(1, P[k].d - P[k - 1].d) * 100;
+    b[i] = Math.min(5, (g / 4) | 0);
+  }
+  return trk._slopeB = b;
+}
 function refreshRouteFeatures() {
   if (!mapReady) return;
   const trk = S.tracks[S.sel];
-  // surface segments: consecutive same-(surface × progress-class) runs of the resampled
-  // track (unmapped = dirt, the safe guess out there). End point shared with the next
-  // run so the line never gaps.
+  // route segments: consecutive same-(progress-class × colour) runs of the resampled
+  // track. End point shared with the next run so the line never gaps.
   const surfFeats = [];
-  if (trk && trk.wayCls) {
-    const surfOf = c => c === 1 ? 'sealed' : c === 3 ? 'single' : 'dirt';
+  if (trk) {
+    const mode = S.set.trackColour || 'none';
+    const surfOf = c => c === 1 ? 'sealed' : c === 3 ? 'single' : 'dirt'; // unmapped = dirt, the safe guess out there
+    const sb = mode === 'slope' && trk.hasEle ? slopeBuckets(trk) : null;
+    const colAt = i => sb ? (sb[i] < 0 ? ADV('colRoute') : SLOPE_RAMP[sb[i]])
+      : mode === 'surface' && trk.wayCls ? (SURF_COLOURS[surfOf(trk.wayCls[i])] || ADV('colRoute'))
+      : ADV('colRoute');
     const cls = progClassAt(trk);
-    let s0 = 0, st0 = cls(0);
+    let s0 = 0, st0 = cls(0), c0 = colAt(0);
     for (let i = 1; i <= trk.n; i++) {
       const st = i < trk.n ? cls(i) : null;
-      if (i < trk.n && surfOf(trk.wayCls[i]) === surfOf(trk.wayCls[s0]) && st === st0) continue;
+      if (i < trk.n && colAt(i) === c0 && st === st0) continue;
       const coords = [];
       for (let j = s0; j <= Math.min(i, trk.n - 1); j++) { const [la, lo] = toLL(trk.xy[j * 2], trk.xy[j * 2 + 1]); coords.push([lo, la]); }
       if (coords.length > 1) surfFeats.push({ type: 'Feature',
-        properties: { s: surfOf(trk.wayCls[s0]), c: ADV('colRoute'), state: st0 },
+        properties: { c: c0, cd: mode === 'none' ? ADV('colDone') : dimColour(c0), state: st0 },
         geometry: { type: 'LineString', coordinates: coords } });
-      s0 = i; st0 = st;
+      s0 = i; st0 = st; if (i < trk.n) c0 = colAt(i);
     }
   }
   map.getSource('selSurf').setData({ type: 'FeatureCollection', features: surfFeats });
@@ -2195,13 +2221,12 @@ function segGrade(a, b) { return Math.abs(b.e - a.e) / Math.max(1, Math.abs(b.d 
 function applyRouteVis() {
   if (!mapReady || !map.getLayer('sel-core')) return;
   const trk = S.tracks[S.sel];
-  // arbitration: surface patterns carry the route when way-class data exists;
-  // sel-core/-case cover surface-off and no-way-class tracks
-  const surfOn = S.set.surf !== false && trk && trk._hasSurf;
+  // arbitration: segment features carry the route whenever a track is selected;
+  // sel-core/-case are the no-track / no-features fallback
+  const surfOn = trk && trk._hasSurf;
   const vis = (l, on) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none');
   vis('sel-core', !surfOn); vis('sel-case', !surfOn);
-  for (const s of ['sealed', 'dirt', 'single'])
-    for (const pre of ['surf-', 'surf-case-', 'surf-done-', 'surf-done-case-', 'surf-miss-', 'surf-recent-']) vis(pre + s, surfOn);
+  for (const l of ['surf-core', 'surf-case', 'surf-done', 'surf-done-case', 'surf-miss', 'surf-recent']) vis(l, surfOn);
 }
 function refreshPosLayers() {
   if (!mapReady || !S.pos) return;
@@ -2341,7 +2366,7 @@ function showDialog(title, html) {
   document.getElementById('dlgShade').classList.add('on');
   document.getElementById('dlg').classList.add('on');
 }
-function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); }
+function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
 document.getElementById('dlgOk').onclick = closeDialog;
 document.getElementById('dlgShade').onclick = closeDialog;
 // first tap/hold of min or max explains favourite zoom; the gesture that triggered it is consumed
@@ -3596,9 +3621,9 @@ function refreshGlove() {
   gd.classList.toggle('active', !!S.demo && !S.nav);
   setIc(gd.querySelector('.gi'), S.nav ? 'square' : 'circle-play');
   gd.querySelector('.gl').textContent = S.nav ? 'Stop ride' : 'Demo';
-  const gc = g('gColour');
-  gc.querySelector('.gl').textContent = 'Track colour';
-  gc.classList.toggle('active', (S.set.trackColour || 'none') !== 'none');
+  const gc = g('gColour'), tcm = S.set.trackColour || 'none';
+  gc.querySelector('.gl').textContent = tcm === 'none' ? 'Track colour' : 'Colour: ' + tcm;
+  gc.classList.toggle('active', tcm !== 'none');
 }
 function gloveTap(fn) { return () => { fn(); refreshGlove(); gloveArm(); }; } // act, reflect, re-arm dismiss
 document.getElementById('gZoom').onclick = gloveTap(() => {
@@ -3622,6 +3647,23 @@ document.getElementById('gRideProf').onclick = gloveTap(() => {
 /* Demo tile doubles as STOP: any active ride (real or demo) ends here — the two-tap
    ☰ → tile path is the mis-tap protection that used to guard gStartStop */
 document.getElementById('gDemo').onclick = () => { closeGlove(); S.nav ? stopNav() : demoChoice(); };
+/* Track colour: ☰ tile → chooser (none / slope / surface). Slope greys out without elevation. */
+document.getElementById('gColour').onclick = () => {
+  closeGlove();
+  const trk = S.tracks[S.sel];
+  document.querySelector('#colourPick [data-tc="slope"]').disabled = !(trk && trk.hasEle);
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('colourPick').classList.add('on');
+};
+for (const b of document.querySelectorAll('#colourPick [data-tc]'))
+  b.onclick = () => {
+    S.set.trackColour = b.dataset.tc; saveSet(); closeDialog();
+    refreshRouteFeatures(); refreshGlove();
+    toast(b.dataset.tc === 'none' ? 'Track colour: plain route blue'
+      : b.dataset.tc === 'slope' ? 'Track colour: slope — brighter blue is steeper'
+      : 'Track colour: surface — blue sealed, amber dirt');
+  };
+document.getElementById('cpCancel').onclick = closeDialog;
 function applyGloveSide() {
   gloveBtn.classList.toggle('right', S.set.gloveSide === 'right');
   gloveBtn.classList.toggle('left', S.set.gloveSide !== 'right');
@@ -5049,7 +5091,6 @@ const SETTINGS = [
     opts: [['turns', 'Turns'], ['thresh', 'Zoom'], ['off', 'Off']] },
   { sec: 'nav', k: 'countUnit', t: 'seg', l: 'Countdown units', segId: 'cdSeg',
     opts: [['m', 'Metres'], ['s', 'Seconds']] },
-  { sec: 'nav', k: 'surf', t: 'toggle', l: 'Road-surface patterns', id: 'setSurf', apply: () => refreshMapData() },
   { sec: 'nav', k: 'trail', t: 'toggle', l: 'Backtrack trail', id: 'setTrail',
     apply: () => { if (mapReady) map.setLayoutProperty('trail-dots', 'visibility', S.set.trail ? 'visible' : 'none'); } },
   // Stark
@@ -5089,15 +5130,10 @@ const SETTINGS = [
   { k: 'trailGap', t: 'range', adv: 1, l: 'Trail dot spacing (m)', min: 5, max: 100, step: 5 },
   { k: 'heatMask', t: 'range', adv: 1, l: 'Heatmap knockout along route (m, 0 = off)', min: 0, max: 60, step: 2 },
   { k: 'heatUnderOp', t: 'range', adv: 1, l: 'Heatmap under route opacity', min: 0, max: 0.5, step: 0.02 },
-  { k: 'dirtDash', t: 'range', adv: 1, l: 'Dirt dash length (×width)', min: 0.5, max: 8, step: 0.1 },
-  { k: 'dirtGap', t: 'range', adv: 1, l: 'Dirt gap length (×width)', min: 0.2, max: 8, step: 0.1 },
-  { k: 'singleDash', t: 'range', adv: 1, l: 'Singletrack dot length (×width)', min: 0.05, max: 4, step: 0.05 },
-  { k: 'singleGap', t: 'range', adv: 1, l: 'Singletrack gap length (×width)', min: 0.2, max: 8, step: 0.1 },
   { k: 'routeWOut', t: 'range', adv: 1, l: 'Route width zoomed out (px)', min: 2, max: 14, step: 0.5 },
   { k: 'routeWIn', t: 'range', adv: 1, l: 'Route width zoomed in (px)', min: 4, max: 20, step: 0.5 },
   { k: 'coreFrac', t: 'range', adv: 1, l: 'Core share of route width', min: 0.4, max: 0.95, step: 0.01 },
   { k: 'caseMode', t: 'seg', adv: 1, l: 'Route casing', opts: [['auto', 'Auto'], ['dark', 'Dark'], ['white', 'White']] },
-  { k: 'gapStyle', t: 'seg', adv: 1, l: 'Dash gaps', opts: [['case', 'Casing colour'], ['clear', 'See-through']] },
   { k: 'colDone', t: 'color', adv: 1, l: 'Travelled route core' },
   { k: 'colDoneCase', t: 'color', adv: 1, l: 'Travelled route casing' },
   { k: 'progDoneOp', t: 'range', adv: 1, l: 'Travelled route opacity', min: 0.1, max: 1, step: 0.05 },
@@ -5139,8 +5175,8 @@ let restyleT = null;
 function advApply(k) {
   if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   else if (k.startsWith('arrow')) applyArrowStyle();
-  else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // surface features bake the colour in
-  else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM') refreshRouteFeatures(); // baked into features
+  else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // segment features bake the colour in
+  else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM' || k === 'colDone') refreshRouteFeatures(); // baked into features
   else if (k === 'heatMask') { heatMaskCache.key = ''; refreshMapData(); } // re-clip with the new radius
   else if (k === 'colTrail' || k === 'trailProm') { clearTimeout(restyleT); restyleT = setTimeout(() => setMapStyle(S.set.mapStyle), 400); }
   else applyAdvPaint();
@@ -5151,28 +5187,18 @@ function applyAdvPaint() {
   map.setPaintProperty('sel-core', 'line-width', coreW());
   map.setPaintProperty('sel-case', 'line-color', caseColor());
   map.setPaintProperty('sel-case', 'line-width', totalW());
-  for (const s of ['sealed', 'dirt', 'single']) {
-    map.setPaintProperty('surf-' + s, 'line-width', coreW());
-    map.setPaintProperty('surf-case-' + s, 'line-color', caseColor());
-    map.setPaintProperty('surf-case-' + s, 'line-width', totalW());
-    map.setPaintProperty('surf-done-' + s, 'line-color', ADV('colDone'));
-    map.setPaintProperty('surf-done-' + s, 'line-opacity', ADV('progDoneOp'));
-    map.setPaintProperty('surf-done-' + s, 'line-width', coreW());
-    map.setPaintProperty('surf-done-case-' + s, 'line-color', ADV('colDoneCase'));
-    map.setPaintProperty('surf-done-case-' + s, 'line-opacity', ADV('progDoneOp'));
-    map.setPaintProperty('surf-done-case-' + s, 'line-width', totalW());
-    map.setPaintProperty('surf-miss-' + s, 'line-opacity', ADV('progMissOp'));
-    map.setPaintProperty('surf-miss-' + s, 'line-width', coreW());
-    map.setPaintProperty('surf-recent-' + s, 'line-opacity', ADV('progRecentOp'));
-    map.setPaintProperty('surf-recent-' + s, 'line-width', coreW());
-  }
-  const dashDirt = [ADV('dirtDash'), ADV('dirtGap')], dashSingle = [ADV('singleDash'), ADV('singleGap')];
-  const clear = ADV('gapStyle') === 'clear';
-  for (const [s, d] of [['dirt', dashDirt], ['single', dashSingle]]) {
-    for (const pre of ['surf-', 'surf-done-', 'surf-miss-', 'surf-recent-']) map.setPaintProperty(pre + s, 'line-dasharray', d);
-    for (const pre of ['surf-case-', 'surf-done-case-']) // continuous casing unless gaps are set to clear
-      map.setPaintProperty(pre + s, 'line-dasharray', clear ? caseDash(d) : null);
-  }
+  map.setPaintProperty('surf-core', 'line-width', coreW());
+  map.setPaintProperty('surf-case', 'line-color', caseColor());
+  map.setPaintProperty('surf-case', 'line-width', totalW());
+  map.setPaintProperty('surf-done', 'line-opacity', ADV('progDoneOp')); // colour is baked per feature ('cd')
+  map.setPaintProperty('surf-done', 'line-width', coreW());
+  map.setPaintProperty('surf-done-case', 'line-color', ADV('colDoneCase'));
+  map.setPaintProperty('surf-done-case', 'line-opacity', ADV('progDoneOp'));
+  map.setPaintProperty('surf-done-case', 'line-width', totalW());
+  map.setPaintProperty('surf-miss', 'line-opacity', ADV('progMissOp'));
+  map.setPaintProperty('surf-miss', 'line-width', coreW());
+  map.setPaintProperty('surf-recent', 'line-opacity', ADV('progRecentOp'));
+  map.setPaintProperty('surf-recent', 'line-width', coreW());
   // keep the tiny mark-dot tier matched to the route width sliders
   if (!S.cueEdit) map.setPaintProperty('mark-dots', 'circle-radius', markDotR());
   map.setPaintProperty('heat-under', 'line-opacity', ADV('heatUnderOp'));
