@@ -1523,12 +1523,15 @@ function tone(freq, dur, when, vol) {
    beeps left), pitch = phase (deep = approaching, high = turn here). The old
    direction-less 660 Hz far beep is gone — the approach already tells you which way. */
 const BEEP = {
+  // LEFT = two short pips with a clear gap; RIGHT = one longer tone. Same-pitch pips
+  // 100 ms apart merged into "one long beep" through a helmet, so the two beeps are
+  // now shorter than the single one AND separated by more silence than their own length.
   appr(ty)   { if (!S.set.sound) return; const f = ADV('deepHz');
-    tone(f, .2, 0); if (ty === 'left') tone(f, .2, .3);
-    vib(ty === 'left' ? [120, 80, 120] : [120]); console.log('[beep] approach ' + ty); },
+    if (ty === 'left') { tone(f, .14, 0); tone(f, .14, .36); } else tone(f, .26, 0);
+    vib(ty === 'left' ? [120, 160, 120] : [220]); console.log('[beep] approach ' + ty); },
   now(ty)    { if (!S.set.sound) return; const f = ADV('highHz');
-    tone(f, .16, 0); if (ty === 'left') tone(f, .16, .24);
-    vib(ty === 'left' ? [90, 60, 90] : [100]); console.log('[beep] turn ' + ty); },
+    if (ty === 'left') { tone(f, .12, 0); tone(f, .12, .3); } else tone(f, .22, 0);
+    vib(ty === 'left' ? [90, 130, 90] : [180]); console.log('[beep] turn ' + ty); },
   turn()     { if (!S.set.sound) return; const f = ADV('highHz'); tone(f, .15, 0); tone(f, .15, .22); vib([80, 60, 80]); console.log('[beep] turn'); },
   done()     { if (!S.set.sound) return; tone(700, .09, 0); tone(1050, .12, .12); console.log('[beep] turn done'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
