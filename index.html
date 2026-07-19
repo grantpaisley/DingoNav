@@ -28,7 +28,7 @@
 
   /* ---------- top HUD ---------- */
   /* turn strip: a centred semi-transparent bar along the top, inset so it sits BETWEEN
-     the two corner buttons (N left, ☰ right); its amber fill drains as the turn nears */
+     the two corner buttons (N left, box right); its amber fill drains as the turn nears */
   #hud{position:fixed; top:0; left:106px; right:106px; display:none; pointer-events:none; z-index:10}
   #hud.on{display:block}
   #hudBox{position:relative; overflow:hidden; display:flex; align-items:center; gap:18px;
@@ -94,7 +94,7 @@
     font-variant-numeric:tabular-nums; transition:opacity .6s}
   #vargModeBig.on{display:block}
   #vargModeBig.fade{opacity:0}
-  /* riding: ☰ owns the top-right corner — the mode digit sits below it, slightly inboard */
+  /* riding: the box button owns the top-right corner — the mode digit sits below it, slightly inboard */
   body.navving #vargModeBig{top:calc(env(safe-area-inset-top) + 106px); right:16px}
   /* indicator telltales — big translucent glyphs across the top, same visual
      language as the speed/mode readouts. Each hidden until its bit is live, so
@@ -195,12 +195,13 @@
   .ctl:active{background:var(--panel2)}
   .ctl.active{border-color:var(--accent); color:var(--accent)}
   /* corner + base buttons: big for gloved hands */
-  #orientCtl, #baseRow .ctl{width:88px; height:88px; border-radius:24px; font-size:40px; flex:none}
-  #orientCtl{position:fixed; left:10px; top:calc(env(safe-area-inset-top) + 10px); z-index:16}
+  #orientCtl, #boxBtn, #baseRow .ctl{width:88px; height:88px; border-radius:24px; font-size:40px; flex:none}
+  #orientCtl, #boxBtn{position:fixed; top:calc(env(safe-area-inset-top) + 10px); z-index:16}
+  #orientCtl{left:10px} #boxBtn{right:10px}
   #baseRow{position:fixed; left:0; right:0; bottom:calc(var(--chromeB,0px) + 8px); z-index:16;
     display:flex; align-items:flex-end; padding:0 10px; pointer-events:none}
   #baseRow .ctl{pointer-events:auto}
-  /* landscape: box hard left, dot hard right, − / + together in the centre */
+  /* landscape: ☰ hard left, dot hard right, − / + together in the centre */
   #zoomOut{margin-left:auto} #zoomIn{margin-left:10px} #dotBtn{margin-left:auto}
   /* the dot is the one round face — centre-on-me; wears the centre-lock ring */
   body:not(.portrait) #baseRow #dotBtn{width:96px; height:96px; border-radius:50%; font-size:44px}
@@ -219,14 +220,26 @@
     font-size:22px; font-weight:800; letter-spacing:.03em; cursor:pointer; display:none;
     box-shadow:0 4px 18px rgba(0,0,0,.45)}
   body:not(.navving) #startBtn.on{display:block}
+  /* ride-direction toggle: START's twin above ☰ (bottom-left); amber when reversed.
+     Stopped-screen only — never during navigation. */
+  #revToggle{position:fixed; left:10px; bottom:calc(var(--chromeB,0px) + 112px); z-index:16;
+    height:68px; padding:0 24px; border:1px solid #2a3540; border-radius:18px;
+    background:rgba(22,28,34,.92); color:var(--fg); font-size:20px; font-weight:800;
+    letter-spacing:.03em; cursor:pointer; display:none; align-items:center; gap:10px;
+    box-shadow:0 4px 18px rgba(0,0,0,.45)}
+  body:not(.navving) #revToggle.on{display:flex}
+  #revToggle.rev{background:var(--warn); border-color:var(--warn); color:#231a00}
+  body.daymode #revToggle:not(.rev){background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f}
   /* retired chrome: the standalone rose, top-right mute and the rose's mode label */
   #north{display:none !important} #muteBtn{display:none !important} #orientLabel{display:none !important}
-  /* riding: same buttons, resting dimmed like the rest of the ride chrome */
-  body.navving #orientCtl, body.navving #baseRow{opacity:var(--navOp,.4)}
-  body.navving #orientCtl:active, body.navving #baseRow:active{opacity:1}
+  /* riding: same buttons, resting dimmed like the rest of the ride chrome —
+     except ☰: a visibility fix that fades is no fix */
+  body.navving #orientCtl, body.navving #boxBtn, body.navving #baseRow .ctl{opacity:var(--navOp,.4)}
+  body.navving #orientCtl:active, body.navving #boxBtn:active, body.navving #baseRow .ctl:active{opacity:1}
+  body.navving #baseRow #menuBtn{opacity:1}
   body.navving #gloveBtn{opacity:var(--navOp,.4)}
   body.navving #gloveBtn:active{opacity:1}
-  body.navving #cueEditBtn, body.navving #revBtn{display:none !important} /* planning-only */
+  body.navving #cueEditBtn{display:none !important} /* planning-only */
   #cueEditBtn.active{border-color:var(--warn); color:var(--warn)}
   /* stacked under the speed readout, clear of the glance card (top centre) */
   #holdPill, #lockPill{position:fixed; top:64px; left:12px; z-index:14;
@@ -280,12 +293,9 @@
     background:rgba(14,18,22,.96); border-top:1px solid #232d38;
     padding:10px 12px calc(env(safe-area-inset-bottom) + 10px); display:flex; gap:10px; align-items:center}
   body.navving #bottom{display:none} /* riding: bar removed — ☰ opens the ride-controls panel instead */
-  /* ☰ menu: dark-grey plate so it reads on any map, TOP-RIGHT corner, glove-sized always.
-     Exempt from the routing transparency fade — a visibility fix that fades is no fix. */
-  #menuBtn{position:fixed; right:10px; top:calc(env(safe-area-inset-top) + 10px); z-index:26;
-    width:88px; height:88px; font-size:44px; display:flex; align-items:center; justify-content:center;
-    background:rgba(34,41,48,.85); border:1px solid #2a3540; border-radius:24px;
-    color:var(--fg); text-shadow:0 1px 6px rgba(0,0,0,.8); cursor:pointer}
+  /* ☰ menu: first slot of the base row (bottom-left), glove-sized like its neighbours;
+     slightly lighter plate so it reads as the odd one out */
+  #menuBtn{background:rgba(34,41,48,.85); text-shadow:0 1px 6px rgba(0,0,0,.8)}
   #menuBtn:active{background:rgba(52,62,72,.9)}
   #trackInfo{flex:1; min-width:0; line-height:1.25}
   #trackName{font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -343,11 +353,11 @@
     background:var(--panel); padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 16px);
     transform:translateY(105%); transition:transform .22s ease}
   #panel.on{transform:translateY(0)}
-  #panelClose{position:fixed; right:10px; top:calc(env(safe-area-inset-top) + 10px); z-index:22;
+  #panelClose{position:fixed; left:10px; top:calc(env(safe-area-inset-top) + 10px); z-index:22;
     width:88px; height:88px; font-size:44px; display:flex; align-items:center; justify-content:center;
     background:rgba(34,41,48,.85); border:1px solid #2a3540; border-radius:24px; color:var(--fg); cursor:pointer}
   body.daymode #panelClose{background:#f5f5f7; border-color:#c9c9ce; color:#1d1d1f}
-  #panel > [data-reg="style"]{margin-right:104px} /* first row clears the close hamburger */
+  #panel > [data-reg="style"]{margin-left:104px} /* first row clears the back arrow */
   #panel h3{font-size:13px; letter-spacing:.06em; color:var(--dim); margin:18px 0 8px}
   /* ---------- Mac-like day theme (2026-07-17 samples review) ----------
      Day map styles flip the chrome light: #f5f5f7 plates with hairline borders
@@ -383,7 +393,6 @@
   body.daymode #panel .sw input:checked + span{background:#34c759}
   #panelNav{display:flex; gap:10px; margin-bottom:6px}
   #panelNav #navBtn{flex:1}
-  #panelNav .ctl{width:56px; height:56px; flex:none}
   #setTabs{display:flex; gap:5px; margin:14px 0 4px}
   #setTabs button{flex:1; padding:10px 0; border-radius:10px; border:1px solid #2a3540; background:var(--panel2);
     color:var(--dim); font-size:13px; font-weight:700; cursor:pointer}
@@ -458,11 +467,10 @@
     #progress.countdown #progCanvas{height:52px}
     /* short viewports (landscape / split-screen): shrink the corner + base buttons
        so the map keeps some height */
-    #orientCtl, #baseRow .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
-    #menuBtn{width:60px; height:52px; border-radius:15px; font-size:26px}
+    #orientCtl, #boxBtn, #baseRow .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
     body:not(.portrait) #baseRow #dotBtn{width:64px; height:64px; border-radius:50%; font-size:30px}
     body.portrait #baseRow .ctl{height:52px}
-    #startBtn{height:52px; font-size:18px; padding:0 22px; bottom:calc(var(--chromeB,0px) + 68px)}
+    #startBtn, #revToggle{height:52px; font-size:18px; padding:0 22px; bottom:calc(var(--chromeB,0px) + 68px)}
     #hud{left:74px; right:74px}
     #markTurn{height:64px; font-size:20px; padding:0 30px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
@@ -559,6 +567,7 @@
   <symbol id="i-battery-medium" viewBox="0 0 24 24"><rect width="16" height="10" x="2" y="7" rx="2" ry="2"/><line x1="22" x2="22" y1="11" y2="13"/><line x1="6" x2="6" y1="11" y2="13"/><line x1="10" x2="10" y1="11" y2="13"/></symbol>
   <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
   <symbol id="i-arrow-left-right" viewBox="0 0 24 24"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
   <symbol id="i-corner-up-left" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></symbol>
   <symbol id="i-corner-up-right" viewBox="0 0 24 24"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h16"/></symbol>
   <symbol id="i-arrow-up" viewBox="0 0 24 24"><line x1="12" x2="12" y1="19" y2="5"/><polyline points="5 12 12 5 19 12"/></symbol>
@@ -625,13 +634,15 @@
 
 <div id="north" title="cycle north-up / course-up / compass"><span id="northInner">N</span></div>
 <div class="ctl" id="orientCtl" title="north-up / course-up / compass">N</div>
+<div class="ctl" id="boxBtn" title="see the whole track"><svg class="ic"><use href="#i-square"/></svg></div>
 <div id="baseRow">
-  <div class="ctl" id="boxBtn" title="see the whole track"><svg class="ic"><use href="#i-square"/></svg></div>
+  <div class="ctl" id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
   <div class="ctl" id="zoomOut" title="zoom out — hold to save as riding zoom"><svg class="ic"><use href="#i-minus"/></svg></div>
   <div class="ctl" id="zoomIn" title="zoom in — hold to save as turn zoom"><svg class="ic"><use href="#i-plus"/></svg></div>
   <div class="ctl" id="dotBtn" title="centre on me"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
 </div>
 <button id="startBtn" title="start navigation">START</button>
+<button id="revToggle" title="ride direction — tap to reverse"><svg class="ic"><use href="#i-arrow-left-right"/></svg><span id="revLbl">FORWARD</span></button>
 <button id="markTurn" title="add a mark on the track">ADD MARK</button>
 <div id="turnHint">ADD MARK then tap the track · tap a point to remove · long-press a point to change it</div>
 <div id="markPicker">
@@ -668,10 +679,9 @@
 
 <div id="progress">
   <canvas id="progCanvas"></canvas>
-  <div id="progLabels"><span id="progDone">—</span><span id="progTogo">—</span></div>
+  <div id="progLabels"><span id="progDone">—</span><span id="progNext"></span><span id="progTogo">—</span></div>
 </div>
 
-<div id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
 <div id="bottom">
   <div id="trackInfo"><div id="trackName">No track selected</div><div id="trackSub">load a GPX to begin</div></div>
   <div class="ctl" id="cueEditBtn" title="edit cues" style="display:none"><svg class="ic"><use href="#i-pencil"/></svg></div>
@@ -688,10 +698,9 @@
 
 <div id="shade"></div>
 <div id="panel">
-  <div id="panelClose" title="close settings"><svg class="ic"><use href="#i-menu"/></svg></div>
+  <div id="panelClose" title="back to the map"><svg class="ic"><use href="#i-arrow-left"/></svg></div>
   <div id="panelNav">
     <button id="navBtn" disabled>Start</button>
-    <div class="ctl" id="revBtn" title="reverse direction" style="display:none"><svg class="ic"><use href="#i-arrow-left-right"/></svg></div>
   </div>
   <div data-reg="style"></div>
 
@@ -2965,6 +2974,7 @@ document.getElementById('hudBox').onclick = () => {
 /* ---------------- progress strip ---------------- */
 const prog = document.getElementById('progress'), progCanvas = document.getElementById('progCanvas');
 const progDone = document.getElementById('progDone'), progTogo = document.getElementById('progTogo');
+const progNext = document.getElementById('progNext');
 /* portrait vs landscape: ONE predicate for CSS and JS — the same width>height test the
    layout editor keys its saved slots by (loOrient, hoisted). 720×720 counts as portrait. */
 function applyOrientClass() { document.body.classList.toggle('portrait', loOrient() === 'portrait'); }
@@ -3084,6 +3094,12 @@ function drawProgress(force) {
   const rem = Math.max(0, len - done);
   progTogo.innerHTML = '<b>' + (rem / 1000).toFixed(1) + ' km</b> · ' +
     (ns.avgSpd > 0.5 ? '~' + fmtTime(rem / ns.avgSpd) : '—');
+  // centre: distance to the next cue — the strip is windowed to the map, so at rider
+  // zoom the next turn is usually off the right edge; this is the number that matters
+  const nd = ns.cdD;
+  progNext.innerHTML = isFinite(nd) && nd != null && !ns.off
+    ? '→ <b>' + (nd < 1000 ? Math.max(10, Math.round(nd / 10) * 10) + ' m' : (nd / 1000).toFixed(1) + ' km') + '</b>'
+    : '';
 }
 /* countdown bar: fixed full width, fills left→right as the next cue closes in; big number
    in metres or seconds (settings). Seconds freeze at the last value when stopped — never ∞. */
@@ -3865,7 +3881,7 @@ const TRAIN_STEPS = [
   { at: t => t.alerts[1].at - 140, title: 'Look around', advance: { ev: 'drag' },
     html: '<b>Drag the map</b> with a finger — looking around is always allowed, even mid-ride.' },
   { title: 'The whole track', target: '#boxBtn', advance: { ev: 'fit' },
-    html: 'Tap the <b>box button</b> (bottom left) — the map zooms right out to frame the whole ride.' },
+    html: 'Tap the <b>box button</b> (top right) — the map zooms right out to frame the whole ride.' },
   { title: 'Come home', target: '#dotBtn', advance: { ev: 'recentre' },
     html: 'And the <b>dot button</b> (bottom right) snaps you back onto yourself. <b>Tap it</b> to carry on.' },
   { title: 'Zoom when stopped', advance: { ev: 'zoom-gesture' },
@@ -3879,7 +3895,7 @@ const TRAIN_STEPS = [
     html: 'The <b>N button</b> (top left) cycles <b>north-up → course-up → compass</b>. Compass turns ' +
       'the map as your bars turn — the fastest way to read a confusing junction.' },
   { title: 'The glove menu', target: '#menuBtn', advance: { ev: 'glove' },
-    html: 'Tap the <b>☰ button</b> (top right) — the whole screen becomes giant glove-sized tiles: ' +
+    html: 'Tap the <b>☰ button</b> (bottom left) — the whole screen becomes giant glove-sized tiles: ' +
       '<b>Mute, Mark spot, Auto zoom, map layers, track colour, Stop</b>.' },
   { title: 'Mute', target: '#gMute', advance: { ev: 'unmute' },
     html: 'Tap <b>Mute</b>, then tap it <b>again</b> to un-mute. Muted, all beeps stop — ' +
@@ -4541,9 +4557,9 @@ function selectTrack(i) {
 }
 function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
-  const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revBtn');
+  const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revToggle');
   document.getElementById('startBtn').classList.toggle('on', !S.nav); // on-map START (free-ride works trackless)
-  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap ☰ to pick a track, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.style.display = 'none'; return; }
+  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap ☰ to pick a track, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.classList.remove('on'); return; }
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
@@ -4551,10 +4567,11 @@ function updateBottomBar() {
   sub.textContent = (t.lengthM / 1000).toFixed(1) + ' km · ' + nA + ' cues' + (nE ? ' (' + nE + ' edited)' : '') + (t.reverse ? ' · reversed' : '');
   nb.disabled = false;
   eb.style.display = t.alerts ? 'flex' : 'none';
-  rb.style.display = 'flex'; rb.classList.toggle('active', !!t.reverse);
+  rb.classList.add('on'); rb.classList.toggle('rev', !!t.reverse);
+  document.getElementById('revLbl').textContent = t.reverse ? 'REVERSE' : 'FORWARD';
 }
-// reverse toggle: pick which way to ride the track before starting nav
-document.getElementById('revBtn').onclick = () => {
+// on-map ride-direction toggle: pick which way to ride the track before starting nav
+document.getElementById('revToggle').onclick = () => {
   const t = S.tracks[S.sel]; if (!t) return;
   t.reverse = !t.reverse;
   updateBottomBar(); refreshMapData(); drawProgress(true);
