@@ -1746,7 +1746,7 @@ async function initMap() {
   // placement) wait out the double-tap window so the two can't collide
   let rideTapT = null;
   map.on('click', e => {
-    if (!S.nav) { if (S.cueEdit) cueEditTap(e.lngLat); return; }
+    if (!S.nav) { S.cueEdit ? cueEditTap(e.lngLat) : trackTap(e.lngLat); return; }
     clearTimeout(rideTapT);
     rideTapT = setTimeout(() => { rideTapT = null; rideTap(e.lngLat); }, 280);
   });
@@ -2112,6 +2112,10 @@ function refreshMapData() {
   map.getSource('tracksOther').setData({ type: 'FeatureCollection',
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
       geometry: { type: 'LineString', coordinates: t.coordsLL } })) });
+  // stopped-screen track picker: with nothing selected every track reads clearly;
+  // once one is picked (nav colours) the rest drop to a translucent underlay
+  map.setPaintProperty('tracks-other', 'line-opacity', S.sel >= 0 ? 0.3 : 0.85);
+  map.setPaintProperty('tracks-other', 'line-width', S.sel >= 0 ? 2 : 3.5);
   const trk = S.tracks[S.sel];
   const dir = S.navState ? S.navState.dir : (trk && trk.reverse ? -1 : 1);
   map.getSource('selTrack').setData(trk ? { type: 'Feature', properties: {},
@@ -2694,7 +2698,14 @@ function fitSelected() {
   // framing a ride and matches the deepest baked satellite tiles.
   const opt = { padding: 60, duration: 600, maxZoom: 16 };
   if (S.sel >= 0) map.fitBounds(S.tracks[S.sel].llBounds, opt);
-  else if (S.tracks.length) map.fitBounds(S.tracks[0].llBounds, opt);
+  else if (S.tracks.length) {
+    // nothing selected: frame ALL loaded tracks (the map is the track picker)
+    const u = [[180, 90], [-180, -90]];
+    for (const t of S.tracks) { const b = t.llBounds;
+      u[0][0] = Math.min(u[0][0], b[0][0]); u[0][1] = Math.min(u[0][1], b[0][1]);
+      u[1][0] = Math.max(u[1][0], b[1][0]); u[1][1] = Math.max(u[1][1], b[1][1]); }
+    map.fitBounds(u, opt);
+  }
   else if (S.heat) {
     let minLo = 180, minLa = 90, maxLo = -180, maxLa = -90;
     for (const f of S.heat.geojson.features) {
@@ -4396,8 +4407,8 @@ async function handleFiles(files) {
     }
     catch (e) { errs++; console.warn('load failed', f.name, e); }
   }
-  if (S.sel < 0 && S.tracks.length) selectTrack(0);
-  refreshTrackList(); refreshEmpty(); refreshMapData();
+  // freshly loaded files stay UNSELECTED — every track shows on the map, tap one to pick it
+  refreshTrackList(); refreshEmpty(); refreshMapData(); updateBottomBar();
   if (nT || nH) fitSelected();
   const extra = stravaTiles ? ` + ${stravaTiles} Strava tiles` : '';
   toast(`Loaded ${nT} track${nT === 1 ? '' : 's'}${nH ? ' + heatmap' : ''}${extra}${errs ? ' · ' + errs + ' failed' : ''}`);
@@ -4544,6 +4555,28 @@ async function swapHeatToPack(pack) {
     document.getElementById('heatInfo').textContent = 'Heatmap: ' + rec.name + ' — ' + S.heat.count + ' tracks';
   } catch (e) { console.warn('heatmap swap failed', e); }
 }
+/* stopped-screen: tap a track line on the map to select it; tap the selected one again
+   to deselect (back to the all-tracks view). Tap radius ~24 px, floor 20 m. */
+function trackTap(lngLat) {
+  if (!S.tracks.length || !mapReady) return;
+  const [x, y] = toXY(lngLat.lat, lngLat.lng);
+  const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
+  const tapR = Math.max(20, mpp * 24);
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < S.tracks.length; i++) {
+    const n = nearestOnTrack(S.tracks[i], x, y);
+    if (n.d < bd) { bd = n.d; best = i; }
+  }
+  if (best < 0 || bd > tapR) return; // tapped empty map — no change
+  if (best === S.sel) deselectTrack();
+  else { selectTrack(best); toast(S.tracks[best].name); }
+}
+function deselectTrack() {
+  if (S.cueEdit) setCueEdit(false);
+  S.sel = -1;
+  refreshTrackList(); updateBottomBar(); refreshMapData();
+  toast('Track deselected — all tracks shown');
+}
 function selectTrack(i) {
   if (S.cueEdit) setCueEdit(false);
   S.sel = i;
@@ -4559,7 +4592,7 @@ function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
   const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revToggle');
   document.getElementById('startBtn').classList.toggle('on', !S.nav); // on-map START (free-ride works trackless)
-  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap ☰ to pick a track, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.classList.remove('on'); return; }
+  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap a track on the map, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.classList.remove('on'); return; }
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
@@ -5874,7 +5907,7 @@ async function boot() {
   try { const tr = await idb.get('trail'); if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; } } catch (e) {}
   try { const pr = await idb.get('prog'); if (pr && pr.spans) S.prog = { track: pr.track || null, spans: pr.spans, prevIdx: null }; } catch (e) {}
   try { S.rides = (await idb.all()).filter(r => r.kind === 'ride').sort((a, b) => a.ts - b.ts); } catch (e) {}
-  if (S.tracks.length && S.sel < 0) S.sel = 0;
+  // boot: nothing pre-selected — all tracks show on the map, tap one to pick it
   refreshTrackList(); refreshEmpty(); updateBottomBar();
   await initMap(); // cue analysis needs basePM, so it runs after the map boots
   if (S.sel >= 0 && !S.tracks[S.sel].alerts)
