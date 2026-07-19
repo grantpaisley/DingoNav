@@ -1758,7 +1758,7 @@ async function initMap() {
     // viewport changes that never fire a resize event (split-screen drags, this dev pane) still re-place the chrome
     if (innerWidth !== lastVW || innerHeight !== lastVH) {
       lastVW = innerWidth; lastVH = innerHeight;
-      placeProgress(); drawProgress(true);
+      applyOrientClass(); placeProgress(); drawProgress(true);
       loViewportChanged(); // custom slots are viewport-fraction based — recompute (rebuilds edit mode too)
     }
   }, 1000);
@@ -2971,9 +2971,15 @@ document.getElementById('hudBox').onclick = () => {
 /* ---------------- progress strip ---------------- */
 const prog = document.getElementById('progress'), progCanvas = document.getElementById('progCanvas');
 const progDone = document.getElementById('progDone'), progTogo = document.getElementById('progTogo');
+/* portrait vs landscape: ONE predicate for CSS and JS — the same width>height test the
+   layout editor keys its saved slots by (loOrient, hoisted). 720×720 counts as portrait. */
+function applyOrientClass() { document.body.classList.toggle('portrait', loOrient() === 'portrait'); }
+applyOrientClass();
 function placeProgress() {
   const b = document.getElementById('bottom').offsetHeight;
   prog.style.bottom = b + 'px';
+  // one number for everything bottom-anchored: idle bar height + progress-strip height
+  document.documentElement.style.setProperty('--chromeB', (b + prog.offsetHeight) + 'px');
   // riding: the strip runs full width, so ☰ lifts above it
   document.getElementById('menuBtn').style.bottom = S.nav ? (b + prog.offsetHeight + 12) + 'px' : '';
   const gb = document.getElementById('gloveBtn');
@@ -2984,7 +2990,7 @@ function placeProgress() {
   gb.style.bottom = above ? above + 'px' : '';
 }
 window.addEventListener('resize', () => {
-  placeProgress(); drawProgress(true);
+  applyOrientClass(); placeProgress(); drawProgress(true);
   // media-query flips (bar hide/show, canvas height) can apply after this event — settle once more
   setTimeout(() => { placeProgress(); drawProgress(true); }, 80);
 });
