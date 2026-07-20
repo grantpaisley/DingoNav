@@ -328,6 +328,8 @@
   .gtile{height:min(26vh,180px); border-radius:18px; background:var(--panel2); border:2px solid #2a3540;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer}
   .gtile:active{background:#26313d}
+  .gtile .gs{font-size:12px; color:var(--dim); margin-top:-4px; text-align:center; padding:0 6px}
+  .gtile.active .gs{color:var(--accent); opacity:.8}
   .gtile.active{border-color:var(--accent)}
   .gtile .gi{font-size:42px; line-height:1; display:flex; align-items:center; justify-content:center; gap:10px}
   .gtile .gi .gv{font-size:26px; font-weight:800; font-variant-numeric:tabular-nums}
@@ -771,7 +773,7 @@
   <div class="gtile" id="gDemo"><div class="gi"><svg class="ic"><use href="#i-circle-play"/></svg></div><div class="gl">Demo</div></div>
   <div class="gtile" id="gLayers"><div class="gi"><svg class="ic"><use href="#i-layers"/></svg></div><div class="gl">Day</div></div>
   <div class="gtile" id="gMute"><div class="gi"><svg class="ic"><use href="#i-volume-2"/></svg></div><div class="gl">Mute</div></div>
-  <div class="gtile" id="gTracks"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Tracks</div></div>
+  <div class="gtile" id="gNavMode"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Follow</div><div class="gs"></div></div>
   <div class="gtile" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
   <div class="gtile" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
   <div class="gtile" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
@@ -974,7 +976,8 @@ const S = {
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure', bigLeft: '' },
+    varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure', bigLeft: '',
+    navMode: 'follow' },  // follow | explore | snap — survives restarts by design
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
@@ -2976,8 +2979,108 @@ function departDist(ns) {
   if (ADV('departUnit') !== 's') return ADV('departM');
   return Math.max(10, ((ns && ns.avgSpd) || vehVal('defSpd')) * ADV('departS'));
 }
+/* ---------------- navigation mode ----------------
+   follow  — one chosen track. Cues, progress, off-track alarm. What the app always did.
+   explore — no track at all. Breadcrumb, speed, compass. Never cues, never alarms.
+   snap    — explore that LATCHES onto whatever known track you ride onto, and lets go
+             again (with the fanfare) when you leave it.
+
+   They're one spectrum, not three systems: snap is explore plus opportunistic latching,
+   and follow is snap locked to a single track. The off-track picker is follow's manual
+   version of what snap does by itself, which is why it never opens in snap.
+
+   The mode persists across restarts, so snap can latch onto something days after you
+   set it — hence the fanfare on letting go: the app should always be audibly saying
+   which of these three it's doing. */
+const NAV_MODES = ['follow', 'explore', 'snap'];
+const NAV_MODE_LABEL = { follow: 'Follow', explore: 'Explore', snap: 'Snap' };
+function navMode() { return NAV_MODES.indexOf(S.set.navMode) >= 0 ? S.set.navMode : 'follow'; }
+// the track actually being navigated: none while exploring, whatever is latched in snap
+function navTrack() { return navMode() === 'explore' ? null : S.tracks[S.sel] || null; }
+function setNavMode(m) {
+  if (!NAV_MODES.includes(m) || m === navMode()) return;
+  S.set.navMode = m; saveSet();
+  if (m === 'explore' && S.nav && S.sel >= 0) snapUnlatch(true); // silent: the rider asked for this
+  applyRouteChrome(S.nav ? navTrack() : null);
+  refreshGlove(); updateBottomBar(); refreshMapData();
+  toast(NAV_MODE_LABEL[m] + ' — ' + { follow: 'one track, tells you when you leave it',
+    explore: 'no track, just your breadcrumb', snap: 'latches onto tracks as you ride onto them' }[m]);
+}
+/* route-dependent chrome in one place: the turn strip and progress bar only mean
+   something with a track under them, and latching/unlatching flips that mid-ride. */
+function applyRouteChrome(trk) {
+  document.body.classList.toggle('hasroute', !!trk);
+  document.getElementById('hud').classList.toggle('on', !!(trk && S.nav));
+  prog.classList.toggle('on', !!(trk && S.nav));
+  if (!trk) {
+    prog.classList.remove('offtrack', 'countdown');
+    document.getElementById('banner').classList.remove('on');
+    if (S.nav) setHud(null);
+  } else prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
+}
+function freshNavState(rev) {
+  return { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0,
+    alertStates: new Map(), movingS: 0, avgSpd: null, lastFixT: 0 };
+}
+/* bearing of the track itself at a point — used to tell "running along me" from
+   "crossing me", and to decide which way round to latch */
+function trackBearingAt(t, i) {
+  const j = Math.min(i + 1, t.n - 1), k = j === i ? Math.max(0, i - 1) : i;
+  return bearing(t.xy[k * 2], t.xy[k * 2 + 1], t.xy[j * 2], t.xy[j * 2 + 1]);
+}
+const SNAP_HOLD_MS = 4000; // settle time either side of a latch — junctions must not thrash
+function snapUpdate(x, y, hdg) {
+  const t = Date.now();
+  if (S.snapT && t - S.snapT < SNAP_HOLD_MS) return;
+  const cur = S.tracks[S.sel];
+  if (cur) { // latched: let go once we're properly clear, not at the first wobble
+    if (nearestOnTrack(cur, x, y, S.navState ? S.navState.idx : -1).d > ADV('offM')) snapUnlatch(false);
+    return;
+  }
+  // unlatched: score every track we're sitting on. A track crossing us is a worse
+  // candidate than one running along us, even if it's momentarily closer.
+  let best = null;
+  for (let i = 0; i < S.tracks.length; i++) {
+    const n = nearestOnTrack(S.tracks[i], x, y);
+    if (n.d >= ADV('onM')) continue;
+    let pen = 0;
+    if (hdg != null && !isNaN(hdg)) {
+      const off = Math.abs(angDiff(hdg, trackBearingAt(S.tracks[i], n.idx)));
+      pen = Math.min(off, 180 - off) / 90 * ADV('onM'); // 0 along us → a full on-radius across us
+    }
+    const score = n.d + pen;
+    if (!best || score < best.score) best = { i, idx: n.idx, score };
+  }
+  // ambiguity resolves itself: overlapping tracks diverge within seconds and we re-score
+  // then. Better a silent best guess than a dialog at the exact moment of a junction.
+  if (best) snapLatch(best.i, best.idx, hdg);
+}
+function snapLatch(i, idx, hdg) {
+  const t = S.tracks[i];
+  // ridden the opposite way to how it was recorded? Take it reversed — in snap the rider
+  // never chose this track, so its recorded direction carries no intent worth keeping.
+  const rev = hdg != null && !isNaN(hdg) && Math.abs(angDiff(hdg, trackBearingAt(t, idx))) > 90;
+  t.reverse = rev;
+  S.snapT = Date.now();
+  selectTrack(i);
+  S.navState = freshNavState(rev);
+  S.prog = { track: t.id, spans: [], prevIdx: null }; progDirty = true;
+  applyRouteChrome(t);
+  placeProgress(); drawProgress(true);
+  if (!t.alerts) analyzeRoute(t).then(() => { refreshMapData(); drawProgress(true); });
+  BEEP.back();
+  toast('Snapped to ' + t.name + (rev ? ' · reversed' : ''));
+}
+function snapUnlatch(silent) {
+  S.snapT = Date.now();
+  S.sel = -1; S.navState = freshNavState(false);
+  S.prog = null;
+  applyRouteChrome(null);
+  refreshTrackList(); updateBottomBar(); refreshMapData(); drawProgress(true);
+  if (!silent) { BEEP.unlatch(); toast('Off the track — exploring'); }
+}
 function startNav() {
-  const trk = S.tracks[S.sel]; // undefined → free-ride: live position, speed & compass, no cues/off-track/progress
+  const trk = navTrack(); // null → explore / free-ride: position, speed & compass, no cues or alarms
   if (S.cueEdit) setCueEdit(false);
   audio(); // unlock on gesture
   // gesture → prompt for the magnetometer if needed (also for auto-compass flips later)
@@ -2995,21 +3098,15 @@ function startNav() {
   if (trk && !trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
   // start in the direction the rider picked (reverse toggle); auto-voting can still correct it if
   // they actually ride the other way, but it holds this direction from the first fix
-  const rev = !!(trk && trk.reverse);
-  S.navState = { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0, alertStates: new Map(),
-    movingS: 0, avgSpd: null, lastFixT: 0 };
+  S.navState = freshNavState(!!(trk && trk.reverse));
+  S.snapT = 0; // snap may latch on the very first fix
   S.nav = true; setFollow(true); S.dotFit = false;
   camOffX = camOffY = 0; // look-ahead offset migrates in from centre
   closeGlove();
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
-  document.body.classList.toggle('hasroute', !!trk); // route → turn strip owns the top; free-ride → speed sits at the very top
   document.getElementById('hudSpeed').classList.add('on');
   renderMain(); modePing();
-  if (trk) { // turn strip + progress strip only make sense with a route
-    document.getElementById('hud').classList.add('on');
-    prog.classList.add('on'); prog.classList.remove('offtrack', 'countdown');
-    prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
-  }
+  applyRouteChrome(trk); // turn strip + progress strip only make sense with a route
   document.getElementById('gloveBtn').classList.add('on');
   setHold(null);
   placeProgress(); drawProgress(true);
@@ -3066,8 +3163,12 @@ function onFix(lat, lon, acc, speed, heading) {
   // turn mode decays on its own once the junction is cleared — no tap-out needed mid-corner
   if (S.turn && dist(x, y, S.turn.ax, S.turn.ay) > 60) exitTurnMode();
   refreshPosLayers(); followCamera();
-  if (!S.nav || S.sel < 0 || !ns) return;
-  if (S.set.trail !== false) trailPush(x, y); // breadcrumb keeps dropping off-track too — the thread back
+  if (!S.nav || !ns) return;
+  // breadcrumb drops for EVERY ride — off-track, free-ride, exploring. It used to sit below
+  // the no-track return, so a trackless ride recorded nothing; Explore is exactly that ride.
+  if (S.set.trail !== false) trailPush(x, y);
+  if (navMode() === 'snap') snapUpdate(x, y, hdg); // may latch or let go before the follow logic
+  if (S.sel < 0 || !navTrack()) return; // exploring / unlatched: no cues, no alarm, nothing to follow
 
   const trk = S.tracks[S.sel];
   const near = nearestOnTrack(trk, x, y, ns.idx);
@@ -3086,7 +3187,10 @@ function onFix(lat, lon, acc, speed, heading) {
     ns.off = true; trainEvent('offtrack');
     // Leaving the route while sitting on another track you've loaded is a different event
     // from being lost — offer the swap instead of only sounding the alarm.
-    if (!TRAIN.active && S.tracks.some((t, i) => i !== S.sel && nearestOnTrack(t, x, y).d < ADV('onM')))
+    // follow only: snap does this switch by itself, so the dialog would be asking a
+    // question the mode has already answered
+    if (navMode() === 'follow' && !TRAIN.active
+        && S.tracks.some((t, i) => i !== S.sel && nearestOnTrack(t, x, y).d < ADV('onM')))
       openTrackPicker('off', S.sel);
   }
   if (near.d < ADV('onM') && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); trainEvent('backontrack'); }
@@ -3914,7 +4018,12 @@ function refreshGlove() {
   setIc(g('gMute').querySelector('.gi'), S.set.sound ? 'volume-2' : 'volume-x');
   g('gMute').querySelector('.gl').textContent = S.set.sound ? 'Mute' : 'Muted';
   g('gMute').classList.toggle('active', !S.set.sound);
-  g('gTracks').querySelector('.gl').textContent = trk ? trk.name.slice(0, 16) : 'Tracks';
+  const gm = g('gNavMode'), m = navMode();
+  setIc(gm.querySelector('.gi'), { follow: 'route', explore: 'compass', snap: 'zap' }[m]);
+  gm.querySelector('.gl').textContent = NAV_MODE_LABEL[m];
+  gm.querySelector('.gs').textContent = m === 'follow' ? (trk ? trk.name.slice(0, 18) : 'no track yet')
+    : m === 'explore' ? 'breadcrumb only' : (trk ? 'on ' + trk.name.slice(0, 15) : 'any track');
+  gm.classList.toggle('active', m !== 'follow');
   setIc(g('gRideProf').querySelector('.gi'), S.set.rideProfile === 'stark' ? 'zap' : 'bike');
   g('gRideProf').querySelector('.gl').textContent = S.set.rideProfile === 'stark' ? 'Stark' : 'Adventure';
   // the Demo tile is also the STOP: mid-ride (real or demo) it flips red and ends the ride
@@ -3938,8 +4047,8 @@ document.getElementById('gLayers').onclick = gloveTap(() => {
 });
 document.getElementById('gMute').onclick = gloveTap(() => setSound(!S.set.sound));
 document.getElementById('gMark').onclick = () => { closeGlove(); markSpot(); };
-document.getElementById('gTracks').onclick = () => { closeGlove(); openPanel();
-  document.querySelector('#setTabs button[data-t="Tracks"]').click(); };
+document.getElementById('gNavMode').onclick = gloveTap(() => // tap cycles follow → explore → snap
+  setNavMode(NAV_MODES[(NAV_MODES.indexOf(navMode()) + 1) % NAV_MODES.length]));
 document.getElementById('gSettings').onclick = () => { closeGlove(); openPanel();
   document.querySelector('#setTabs button[data-t="General"]').click(); };
 document.getElementById('gRideProf').onclick = gloveTap(() => {
@@ -4974,7 +5083,15 @@ function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
   const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revToggle');
   document.getElementById('startBtn').classList.toggle('on', !S.nav); // on-map START (free-ride works trackless)
-  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap a track on the map, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.classList.remove('on'); return; }
+  const md = navMode();
+  if (S.sel < 0 || md === 'explore') {
+    nm.textContent = md === 'explore' ? 'Explore' : md === 'snap' ? 'Snap' : S.nav ? 'Free ride' : 'No track selected';
+    sub.textContent = md === 'explore' ? 'no track — breadcrumb, speed & compass'
+      : md === 'snap' ? (S.nav ? 'looking for a track to snap onto' : 'START, then ride onto any track')
+      : S.nav ? 'no track — position & speed only'
+      : (S.tracks.length ? 'tap a track on the map, or START to free-ride' : 'load a GPX, or START to free-ride');
+    nb.disabled = false; eb.style.display = 'none'; rb.classList.remove('on'); return;
+  }
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
