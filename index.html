@@ -1679,13 +1679,14 @@ const BEEP = {
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
   /* Snap's pair of chimes share one motif, which is the point: the rider learns a single
      shape and hears where it stops.
-       latch   C5→F5     — the gesture ARRIVING, closed on the tonic. Routine, so it's short.
+       latch   C5→F5     — the gesture ARRIVING, closed on the tonic. Snap latches often in
+                           dense trail country, so the landing is clipped to a tick.
        unlatch C5→F5→A5  — the same opening, but it climbs past the resolution and hangs
                            open on the third: "on my way into the unknown".
      unlatch is Snap's counterpart to off(), and deliberately its opposite: where off()
      falls (240→200) and growls a warning, this one rises. Nothing has gone wrong. */
-  latch()    { if (!S.set.sound) return; tone(523, .11, 0); tone(698, .30, .13);
-    vib([90, 60, 200]); console.log('[beep] latched — following'); },
+  latch()    { if (!S.set.sound) return; tone(523, .11, 0); tone(698, .20, .13);
+    vib([90, 60, 140]); console.log('[beep] latched — following'); },
   unlatch()  { if (!S.set.sound) return; tone(523, .13, 0); tone(698, .11, .15); tone(880, .40, .28);
     vib([90, 60, 90, 60, 220]); console.log('[beep] unlatched — exploring'); },
   straight() { if (!S.set.sound) return; tone(990, .3, 0); vib([160]); console.log('[beep] straight'); },
