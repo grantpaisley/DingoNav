@@ -3211,14 +3211,37 @@ function openBrief() {
     + escHtml(String(r[1])) + '</span>').join('');
   document.getElementById('dlgShade').classList.add('on');
   document.getElementById('briefDlg').classList.add('on');
+  briefCountdown(BRIEF_AUTO_S);
+}
+/* It proceeds on its own, so the countdown has to be ON the button — a dialog that starts
+   a ride with no warning is worse than no dialog. Touching the card holds it, for reading
+   time; Back cancels outright. */
+const BRIEF_AUTO_S = 5;
+let briefT = null;
+function briefCountdown(n) {
+  clearInterval(briefT);
+  const go = document.getElementById('briefGo');
+  if (n == null) { go.textContent = 'Ride'; briefT = null; return; } // held
+  go.textContent = 'Ride ' + n;
+  briefT = setInterval(() => {
+    n--;
+    if (n <= 0) { clearInterval(briefT); briefT = null; closeBrief(true); return; }
+    go.textContent = 'Ride ' + n;
+  }, 1000);
 }
 function closeBrief(go) {
+  clearInterval(briefT); briefT = null;
   document.getElementById('dlgShade').classList.remove('on');
   document.getElementById('briefDlg').classList.remove('on');
   if (go) startNav();
 }
 document.getElementById('briefGo').onclick = () => closeBrief(true);
 document.getElementById('briefCancel').onclick = () => closeBrief(false);
+// a touch anywhere on the card means "wait, I'm reading this"
+document.getElementById('briefDlg').addEventListener('pointerdown', e => {
+  if (e.target.closest('#briefBtns')) return; // the buttons speak for themselves
+  briefCountdown(null);
+});
 document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : openBrief();
 document.getElementById('startBtn').onclick = () => { if (!S.nav) openBrief(); }; // on-map START — stopping lives in ☰
 // START/STOP is one plain-tap tile in the ☰ grid — the two-tap path (☰ → tile) is the
