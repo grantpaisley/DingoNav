@@ -891,7 +891,7 @@
 
   <div class="tabSec" id="tabNav">
     <div data-reg="nav"></div>
-    <div class="btnRow"><button class="btn" id="demoBtn"><svg class="ic"><use href="#i-circle-play"/></svg> Demo ride (simulate GPS)</button><button class="btn" id="testBeep"><svg class="ic"><use href="#i-volume-2"/></svg> Test beep</button><button class="btn" id="testUnlatch"><svg class="ic"><use href="#i-volume-2"/></svg> Explore chime</button></div>
+    <div class="btnRow"><button class="btn" id="demoBtn"><svg class="ic"><use href="#i-circle-play"/></svg> Demo ride (simulate GPS)</button><button class="btn" id="testBeep"><svg class="ic"><use href="#i-volume-2"/></svg> Test beep</button><button class="btn" id="testLatch"><svg class="ic"><use href="#i-volume-2"/></svg> Snap on</button><button class="btn" id="testUnlatch"><svg class="ic"><use href="#i-volume-2"/></svg> Snap off</button></div>
     <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
   </div>
 
@@ -1677,10 +1677,15 @@ const BEEP = {
   done()     { if (!S.set.sound) return; tone(700, .09, 0); tone(1050, .12, .12); console.log('[beep] turn done'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
-  /* Snap mode's counterpart to off(). Same event — you've left the track — but the
-     opposite meaning: in Snap, leaving IS the point. So where off() falls (240→200) and
-     growls, this climbs a fanfare (C5→F5→A5, short-short-held): "on my way into the
-     unknown". Deliberately not a warning; nothing has gone wrong. */
+  /* Snap's pair of chimes share one motif, which is the point: the rider learns a single
+     shape and hears where it stops.
+       latch   C5→F5     — the gesture ARRIVING, closed on the tonic. Routine, so it's short.
+       unlatch C5→F5→A5  — the same opening, but it climbs past the resolution and hangs
+                           open on the third: "on my way into the unknown".
+     unlatch is Snap's counterpart to off(), and deliberately its opposite: where off()
+     falls (240→200) and growls a warning, this one rises. Nothing has gone wrong. */
+  latch()    { if (!S.set.sound) return; tone(523, .11, 0); tone(698, .30, .13);
+    vib([90, 60, 200]); console.log('[beep] latched — following'); },
   unlatch()  { if (!S.set.sound) return; tone(523, .13, 0); tone(698, .11, .15); tone(880, .40, .28);
     vib([90, 60, 90, 60, 220]); console.log('[beep] unlatched — exploring'); },
   straight() { if (!S.set.sound) return; tone(990, .3, 0); vib([160]); console.log('[beep] straight'); },
@@ -3094,7 +3099,7 @@ function snapLatch(i, idx, hdg) {
   applyRouteChrome(t);
   placeProgress(); drawProgress(true);
   if (!t.alerts) analyzeRoute(t).then(() => { refreshMapData(); drawProgress(true); });
-  BEEP.back();
+  BEEP.latch(); // its own chime now — borrowing follow's back-on-track bell muddled the two
   toast('Snapped to ' + t.name + (rev ? ' · reversed' : ''));
 }
 function snapUnlatch(silent) {
@@ -4242,7 +4247,8 @@ function stopDemo() {
 }
 document.getElementById('demoBtn').onclick = () => { closePanel(); S.nav ? stopNav() : demoChoice(); };
 document.getElementById('testBeep').onclick = () => { audio(); BEEP.turn(); };
-// audition the Snap-mode leaving fanfare — nothing fires it yet until Snap lands
+// audition Snap's pair — they share a motif, so they're worth hearing back to back
+document.getElementById('testLatch').onclick = () => { audio(); BEEP.latch(); };
 document.getElementById('testUnlatch').onclick = () => { audio(); BEEP.unlatch(); };
 
 /* ---------------- training ride (2026-07-19 design) ----------------
