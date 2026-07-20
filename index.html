@@ -64,20 +64,25 @@
   body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 106px); left:16px}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 256px)}
   body.navving #lockPill{top:calc(env(safe-area-inset-top) + 292px)}
-  /* Stark Varg battery/mode pill — top-right, under the mute button while riding.
+  /* Stark Varg pill — the SECOND number slot: it carries whatever the big left readout
+     didn't take (battery if the big one is speed, speed if the big one is battery). Sits
+     immediately left of the box button and matches its height, so the two read as one row.
      Doubles as the BLE handoff switch: the bike allows ONE connection, so
      tap = release it to the Stark app (tuning), tap again = take it back. */
-  #vargPill{position:fixed; top:calc(env(safe-area-inset-top) + 12px); right:10px; z-index:12;
-    background:rgba(14,18,22,.85); border:1px solid #2a3540; border-radius:12px; padding:6px 11px;
-    font-size:17px; font-weight:700; display:none; align-items:center; gap:8px;
+  #vargPill{position:fixed; top:calc(env(safe-area-inset-top) + 10px); right:108px; z-index:12;
+    height:88px; box-sizing:border-box;
+    background:rgba(14,18,22,.85); border:1px solid #2a3540; border-radius:24px; padding:0 18px;
+    font-size:26px; font-weight:700; display:none; align-items:center; gap:8px;
     font-variant-numeric:tabular-nums; cursor:pointer}
   #vargPill.on{display:flex}
-  #vargPill .vm{font-size:13px; font-weight:800; color:var(--accent)}
+  #vargPill .vm{font-size:15px; font-weight:800; color:var(--accent)}
+  #vargPill .u{font-size:15px; font-weight:600; color:var(--dim)}
   #vargPill.low{border-color:var(--bad); color:var(--bad)}
   #vargPill.wait{color:var(--dim)} #vargPill.wait .vm{color:var(--dim)}
-  #vargPill.rel{border-style:dashed; color:var(--dim); font-size:13px; font-weight:600}
-  /* riding: battery lives in the main number slot; the handoff pill is a stopped activity */
-  body.navving #vargPill{display:none !important}
+  #vargPill.rel{border-style:dashed; color:var(--dim); font-size:15px; font-weight:600}
+  /* riding: the pill stays visible (it's a number slot) but goes inert — a stray glove
+     on the handoff switch at speed would drop the bike's one BLE connection */
+  body.navving #vargPill{pointer-events:none} /* full brightness — it's a readout, not chrome */
   /* Varg reverse/crawl takeover — whole screen tinted, the word itself knocked out
      to full transparency (SVG mask), pulsing. Above panel/glove: nothing should
      out-shout "you are in reverse". */
@@ -198,8 +203,12 @@
      points at true north (straight up in north-up mode) */
   #orientNeedle{position:absolute; inset:0; display:flex; justify-content:center;
     pointer-events:none; will-change:transform}
-  #orientNeedle::before{content:''; width:0; height:0; border:7px solid transparent;
-    border-bottom:12px solid var(--bad); margin-top:4px}
+  /* hard against the button's top border — at 4px it collided with the glyph on short
+     screens, where the button is only 52px tall and the 40px N leaves nothing spare */
+  #orientNeedle::before{content:''; width:0; height:0; border:6px solid transparent;
+    border-bottom:11px solid var(--bad); margin-top:1px}
+  /* the glyph steps down out of the needle's way rather than the needle riding over it */
+  #orientCtl #orientGlyph{margin-top:8px; line-height:1}
   #baseRow{position:fixed; left:0; right:0; bottom:calc(var(--chromeB,0px) + 8px); z-index:16;
     display:flex; align-items:flex-end; padding:0 10px; pointer-events:none}
   #baseRow .ctl{pointer-events:auto}
@@ -493,6 +502,9 @@
     /* short viewports (landscape / split-screen): shrink the corner + base buttons
        so the map keeps some height */
     #orientCtl, #boxBtn, #baseRow .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
+    /* pill tracks the shrunken box button: same height, still butted up against it */
+    #vargPill{height:52px; right:80px; border-radius:15px; padding:0 12px; font-size:20px}
+    #vargPill .vm, #vargPill .u{font-size:13px}
     body:not(.portrait) #baseRow #dotBtn{width:64px; height:64px; border-radius:50%; font-size:30px}
     body.portrait #baseRow .ctl{height:52px}
     #startBtn, #revToggle{height:52px; font-size:18px; padding:0 22px; bottom:calc(var(--chromeB,0px) + 68px)}
@@ -552,8 +564,8 @@
      default (and media-query) sizing exactly as before */
   #hudSpeed[data-sz]{font-size:calc(138px*var(--sz,1))}
   #hudSpeed[data-sz] small{font-size:calc(50px*var(--sz,1))}
-  #vargPill[data-sz]{font-size:calc(17px*var(--sz,1))}
-  #vargPill[data-sz] .vm{font-size:calc(13px*var(--sz,1))}
+  #vargPill[data-sz]{font-size:calc(26px*var(--sz,1))}
+  #vargPill[data-sz] .vm, #vargPill[data-sz] .u{font-size:calc(15px*var(--sz,1))}
   #vargModeBig[data-sz]{font-size:calc(138px*var(--sz,1))}
   #vargModeBig[data-sz] #vargModeDetail{font-size:calc(22px*var(--sz,1))}
   #vargInd .blink[data-sz]{font-size:calc(60px*var(--sz,1))}
@@ -895,10 +907,21 @@ const S = {
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure' },
+    varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure', bigLeft: '' },
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
+/* bigLeft migration: the big left readout used to be implied by rideProfile and flipped by the
+   UI-tab "Swap main number" toggle — two settings that interacted. Settle it once into one
+   explicit choice the rider can read straight off the Stark tab. Also runs on config import,
+   which can carry a swapMain from an older bench setup. */
+function migrateBigLeft() {
+  if (S.set.bigLeft) return;
+  const wasBattery = (S.set.rideProfile || 'adventure') === 'stark';
+  S.set.bigLeft = (S.set.swapMain ? !wasBattery : wasBattery) ? 'battery' : 'speed';
+  delete S.set.swapMain;
+}
+migrateBigLeft();
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
 // v2 migration: ♥ favourite spans become the max zoom preset
 if (!S.set._v2) {
@@ -3164,13 +3187,13 @@ function drawCountdown(ctx, w, h, ns) {
   ctx.fillStyle = '#fff'; ctx.fillText(txt, w / 2, h / 2 + 1);
 }
 
-/* ---------------- ride view: main number slot, giant arrows, gesture gating ----------------
-   One edge readout — speed (adventure profile) or battery (Stark). On a turn approach the
-   countdown borrows the slot in amber, then the number returns. Nothing is ever centred. */
-function primaryIsBattery() {
-  const base = (S.set.rideProfile || 'adventure') === 'stark';
-  return S.set.swapMain ? !base : base; // UI-tab "Swap main number" flips speed ↔ battery
-}
+/* ---------------- ride view: the two number slots, giant arrows, gesture gating ----------------
+   Two edge readouts — the big left one and the small top-right pill — carrying speed and
+   battery between them, in whichever order the rider picked. On a turn approach the countdown
+   borrows the BIG slot in amber, then the number returns. Nothing is ever centred. */
+/* The two number slots are a pair: whichever the big left readout takes, the small
+   top-right pill takes the other. One setting decides both (Stark tab → Big left readout). */
+function primaryIsBattery() { return S.set.bigLeft === 'battery'; }
 function cdMain(ns) { // distance or seconds, per the countdown-units setting; seconds freeze when stopped
   const d = Math.max(0, ns.cdD || 0);
   if (S.set.countUnit === 's') {
@@ -3185,6 +3208,7 @@ function renderMain() {
   const ns = S.navState;
   const cd = !!(S.nav && ns && ns.cdOn && !ns.off);
   el.classList.toggle('cd', cd);
+  renderPill(); // the pill carries the other number — keep the pair in step
   if (cd) { el.classList.remove('low'); el.innerHTML = cdMain(ns); return; }
   if (primaryIsBattery()) {
     el.classList.toggle('low', varg.soc != null && varg.soc <= 15);
@@ -3193,6 +3217,16 @@ function renderMain() {
     el.classList.remove('low');
     el.innerHTML = Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' <small>km/h</small>';
   }
+}
+/* the pill is the second slot: it shows whichever number the big one didn't take.
+   'bike free' still wins over both — a released bike has no telemetry to report. */
+function renderPill() {
+  const el = document.getElementById('vargSoc'); if (!el) return;
+  const bat = !primaryIsBattery(); // big slot took speed, so the pill takes battery
+  vargPill.classList.toggle('low', bat && varg.soc != null && varg.soc <= 15);
+  el.innerHTML = varg.state === 'released' ? 'bike free'
+    : bat ? icSvg('battery-medium') + ' ' + (varg.soc == null ? '—' : varg.soc) + '<span class="u">%</span>'
+    : Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' <span class="u">km/h</span>';
 }
 /* the ONLY turn arrows: solid amber, inside the progress bar, on the side of the turn —
    left arrow left for a left turn, right arrow right for a right. They double as the Varg
@@ -5131,11 +5165,8 @@ function vargUI() {
   vargPill.classList.toggle('on', on && varg.state !== 'off');
   vargPill.classList.toggle('rel', varg.state === 'released');
   vargPill.classList.toggle('wait', varg.state === 'connecting' || varg.state === 'retry');
-  vargPill.classList.toggle('low', varg.soc != null && varg.soc <= 15);
-  document.getElementById('vargSoc').innerHTML =
-    varg.state === 'released' ? 'bike free' : icSvg('battery-medium') + ' ' + (varg.soc == null ? '—%' : varg.soc + '%');
   document.getElementById('vargMode').textContent = varg.state === 'on' ? vargModeTxt() : '';
-  renderMain(); // battery may own the main number slot (Stark profile)
+  renderMain(); // fills both number slots (renderPill rides along)
   vargStatus.textContent = !on ? 'Off — telemetry pill hidden.'
     : vpSrc ? {
         off: 'Set the VargPilot server URL below, then Connect.',
@@ -5241,6 +5272,10 @@ const SETTINGS = [
     opts: [['daylight', 'Day'], ['contrast', 'Trail'], ['dark', 'Dark'], ['satellite', 'Sat']],
     put: v => setMapStyle(v) }, // setMapStyle persists + repaints the seg itself
   // Account
+  // the big left number and the small top-right pill are a pair — this picks which is which
+  { sec: 'stark', k: 'bigLeft', t: 'seg', l: 'Big left readout', segId: 'bigLeftSeg',
+    opts: [['speed', 'Speed'], ['battery', 'Battery']],
+    apply: () => { renderMain(); vargUI(); } }, // the pill takes whichever one is left over
   { sec: 'account', k: 'name', t: 'text', l: 'Your name', id: 'myName', max: 12, ph: 'Grant' },
   { sec: 'account', k: 'email', t: 'text', l: 'Email', id: 'myEmail', max: 60, ph: 'you@example.com' },
   { sec: 'ride', k: 'code', t: 'text', l: 'Ride name', id: 'rideCode', max: 24, ph: 'e.g. watagans-42',
@@ -5251,7 +5286,6 @@ const SETTINGS = [
   { sec: 'map', k: 'stravaHike', t: 'toggle', l: 'Strava hikes (purple)', id: 'setStravaHike', apply: applyStrava },
   { sec: 'ui', k: 'wake', t: 'toggle', l: 'Keep screen on while navigating', id: 'setWake',
     apply: () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); } },
-  { sec: 'ui', k: 'swapMain', t: 'toggle', l: 'Swap main number (speed ↔ battery)', id: 'setSwapMain', apply: () => renderMain() },
   { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tabs (UI, Stark, Keys)', id: 'setShowAdv', apply: applyShowAdv },
   // Nav
   { sec: 'nav', k: 'sound', t: 'toggle', l: 'Turn beeps', id: 'setSound', put: v => setSound(v) }, // setSound persists + syncs every mute face
@@ -5493,6 +5527,7 @@ function configBlob() { return JSON.stringify({ dingonavConfig: 1, set: S.set },
 function applyAllSettings() {
   S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
   S.set.layout = S.set.layout || {}; S.set.keys = S.set.keys || {};
+  migrateBigLeft();
   saveSet();
   renderSettings();
   setSound(S.set.sound);
