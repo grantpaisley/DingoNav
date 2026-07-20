@@ -86,15 +86,24 @@
   #vargOver text{font:900 16vw system-ui,sans-serif; letter-spacing:.02em}
   @keyframes vgPulse{0%,100%{opacity:1}50%{opacity:.55}}
   /* mode digit: a bare number on the opposite edge to the main one — the centre stays clear.
-     Squarish screens fade it 4s after a change (JS adds .fade); wide keeps it resident. */
-  #vargModeBig{position:fixed; right:12px; top:calc(env(safe-area-inset-top) + 12px); z-index:10; background:none;
-    padding:0 6px; font-size:138px; font-weight:800; display:none; pointer-events:none;
+     The digit is resident; the settings block underneath is the thing that fades (see #vargModeDetail). */
+  /* now the digit is resident it must clear the box button on BOTH screens, not just while riding */
+  #vargModeBig{position:fixed; right:16px; top:calc(env(safe-area-inset-top) + 106px); z-index:10; background:none;
+    padding:0 6px; font-size:138px; font-weight:800; display:none; pointer-events:none; text-align:right;
     text-shadow:0 2px 14px rgba(0,0,0,.9), 0 0 5px rgba(0,0,0,.7);
-    font-variant-numeric:tabular-nums; transition:opacity .6s}
+    font-variant-numeric:tabular-nums}
   #vargModeBig.on{display:block}
-  #vargModeBig.fade{opacity:0}
-  /* riding: the box button owns the top-right corner — the mode digit sits below it, slightly inboard */
-  body.navving #vargModeBig{top:calc(env(safe-area-inset-top) + 106px); right:16px}
+  /* the digit alone takes the tap — the map keeps the rest of the corner */
+  #vargModeNum{display:block; line-height:.92; pointer-events:auto; cursor:pointer}
+  #vargModeBig.neutral #vargModeNum{color:var(--ok)}
+  /* what the mode actually is: values right-aligned, labels left-aligned, 4s then gone */
+  #vargModeDetail{display:grid; grid-template-columns:auto auto; column-gap:10px; justify-content:end;
+    font-size:22px; font-weight:700; line-height:1.35; margin-top:4px; transition:opacity .6s}
+  #vargModeDetail.fade{opacity:0}
+  #vargModeDetail .v{text-align:right}
+  #vargModeDetail .l{text-align:left; color:var(--dim)}
+  #vargModeDetail .n{grid-column:1/-1; text-align:right; color:var(--ok)}
+  /* the box button owns the top-right corner — the mode digit sits below it, slightly inboard */
   /* indicator telltales — big translucent glyphs across the top, same visual
      language as the speed/mode readouts. Each hidden until its bit is live, so
      nothing shows unless a blinker/beam is actually on. */
@@ -382,7 +391,7 @@
   body.daymode #dotBtn{background:rgba(245,245,247,.92); border-color:#c9c9ce; color:#1d1d1f}
   body.daymode #hudSpeed, body.daymode #vargModeBig{color:#15202b;
     text-shadow:0 1px 8px rgba(255,255,255,.85), 0 0 3px rgba(255,255,255,.7)}
-  body.daymode #hudSpeed small{color:#3f4a55}
+  body.daymode #hudSpeed small, body.daymode #vargModeDetail .l{color:#3f4a55}
   body.daymode #hudSpeed.cd, body.daymode #hudSpeed.cd small{color:#b45309}
   body.daymode #hudSpeed.low, body.daymode #hudSpeed.low small{color:#c22a2a}
   body.daymode #hudBox{background:rgba(255,255,255,.72); border-bottom-color:#d0d5db}
@@ -476,8 +485,8 @@
     body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px); left:12px}
     body.navving #holdPill{top:calc(env(safe-area-inset-top) + 148px)}
     body.navving #lockPill{top:calc(env(safe-area-inset-top) + 182px)}
-    #vargModeBig{font-size:76px}
-    body.navving #vargModeBig{top:calc(env(safe-area-inset-top) + 64px); right:12px}
+    #vargModeBig{font-size:76px; top:calc(env(safe-area-inset-top) + 64px); right:12px}
+    #vargModeDetail{font-size:16px; column-gap:8px}
     body.navving #vargInd{top:calc(env(safe-area-inset-top) + 70px)}
     #vargInd .beam{font-size:26px}
     #progress.countdown #progCanvas{height:52px}
@@ -546,6 +555,7 @@
   #vargPill[data-sz]{font-size:calc(17px*var(--sz,1))}
   #vargPill[data-sz] .vm{font-size:calc(13px*var(--sz,1))}
   #vargModeBig[data-sz]{font-size:calc(138px*var(--sz,1))}
+  #vargModeBig[data-sz] #vargModeDetail{font-size:calc(22px*var(--sz,1))}
   #vargInd .blink[data-sz]{font-size:calc(60px*var(--sz,1))}
   #vargInd .beam[data-sz]{font-size:calc(34px*var(--sz,1))}
   /* corner resize handle on readouts while editing */
@@ -620,7 +630,7 @@
   <span class="ind beam" id="indBeam" title="high beam">≣</span>
   <span class="ind blink" id="indR" title="right indicator">▶</span>
 </div>
-<div id="vargModeBig"><span id="vargModeNum">—</span></div>
+<div id="vargModeBig"><span id="vargModeNum">—</span><div id="vargModeDetail"></div></div>
 <div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
   <rect width="100%" height="100%" fill="#fff"/>
   <text id="vargOverTxt" x="50%" y="50%" text-anchor="middle" dominant-baseline="central" fill="#000">REVERSE</text>
@@ -3197,14 +3207,28 @@ function applyCdArrows() {
   L.classList.toggle('blink', indL);
   R.classList.toggle('blink', indR);
 }
-/* squarish screens drop the mode digit 4s after a change; wide keeps it resident */
-function modePing() {
-  const mb = document.getElementById('vargModeBig');
-  mb.classList.remove('fade');
-  clearTimeout(modePing.t);
-  const squarish = Math.max(innerWidth, innerHeight) / Math.min(innerWidth, innerHeight) < 1.35;
-  if (squarish) modePing.t = setTimeout(() => mb.classList.add('fade'), 4000);
+/* The digit itself is resident on every screen — at a glance, always, which mode you're in.
+   What fades is the block underneath: what that mode actually MEANS (hp / regen / TC), shown
+   for 4 s after the bike changes mode, or whenever the rider taps the digit to ask again. */
+function renderModeDetail() {
+  const mb = document.getElementById('vargModeBig'), d = document.getElementById('vargModeDetail');
+  mb.classList.toggle('neutral', !!varg.neutral);
+  document.getElementById('vargModeNum').textContent =
+    varg.neutral ? 'N' : varg.mode == null ? '—' : varg.mode;
+  if (varg.neutral) { d.innerHTML = '<div class="n">neutral</div>'; return; } // no map is live — no numbers to show
+  const row = (v, l) => '<span class="v">' + v + '</span><span class="l">' + l + '</span>';
+  d.innerHTML = (varg.hp != null ? row(varg.hp, 'HP') : '')
+    + (varg.regen != null ? row(varg.regen + '%', 'Regen') : '')
+    + (varg.tc != null ? row(varg.tc + '%', 'TC') : '');
 }
+function modePing() {
+  renderModeDetail();
+  const d = document.getElementById('vargModeDetail');
+  d.classList.remove('fade');
+  clearTimeout(modePing.t);
+  modePing.t = setTimeout(() => d.classList.add('fade'), 4000);
+}
+document.getElementById('vargModeNum').onclick = () => modePing(); // tap the digit = show me the numbers again
 /* finger-zoom is stop-and-manipulate: disabled above walking speed (with hysteresis
    so GPS jitter can't flap it). Dragging to look around stays live at any speed
    (2026-07-17 grammar) — a drag just flips the dot/square to dot. */
@@ -4763,6 +4787,8 @@ const varg = {
   dev: null, batt: null, state: 'off', // off | connecting | on | released | retry
   soc: null, soh: null, vbus: null,
   mode: null, special: null, // mode 1–5; special: null | 'rev' | 'crawl'
+  // neutral is NOT a special: it gets the green N digit, never the full-screen takeover
+  neutral: false,
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, pickAll: false, sndT: null,
@@ -4822,6 +4848,8 @@ function vargSpecial(sp) { // sp: null | 'rev' | 'crawl'
 function vargApplyState(st) { // single entry point for the future mode/config decoder
   for (const k of ['hp', 'regen', 'tc']) if (st[k] != null) varg[k] = st[k];
   if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; modePing(); }
+  // in/out of neutral is a mode change as far as the rider is concerned — ping the detail block
+  if ('neutral' in st && !!st.neutral !== varg.neutral) { varg.neutral = !!st.neutral; modePing(); }
   if ('special' in st) vargSpecial(st.special);
   vargUI();
 }
@@ -4842,6 +4870,7 @@ async function vargConnect(dev) {
 
 function vargDropped() {
   varg.soc = null; // stale % is worse than none
+  varg.neutral = false; // ditto a stale green N
   vargSpecial(null); // no connection = no idea if we're still in reverse — never show a guess
   if (varg.state === 'released' || !S.set.varg || S.set.vargSrc !== 'ble') { vargUI(); return; }
   varg.state = 'retry'; vargUI(); vargRetry();
@@ -5027,7 +5056,8 @@ function vpProp(path, v) {
   if (path === VP_P.drive) { // confirmed on the bike: "CRAWL REV" = reverse, "CRAWL FWD" = crawl
     vp.sawDrive = true;
     const s = String(v).toUpperCase();
-    vargApplyState({ special: s.includes('REV') ? 'rev' : s.includes('CRAWL') ? 'crawl' : null });
+    vargApplyState({ special: s.includes('REV') ? 'rev' : s.includes('CRAWL') ? 'crawl' : null,
+      neutral: s.includes('NEUTRAL') });
     return;
   }
   if (path === VP_P.walk) { // fallback only if drive_state never arrives: 8 = reverse, 12 = crawl
@@ -5096,8 +5126,8 @@ function vargUI() {
   document.getElementById('vargRow').style.display = on && !vpSrc ? '' : 'none';
   document.getElementById('vargRow2').style.display = on ? '' : 'none';
   const mb = document.getElementById('vargModeBig');
-  mb.classList.toggle('on', on && varg.state === 'on' && varg.mode != null);
-  document.getElementById('vargModeNum').textContent = varg.mode == null ? '—' : varg.mode;
+  mb.classList.toggle('on', on && varg.state === 'on' && (varg.mode != null || varg.neutral));
+  renderModeDetail(); // keeps the digit and the hp/regen/TC rows current; the fade timer is modePing's
   vargPill.classList.toggle('on', on && varg.state !== 'off');
   vargPill.classList.toggle('rel', varg.state === 'released');
   vargPill.classList.toggle('wait', varg.state === 'connecting' || varg.state === 'retry');
@@ -5166,7 +5196,7 @@ document.getElementById('vargForgetBtn').onclick = async () => {
     if (varg.dev.forget) await varg.dev.forget().catch(() => {}); // Chrome 110+: drops the site permission
   }
   Object.assign(varg, { dev: null, batt: null, state: 'off', soc: null, soh: null, vbus: null,
-    mode: null, hp: null, regen: null, tc: null });
+    mode: null, neutral: false, hp: null, regen: null, tc: null });
   vargUI(); toast('Bike forgotten');
 };
 
