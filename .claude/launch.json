@@ -4,7 +4,7 @@
     {
       "name": "dingonav",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["serve.js", "8139"],
+      "runtimeArgs": ["serve.js"],
       "port": 8139,
       "autoPort": true
     }

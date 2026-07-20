@@ -449,6 +449,15 @@
     color:var(--dim); font-size:14px; font-weight:700; cursor:pointer}
   .seg button.active{border-color:var(--accent); color:var(--accent)}
   .hint{font-size:12.5px; color:var(--dim); margin-top:6px; line-height:1.45}
+  /* pairing pre-flight / recovery box — walks the rider through Android's permission prompt */
+  .callout{margin-top:10px; padding:12px 14px; border-radius:12px; background:var(--panel2);
+    border:1px solid #2a3540; border-left:3px solid var(--accent); font-size:13.5px; line-height:1.5}
+  .callout b{color:var(--fg)}
+  .callout ol{margin:8px 0 0; padding-left:20px}
+  .callout li{margin:4px 0}
+  .callout .sub{margin:6px 0 0 20px; padding-left:12px; border-left:2px solid #2a3540} /* nested steps read as a sub-list, not a restart */
+  /* var(--bg) so the chip inverts with the panel in day mode instead of going dark-on-dark */
+  .callout .kbd{padding:1px 6px; border-radius:5px; background:var(--bg); border:1px solid var(--dim); font-weight:700; white-space:nowrap}
   #friendStatus,#baseStatus{font-size:13px; color:var(--dim); padding:4px}
   .friendPop .maplibregl-popup-content{background:#1a2530; color:#e8eef3; border-radius:10px; padding:8px 12px; font-size:13px; line-height:1.35; box-shadow:0 4px 16px rgba(0,0,0,.5)}
   .friendPop .maplibregl-popup-tip{border-top-color:#1a2530; border-bottom-color:#1a2530}
@@ -782,6 +791,7 @@
 
     <h3>Direct BLE (no VargPilot)</h3>
     <div class="btnRow" id="vargRow" style="display:none"><button class="btn" id="vargBtn">Connect bike…</button><button class="btn" id="vargForgetBtn">Forget bike</button></div>
+    <div class="callout" id="vargHelp" style="display:none"></div>
     <div class="hint">The app talks to the VCU itself — it then owns the bike's single BLE slot; tap the 🔋 pill to hand it to the Stark app and back.</div>
 
     <h3>Alerts</h3>
@@ -4865,8 +4875,61 @@ function vargResume() { // take it back (bond persists — no PIN, no picker)
   vargConnect(varg.dev).catch(vargDropped);
 }
 
+/* ---- pairing pre-flight / recovery ----
+   Android gates BLE scanning behind a runtime permission, so the first tap of
+   Connect lands the rider in Chrome's "wants to pair / Update permissions"
+   dialog with no idea what it wants. A web page CANNOT open the phone's
+   permission screen (that's a native intent) — only Chrome's own "Update
+   permissions" button does. So the next best thing: warn before the prompt,
+   and explain the recovery path when the pick comes back empty. */
+const vargHelpEl = () => document.getElementById('vargHelp');
+function vargHelpHide() { vargHelpEl().style.display = 'none'; }
+
+const VARG_PERM_STEPS = `<ol>
+  <li>Tap <span class="kbd">Update permissions</span> on Chrome's prompt — it opens the right settings screen.</li>
+  <li>Allow <b>Nearby devices</b> (and <b>Location</b> on Android 11 or older — Chrome needs it to scan).</li>
+  <li>Come back here and tap Connect again.</li>
+</ol>
+<div class="hint">Already dismissed it? Android <b>Settings → Apps → Chrome → Permissions → Nearby devices → Allow</b>.</div>`;
+
+function vargHelpShow(kind) {
+  const el = vargHelpEl();
+  el.innerHTML = kind === 'pre'
+    ? `<b>Before you tap Connect</b><ol>
+         <li>Power the bike on and stand next to it.</li>
+         <li>Chrome will ask to pair and may say it <b>needs permission</b> — that's Android, not the bike.</li>
+         <li>First pairing also shows a <b>PIN on the bike's display</b>; type it into the phone.</li>
+       </ol>
+       <div class="btnRow"><button class="btn" id="vargHelpGo">Got it — connect</button>
+         <button class="btn" id="vargHelpClose">Cancel</button></div>`
+    : kind === 'perm'
+    ? `<b>Chrome needs Bluetooth permission</b>${VARG_PERM_STEPS}
+       <div class="btnRow"><button class="btn" id="vargHelpGo">Try again</button>
+         <button class="btn" id="vargHelpClose">Close</button></div>`
+    : `<b>Didn't see the bike?</b>
+       <div class="hint" style="margin-top:6px">Two things it usually is:</div>
+       <ol>
+         <li><b>The bike wasn't listed</b> — check it's powered on, in range, and not already held by the Stark app or VargPilot. Then retry showing every nearby device.</li>
+         <li><b>Chrome couldn't scan</b> — if the prompt mentioned permissions:</li>
+       </ol>
+       <div class="sub">${VARG_PERM_STEPS}</div>
+       <div class="btnRow"><button class="btn" id="vargHelpAll">Show all devices</button>
+         <button class="btn" id="vargHelpClose">Close</button></div>`;
+  el.style.display = '';
+  const go = document.getElementById('vargHelpGo');
+  if (go) go.onclick = () => { S.set.vargPre = 1; saveSet(); vargPick(); };
+  const all = document.getElementById('vargHelpAll');
+  if (all) all.onclick = () => { varg.pickAll = true; vargPick(); };
+  document.getElementById('vargHelpClose').onclick = vargHelpHide;
+  el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 async function vargPick() { // first-time pairing: needs the chooser (user gesture)
   if (!navigator.bluetooth) { toast('No Web Bluetooth in this browser — use Chrome on Android.'); return; }
+  // one-time brief, so Android's permission prompt isn't a surprise (the Got it
+  // tap is itself a user gesture, so requestDevice below is still allowed)
+  if (!S.set.vargPre) { vargHelpShow('pre'); return; }
+  vargHelpHide();
   try {
     const dev = await navigator.bluetooth.requestDevice(varg.pickAll
       ? { acceptAllDevices: true, optionalServices: [VARG_SERVICE] }
@@ -4876,10 +4939,12 @@ async function vargPick() { // first-time pairing: needs the chooser (user gestu
     varg.pickAll = false; varg.retryN = 0;
     await vargConnect(dev);
   } catch (e) {
-    if (e.name === 'NotFoundError') { // bike not in the list (or cancelled) — next tap shows everything
-      varg.pickAll = true;
-      document.getElementById('vargBtn').textContent = 'Connect bike (show all devices)…';
-    } else { toast('Bike connect failed: ' + e.message); }
+    // NotFoundError is ambiguous on Android — cancelled chooser, nothing matching,
+    // OR permission denied so the scan never ran. The panel covers both.
+    if (e.name === 'NotFoundError') vargHelpShow(varg.pickAll ? 'perm' : 'notfound');
+    else if (e.name === 'NotAllowedError' || e.name === 'SecurityError') vargHelpShow('perm');
+    else toast('Bike connect failed: ' + e.message);
+    varg.pickAll = false;
     vargUI();
   }
 }
