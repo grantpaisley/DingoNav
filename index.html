@@ -241,7 +241,10 @@
   body.portrait.turnmode #baseRow #dotBtn{margin-left:auto}
   /* START: green, stopped-with-a-track only. In landscape it's an in-flow member of the
      base row, sitting in the gap between the + and the dot. */
-  #startBtn{margin-left:10px; z-index:16; flex:none;
+  /* margin-left:auto here makes THREE auto margins in the row (zoomOut, START, dot), so
+     the free space splits into equal thirds and START lands midway between + and the dot.
+     With START hidden it falls back to the original two-auto split, ☰ | − + | ◎. */
+  #startBtn{margin-left:auto; z-index:16; flex:none;
     height:68px; padding:0 32px; border:none; border-radius:18px; background:var(--ok); color:#04240f;
     font-size:22px; font-weight:800; letter-spacing:.03em; cursor:pointer; display:none;
     box-shadow:0 4px 18px rgba(0,0,0,.45)}
@@ -1004,7 +1007,7 @@ const ADV_D = {
   apprUnit: 's', apprS: 15, apprM: 250, departUnit: 'm', departM: 30, departS: 4,
   btnOp: 0.4, trailGap: 20,
   routeWOut: 6, routeWIn: 11, coreFrac: 0.67, caseMode: 'auto', // route width px at overview/nav zoom; core share; casing auto = dark day / white night
-  colDone: '#7F8791', colDoneCase: '#1A1E24', progDoneOp: 0.5, progMissOp: 0.5, // travelled grey + reduced case; missed = half-strength colour, no case
+  colDone: '#7F8791', colDoneCase: '#1A1E24', progDoneOp: 0.5, // travelled grey + reduced case
   progContM: 150, // max route-metres between on-track fixes that still count as riding the stretch
   recentM: 75, progRecentOp: 0.8, // just-ridden tail: route colour at strength, linking marker to the grey history
   rideSimpM: 10, // ride-archive simplification tolerance (Douglas-Peucker, m)
@@ -1972,15 +1975,13 @@ function addOverlays() {
   map.addSource('selSurf', { type: 'geojson', data: EMPTY });
   const rnd = { 'line-join': 'round', 'line-cap': 'round' };
   const sf = st => ['==', ['get', 'state'], st];
-  /* progress ladder, bottom→top: travelled (dimmed, reduced dark case) → missed
-     (half-strength colour, NO case — casing is the exclusive route-ahead signal)
-     → remaining (full colour, cased). */
+  /* progress ladder, bottom→top: travelled (dimmed, reduced dark case) → remaining
+     (full colour, cased). A skipped-then-rejoined stretch counts as travelled — the
+     red breadcrumb over it carries the "you didn't actually ride this" story. */
   map.addLayer({ id: 'surf-done-case', type: 'line', source: 'selSurf', filter: sf('done'), layout: rnd,
     paint: { 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() } });
   map.addLayer({ id: 'surf-done', type: 'line', source: 'selSurf', filter: sf('done'), layout: rnd,
     paint: { 'line-color': ['get', 'cd'], 'line-opacity': ADV('progDoneOp'), 'line-width': coreW() } });
-  map.addLayer({ id: 'surf-miss', type: 'line', source: 'selSurf', filter: sf('miss'), layout: rnd,
-    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('progMissOp'), 'line-width': coreW() } });
   map.addLayer({ id: 'surf-recent', type: 'line', source: 'selSurf', filter: sf('recent'), layout: rnd, // just-ridden tail — bright, uncased, hugs the marker
     paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('progRecentOp'), 'line-width': coreW() } });
   map.addLayer({ id: 'sel-case', type: 'line', source: 'selTrack', layout: rnd,
@@ -2243,9 +2244,14 @@ function refreshMapData() {
 }
 /* progress class of each track sample, from the merged travelled spans:
    'recent' inside a span within recentM of the rider (mid-ride only — the bright
-   tail linking the marker to the history) · 'done' inside a span · 'miss' in a
-   gap between spans (skipped, then rejoined past) · 'rem' ahead of the last span
-   and behind the first. Monotonic walk — one closure per pass. */
+   tail linking the marker to the history) · 'done' inside a span, AND in a gap
+   between spans · 'rem' ahead of the last span and behind the first. Monotonic
+   walk — one closure per pass.
+
+   A gap only exists once you've rejoined past it, and such a stretch reads as
+   travelled: the red off-route breadcrumb laid over it is what shows where you
+   actually went (typically an out-and-back). Highlighting the skipped route as
+   well would say the same thing twice, in the louder of the two voices. */
 function progClassAt(trk) {
   const p = S.prog, sp = (p && p.track === trk.id && p.spans) || [];
   if (!sp.length) return () => 'rem';
@@ -2257,7 +2263,7 @@ function progClassAt(trk) {
     while (k < sp.length && i > sp[k][1]) k++;
     if (k < sp.length && i >= sp[k][0])
       return posC != null && Math.abs(posC - trk.cum[i]) <= rM ? 'recent' : 'done';
-    return k > 0 && k < sp.length ? 'miss' : 'rem';
+    return k > 0 && k < sp.length ? 'done' : 'rem';
   };
 }
 /* ---------------- track colouring (☰ Track colour tile: none / slope / surface) ---------------- */
@@ -2357,7 +2363,7 @@ function applyRouteVis() {
   const surfOn = trk && trk._hasSurf;
   const vis = (l, on) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none');
   vis('sel-core', !surfOn); vis('sel-case', !surfOn);
-  for (const l of ['surf-core', 'surf-case', 'surf-done', 'surf-done-case', 'surf-miss', 'surf-recent']) vis(l, surfOn);
+  for (const l of ['surf-core', 'surf-case', 'surf-done', 'surf-done-case', 'surf-recent']) vis(l, surfOn);
 }
 function refreshPosLayers() {
   if (!mapReady || !S.pos) return;
@@ -3031,7 +3037,7 @@ function onFix(lat, lon, acc, speed, heading) {
     bn.textContent = 'Off track · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
     if (t - ns.lastOffBeep > 30e3) { BEEP.off(); ns.lastOffBeep = t; }
     prog.classList.add('offtrack'); // strip dims, labels freeze — no fake ETA off-route
-    if (S.prog) S.prog.prevIdx = null; // the sequence index freezes — the skipped span will read as missed
+    if (S.prog) S.prog.prevIdx = null; // the sequence index freezes — the gap closes as travelled on rejoin
     ns.confirmAt = null;            // wandered off after the turn — nothing to congratulate
     ns.cdOn = false; setHud(null); return;
   }
@@ -3753,7 +3759,8 @@ setInterval(() => {
    Travelled = merged sample-index ranges actually ridden on-track. A stretch only
    counts when consecutive on-track fixes are sequence-continuous (≤ progContM of
    route between them); off-track periods and index leaps at crossings leave a gap,
-   which renders as 'miss' once riding continues past it. Survives STOP for
+   which renders as travelled once riding continues past it (the red breadcrumb
+   over the gap is what shows you didn't ride it). Survives STOP for
    post-ride review; a different track starts fresh (breadcrumb lifecycle). */
 let progDirty = false, progRefT = null;
 function progMark(trk, idx) {
@@ -5495,7 +5502,6 @@ const SETTINGS = [
   { k: 'colDone', t: 'color', adv: 1, l: 'Travelled route core' },
   { k: 'colDoneCase', t: 'color', adv: 1, l: 'Travelled route casing' },
   { k: 'progDoneOp', t: 'range', adv: 1, l: 'Travelled route opacity', min: 0.1, max: 1, step: 0.05 },
-  { k: 'progMissOp', t: 'range', adv: 1, l: 'Missed section opacity', min: 0.1, max: 1, step: 0.05 },
   { k: 'progContM', t: 'range', adv: 1, l: 'Progress continuity gap (m)', min: 50, max: 400, step: 10 },
   { k: 'recentM', t: 'range', adv: 1, l: 'Recent band length (m)', min: 0, max: 300, step: 5 },
   { k: 'progRecentOp', t: 'range', adv: 1, l: 'Recent band opacity', min: 0.1, max: 1, step: 0.05 },
@@ -5555,8 +5561,6 @@ function applyAdvPaint() {
   map.setPaintProperty('surf-done-case', 'line-color', ADV('colDoneCase'));
   map.setPaintProperty('surf-done-case', 'line-opacity', ADV('progDoneOp'));
   map.setPaintProperty('surf-done-case', 'line-width', totalW());
-  map.setPaintProperty('surf-miss', 'line-opacity', ADV('progMissOp'));
-  map.setPaintProperty('surf-miss', 'line-width', coreW());
   map.setPaintProperty('surf-recent', 'line-opacity', ADV('progRecentOp'));
   map.setPaintProperty('surf-recent', 'line-width', coreW());
   // keep the tiny mark-dot tier matched to the route width sliders
