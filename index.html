@@ -164,6 +164,33 @@
   #introDlg .btn{flex:1; padding:13px; border:1px solid #2a3540; border-radius:12px;
     background:var(--panel2); color:var(--fg); font-size:16px; font-weight:700; cursor:pointer}
   #introDlg .btn.primary{background:var(--accent); border-color:var(--accent); color:#00252b; font-weight:800}
+  /* track picker — one card, two modes (rider-asked 'pick' / Follow-mode 'off') */
+  #trkPick{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(90vw,380px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
+    padding:16px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #trkPick.on{display:block}
+  #trkPick h4{font-size:17px; margin-bottom:2px}
+  #trkPick.off h4{color:var(--bad)}
+  #tpSub{font-size:12px; color:var(--dim); margin-bottom:12px}
+  #tpList{display:flex; flex-direction:column; gap:6px; max-height:44vh; overflow-y:auto}
+  .tpRow{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px;
+    border:1px solid #2a3540; cursor:pointer}
+  .tpRow.sel{border-color:var(--accent); background:rgba(0,229,255,.08)}
+  .tpRow .dot{width:10px; height:10px; border-radius:50%; flex:none; background:var(--dim)}
+  .tpRow.on .dot{background:var(--ok)} .tpRow.left .dot{background:var(--bad)}
+  .tpName{font-size:15px; color:var(--fg)}
+  .tpMeta{font-size:12px; color:var(--dim)}
+  .tpRow.on .tpMeta{color:var(--ok)} .tpRow.left .tpMeta{color:var(--bad)}
+  #tpRev{display:flex; align-items:center; justify-content:space-between; margin-top:14px;
+    padding-top:12px; border-top:1px solid #2a3540; font-size:14px; color:var(--dim)}
+  #tpRevSw{width:52px; height:30px; border-radius:15px; background:#2a3540; position:relative; cursor:pointer; flex:none}
+  #tpRevSw::after{content:''; position:absolute; top:3px; left:3px; width:24px; height:24px;
+    border-radius:50%; background:var(--fg); transition:left .18s}
+  #tpRevSw.rev{background:var(--warn)} #tpRevSw.rev::after{left:25px}
+  #tpBtns{display:flex; gap:10px; margin-top:14px}
+  #tpBtns button{flex:1; padding:12px; border:1px solid #2a3540; border-radius:12px;
+    background:var(--panel2); color:var(--fg); font-size:15px; font-weight:700; cursor:pointer}
+  #tpBtns button.go{background:var(--ok); border-color:var(--ok); color:#04240f; font-weight:800}
 
   /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design)
      (#colourPick shares the chooser look — ☰ Track colour tile) ---------- */
@@ -680,6 +707,15 @@
   <div class="row"><label for="introEmail">Email</label><input type="text" id="introEmail" maxlength="60" placeholder="you@example.com"></div>
   <div class="hint">Your name and location are shown to other riders on the same ride.</div>
   <div class="btnRow"><button class="btn primary" id="introSave">Start demo ride</button><button class="btn" id="introSkip">Skip</button></div>
+</div>
+<!-- track picker: long-press a track / tap the bottom bar, or Follow mode noticing you
+     left the route while sitting on another track you've loaded -->
+<div id="trkPick">
+  <h4 id="tpTitle">Choose track</h4>
+  <div id="tpSub"></div>
+  <div id="tpList"></div>
+  <div id="tpRev"><span>Ride reversed</span><span id="tpRevSw"></span></div>
+  <div id="tpBtns"></div>
 </div>
 <div id="demoPick"><h4>Demo ride</h4>
   <button class="dpBtn" id="dpTrain"><b>Training ride</b><span>learn DingoNav on a guided fake ride — no track needed</span></button>
@@ -2563,6 +2599,7 @@ function closeDialog() {
   // tapping the backdrop while the intro is up counts as Skip — otherwise the shade goes
   // and the card is left floating over the map with no way to answer it
   if (document.getElementById('introDlg').classList.contains('on')) { closeIntro(false); return; }
+  if (document.getElementById('trkPick').classList.contains('on')) { closeTrackPicker(false); return; } // backdrop = leave things alone
   document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
 document.getElementById('dlgOk').onclick = closeDialog;
 document.getElementById('dlgShade').onclick = closeDialog;
@@ -2651,6 +2688,15 @@ function initLockGesture() {
         const mpp = spanForZoom(map.getZoom(), ll.lat) / (el.clientHeight || 700);
         const hit = findTurnPointNear(mx, my, Math.max(15, mpp * 30));
         if (hit) { openMarkPicker(hit.x, hit.y, { cue: hit.cue }); return; }
+        // long-press ON a track line: the picker — including the one already selected.
+        // Stopped only: while riding this gesture is the centre lock, and the route is
+        // exactly where a rider's thumb lands, so the two would fight constantly.
+        if (!S.nav && S.tracks.length) {
+          const tapR = Math.max(20, mpp * 24);
+          let bd = Infinity;
+          for (const t of S.tracks) bd = Math.min(bd, nearestOnTrack(t, mx, my).d);
+          if (bd <= tapR) { openTrackPicker('pick'); return; }
+        }
       }
       if (S.lock) { setLock(false); toast('Centre lock off — map can be moved'); }
       else {
@@ -3030,7 +3076,13 @@ function onFix(lat, lon, acc, speed, heading) {
   }
   ns.idx = near.idx;
 
-  if (near.d > ADV('offM') && !ns.off) { ns.off = true; trainEvent('offtrack'); }
+  if (near.d > ADV('offM') && !ns.off) {
+    ns.off = true; trainEvent('offtrack');
+    // Leaving the route while sitting on another track you've loaded is a different event
+    // from being lost — offer the swap instead of only sounding the alarm.
+    if (!TRAIN.active && S.tracks.some((t, i) => i !== S.sel && nearestOnTrack(t, x, y).d < ADV('onM')))
+      openTrackPicker('off', S.sel);
+  }
   if (near.d < ADV('onM') && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); trainEvent('backontrack'); }
   if (ns.off) {
     const bn = document.getElementById('banner');
@@ -4784,6 +4836,115 @@ function trackTap(lngLat) {
   if (best === S.sel) deselectTrack();
   else { selectTrack(best); toast(S.tracks[best].name); }
 }
+/* ---------------- track picker ----------------
+   One card, two modes:
+   'pick' — the rider asked (long-press any track, or tap the bottom bar). Tap a track to
+            take it; the dialog closes. Nothing happens until they tap.
+   'off'  — Follow mode noticed they left the route while sitting on another track they've
+            loaded. Red header, proximity dots, explicit Switch / Stay, and it dismisses
+            itself so an unanswered dialog can't sit over the map mid-corner.
+   The 'off' variant is the manual version of what Snap mode does by itself. */
+const TP = { mode: 'pick', sel: -1, rev: false, left: -1, timer: null };
+const TP_DISMISS_MS = 8000;
+function tpCandidates() { // every track, with how far it is from the rider right now
+  const rows = S.tracks.map((t, i) => {
+    let d = null;
+    if (S.pos) { const n = nearestOnTrack(t, S.pos.x, S.pos.y); d = n.d; }
+    return { i, t, d, on: d != null && d < ADV('onM') };
+  });
+  // nearest first when we know where we are — the ones you could actually be riding
+  if (S.pos) rows.sort((a, b) => (a.d ?? 1e12) - (b.d ?? 1e12));
+  return rows;
+}
+function tpDist(d) { return d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(1) + ' km'; }
+/* cancel the auto-dismiss AND forget the id — a stale handle reads as "still pending" */
+function tpHold() { clearTimeout(TP.timer); TP.timer = null; }
+function openTrackPicker(mode, leftIdx) {
+  if (!S.tracks.length) { toast('No tracks loaded'); return; }
+  TP.mode = mode; TP.left = leftIdx == null ? -1 : leftIdx;
+  if (mode === 'off') {
+    // Never preselect the track we just left — "Switch" has to mean something. Prefer one
+    // we're actually on; otherwise the nearest other track (candidates are distance-sorted).
+    const c = tpCandidates().filter(r => r.i !== TP.left);
+    TP.sel = (c.find(r => r.on) || c[0] || {}).i ?? S.sel;
+  } else TP.sel = S.sel;
+  TP.rev = !!(S.tracks[TP.sel] && S.tracks[TP.sel].reverse);
+  renderTrackPicker();
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('trkPick').classList.add('on');
+  clearTimeout(TP.timer);
+  // only the self-opening variant times out — a dialog the rider asked for waits for them
+  if (mode === 'off') TP.timer = setTimeout(() => closeTrackPicker(false), TP_DISMISS_MS);
+}
+function renderTrackPicker() {
+  const off = TP.mode === 'off', dlg = document.getElementById('trkPick');
+  dlg.classList.toggle('off', off);
+  const leftName = TP.left >= 0 && S.tracks[TP.left] ? S.tracks[TP.left].name : '';
+  document.getElementById('tpTitle').textContent = off ? 'Off ' + leftName : 'Choose track';
+  const leftD = off && S.pos && S.tracks[TP.left]
+    ? nearestOnTrack(S.tracks[TP.left], S.pos.x, S.pos.y).d : null;
+  document.getElementById('tpSub').textContent = off
+    ? (leftD != null ? tpDist(leftD) + ' off, riding a track you have loaded' : 'riding a track you have loaded')
+    : S.tracks.length + ' track' + (S.tracks.length === 1 ? '' : 's') + ' loaded';
+  const list = document.getElementById('tpList');
+  list.innerHTML = '';
+  for (const r of tpCandidates()) {
+    const row = document.createElement('div');
+    const left = r.i === TP.left;
+    row.className = 'tpRow' + (r.i === TP.sel ? ' sel' : '') + (left ? ' left' : r.on ? ' on' : '');
+    const meta = left ? 'the track you left' + (r.d != null ? ' · ' + tpDist(r.d) + ' away' : '')
+      : r.d == null ? (r.t.lengthM / 1000).toFixed(1) + ' km'
+      : (r.on ? 'on it · ' : '') + tpDist(r.d) + ' away · ' + (r.t.lengthM / 1000).toFixed(1) + ' km';
+    row.innerHTML = '<span class="dot"></span><span><span class="tpName">' + escHtml(r.t.name)
+      + '</span><br><span class="tpMeta">' + escHtml(meta) + '</span></span>';
+    row.onclick = () => {
+      // TP.rev is the rider's intent for this whole interaction, seeded from the track that
+      // was selected when the card opened. Tapping a row must NOT reset it: in 'pick' mode
+      // the tap also commits, so a toggle set beforehand would be silently discarded.
+      TP.sel = r.i;
+      tpHold(); // they're engaging — stop the auto-dismiss out from under them
+      if (off) renderTrackPicker(); else closeTrackPicker(true); // rider-asked: tap IS the choice
+    };
+    list.appendChild(row);
+  }
+  document.getElementById('tpRevSw').classList.toggle('rev', TP.rev);
+  const btns = document.getElementById('tpBtns');
+  btns.innerHTML = '';
+  const add = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.textContent = label; if (cls) b.className = cls; b.onclick = fn; btns.appendChild(b);
+  };
+  if (off) { add('Stay on ' + leftName.split(' ')[0], '', () => closeTrackPicker(false)); add('Switch', 'go', () => closeTrackPicker(true)); }
+  else add('Cancel', '', () => closeTrackPicker(false));
+}
+function closeTrackPicker(commit) {
+  clearTimeout(TP.timer); TP.timer = null;
+  document.getElementById('dlgShade').classList.remove('on');
+  document.getElementById('trkPick').classList.remove('on');
+  if (!commit || TP.sel < 0 || !S.tracks[TP.sel]) return;
+  const t = S.tracks[TP.sel];
+  t.reverse = TP.rev;
+  if (TP.sel !== S.sel) selectTrack(TP.sel);
+  else { updateBottomBar(); refreshMapData(); drawProgress(true); }
+  if (S.nav) {
+    // Swapping mid-ride: the new track starts clean, but the breadcrumb does NOT — it
+    // belongs to the ride, not the route, and it's the record of how you got here.
+    const rev = !!t.reverse;
+    S.navState = { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0,
+      alertStates: new Map(), movingS: 0, avgSpd: null, lastFixT: 0 };
+    S.prog = { track: t.id, spans: [], prevIdx: null }; progDirty = true;
+    document.getElementById('banner').classList.remove('on');
+    prog.classList.remove('offtrack', 'countdown');
+    if (!t.alerts) analyzeRoute(t).then(() => { refreshMapData(); drawProgress(true); });
+  }
+  toast(t.name + (t.reverse ? ' · reversed' : ''));
+}
+document.getElementById('tpRevSw').onclick = () => {
+  TP.rev = !TP.rev; tpHold();
+  document.getElementById('tpRevSw').classList.toggle('rev', TP.rev);
+};
+document.getElementById('trackInfo').onclick = () => { if (!S.cueEdit) openTrackPicker('pick'); };
+
 function deselectTrack() {
   if (S.cueEdit) setCueEdit(false);
   S.sel = -1;
