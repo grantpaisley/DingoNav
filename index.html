@@ -225,8 +225,8 @@
   #orientCtl #orientGlyph{margin-top:8px; line-height:1}
   #baseRow{position:fixed; left:0; right:0; bottom:calc(var(--chromeB,0px) + 8px); z-index:16;
     display:flex; align-items:flex-end; padding:0 10px; pointer-events:none}
-  #baseRow .ctl{pointer-events:auto}
-  /* landscape: ☰ hard left, dot hard right, − / + together in the centre */
+  #baseRow .ctl, #baseRow #startBtn{pointer-events:auto}
+  /* landscape: ☰ hard left, dot hard right, − / + together in the centre, START after the + */
   #zoomOut{margin-left:auto} #zoomIn{margin-left:10px} #dotBtn{margin-left:auto}
   /* the dot is the one round face — centre-on-me; wears the centre-lock ring */
   body:not(.portrait) #baseRow #dotBtn{width:96px; height:96px; border-radius:50%; font-size:44px}
@@ -239,12 +239,16 @@
   body.turnmode #zoomOut, body.turnmode #zoomIn{display:none}
   body.portrait.turnmode #baseRow .ctl{flex:0 0 25vw}
   body.portrait.turnmode #baseRow #dotBtn{margin-left:auto}
-  /* START: green, above the dot, stopped-with-a-track only */
-  #startBtn{position:fixed; right:10px; bottom:calc(var(--chromeB,0px) + 112px); z-index:16;
+  /* START: green, stopped-with-a-track only. In landscape it's an in-flow member of the
+     base row, sitting in the gap between the + and the dot. */
+  #startBtn{margin-left:10px; z-index:16; flex:none;
     height:68px; padding:0 32px; border:none; border-radius:18px; background:var(--ok); color:#04240f;
     font-size:22px; font-weight:800; letter-spacing:.03em; cursor:pointer; display:none;
     box-shadow:0 4px 18px rgba(0,0,0,.45)}
   body:not(.navving) #startBtn.on{display:block}
+  /* portrait / square: the row is four equal quarters and has no room for a fifth item —
+     START comes back out of flow and floats above the dot, as before */
+  body.portrait #startBtn{position:fixed; right:10px; bottom:calc(var(--chromeB,0px) + 112px); margin-left:0}
   /* ride-direction toggle: START's twin above ☰ (bottom-left); amber when reversed.
      Stopped-screen only — never during navigation. */
   #revToggle{position:fixed; left:10px; bottom:calc(var(--chromeB,0px) + 112px); z-index:16;
@@ -696,9 +700,11 @@
   <div class="ctl" id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
   <div class="ctl" id="zoomOut" title="zoom out — hold to save as riding zoom"><svg class="ic"><use href="#i-minus"/></svg></div>
   <div class="ctl" id="zoomIn" title="zoom in — hold to save as turn zoom"><svg class="ic"><use href="#i-plus"/></svg></div>
+  <!-- landscape: START rides in the row between + and the dot. Portrait pulls it back
+       out of flow (the row is four equal quarters there) — see #startBtn CSS. -->
+  <button id="startBtn" title="start navigation">START</button>
   <div class="ctl" id="dotBtn" title="centre on me"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
 </div>
-<button id="startBtn" title="start navigation">START</button>
 <button id="revToggle" title="ride direction — tap to reverse"><svg class="ic"><use href="#i-arrow-left-right"/></svg><span id="revLbl">FORWARD</span></button>
 <button id="markTurn" title="add a mark on the track">ADD MARK</button>
 <div id="turnHint">ADD MARK then tap the track · tap a point to remove · long-press a point to change it</div>
@@ -1947,7 +1953,9 @@ function addOverlays() {
   map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': ADV('colRoute'), 'line-opacity': 1, 'line-width': coreW() } });
-  // backtrack trail: muted dotted thread of where you've actually been, under the route
+  // backtrack trail: the dotted thread of where you've actually been. The layer is
+  // added here but MOVED below (see moveLayer) — its stacking is deliberate, not
+  // wherever the add order happened to leave it.
   map.addSource('trail', { type: 'geojson', data: EMPTY });
   // On-route stretches stay the muted thin thread; off-route stretches go red at the
   // route's own core width (the line inside the casing), slightly transparent so the
@@ -1983,6 +1991,10 @@ function addOverlays() {
     paint: { 'line-color': ['get', 'c'], 'line-width': coreW() } });
   map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack', layout: rnd,
     paint: { 'line-color': ADV('colRoute'), 'line-width': coreW() } });
+  /* Breadcrumb stacking: ABOVE every other loaded track and above the travelled/missed
+     progress shading of the selected one — your actual line is what you're checking
+     against them — but BELOW the route ahead (casing + core), which nothing may obscure. */
+  map.moveLayer('trail-dots', 'sel-case');
   /* direction Vs: case-coloured overlay glyphs along the line (the cutout look
      without the cutout — reads on solid, dashed and dotted alike). They follow the
      casing of their state, so travelled sections dim automatically. */
