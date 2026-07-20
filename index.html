@@ -150,6 +150,21 @@
   #dlgMsg b{color:var(--accent)}
   #dlgOk{margin-top:18px; width:100%; padding:13px; border:none; border-radius:12px;
     background:var(--accent); color:#00252b; font-size:16px; font-weight:800; cursor:pointer}
+  /* first-visit capture — same card as #dlg, but it carries fields */
+  #introDlg{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(88vw,360px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
+    padding:20px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #introDlg.on{display:block}
+  #introDlg h4{font-size:18px; margin-bottom:14px}
+  #introDlg .row{display:block; margin-bottom:12px} /* the global .row is a flex pair — stack here */
+  #introDlg label{display:block; font-size:13px; color:var(--dim); margin-bottom:5px}
+  #introDlg input{width:100%; box-sizing:border-box; padding:11px 12px; font-size:16px;
+    background:var(--panel2); border:1px solid #2a3540; border-radius:10px; color:var(--fg)}
+  #introDlg .hint{font-size:13px; color:var(--dim); line-height:1.5; margin:14px 0 4px}
+  #introDlg .btnRow{display:flex; gap:10px; margin-top:16px}
+  #introDlg .btn{flex:1; padding:13px; border:1px solid #2a3540; border-radius:12px;
+    background:var(--panel2); color:var(--fg); font-size:16px; font-weight:700; cursor:pointer}
+  #introDlg .btn.primary{background:var(--accent); border-color:var(--accent); color:#00252b; font-weight:800}
 
   /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design)
      (#colourPick shares the chooser look — ☰ Track colour tile) ---------- */
@@ -652,6 +667,14 @@
 <div id="toast"></div>
 <div id="dlgShade"></div>
 <div id="dlg"><h4 id="dlgTitle"></h4><div id="dlgMsg"></div><button id="dlgOk">Got it</button></div>
+<!-- first visit only: who you are, so other riders on the same ride can see you -->
+<div id="introDlg">
+  <h4>G'day</h4>
+  <div class="row"><label for="introName">Your name</label><input type="text" id="introName" maxlength="12" placeholder="Grant"></div>
+  <div class="row"><label for="introEmail">Email</label><input type="text" id="introEmail" maxlength="60" placeholder="you@example.com"></div>
+  <div class="hint">Your name and location are shown to other riders on the same ride.</div>
+  <div class="btnRow"><button class="btn primary" id="introSave">Start riding</button><button class="btn" id="introSkip">Skip</button></div>
+</div>
 <div id="demoPick"><h4>Demo ride</h4>
   <button class="dpBtn" id="dpTrain"><b>Training ride</b><span>learn DingoNav on a guided fake ride — no track needed</span></button>
   <button class="dpBtn" id="dpPlain"><b>Plain demo</b><span id="dpPlainSub">replay the selected track at 30 km/h</span></button>
@@ -692,8 +715,8 @@
   <div class="big">DingoNav</div>
   <div style="color:var(--dim)">No tracks loaded yet</div>
   <div id="emptyPacks" style="display:flex; flex-direction:column; gap:10px"></div>
-  <button class="btn primary" id="emptyLoad">Load GPX / heatmap files</button>
-  <button class="btn" id="emptyTrain">Try the training ride</button>
+  <!-- loading files lives in settings; the training ride is a first-visit offer only -->
+  <button class="btn primary" id="emptyTrain">Try the training ride</button>
 </div>
 
 <div id="gloveBtn" class="left" title="ride controls">▦</div>
@@ -2437,6 +2460,57 @@ function refreshPresets() {
     b.classList.toggle('set', !!p[k]);
   }
 }
+/* ---------------- first visit ----------------
+   Asked once, on the very first launch: who you are, because the friend-share puts your
+   name and position in front of everyone else on the same ride. Skippable — someone who
+   just wants to ride shouldn't be held at a form — and either way we never ask again;
+   both fields stay editable in Settings → Account. */
+function maybeIntro() {
+  if (S.set.seenIntro) return;
+  document.getElementById('introName').value = S.set.name || '';
+  document.getElementById('introEmail').value = S.set.email || '';
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('introDlg').classList.add('on');
+}
+function closeIntro(save) {
+  if (save) {
+    S.set.name = document.getElementById('introName').value.trim();
+    S.set.email = document.getElementById('introEmail').value.trim();
+  }
+  S.set.seenIntro = 1; // asked once, answered or not
+  saveSet(); renderSettings(); refreshEmpty(); startFriends(); // name change re-announces us
+  document.getElementById('dlgShade').classList.remove('on');
+  document.getElementById('introDlg').classList.remove('on');
+}
+document.getElementById('introSave').onclick = () => closeIntro(true);
+document.getElementById('introSkip').onclick = () => closeIntro(false);
+
+/* ---------------- usage counters ----------------
+   Local tally: launches, cumulative time in the app, last launch. Kept in its own
+   localStorage key rather than S.set — S.set is exportable and importable, and a bench
+   config shared between riders must not carry (or overwrite) someone else's usage.
+   Time accrues only while the page is actually visible, so a phone in a pocket with the
+   app backgrounded doesn't bank hours it never had. */
+const USE = (() => {
+  try { return { n: 0, ms: 0, last: 0, ...JSON.parse(localStorage.getItem('dingonav-use') || '{}') }; }
+  catch (e) { return { n: 0, ms: 0, last: 0 }; }
+})();
+function saveUse() { localStorage.setItem('dingonav-use', JSON.stringify(USE)); }
+USE.n++; USE.last = Date.now(); saveUse();
+let useSince = document.visibilityState === 'visible' ? Date.now() : 0;
+function bankUse() {
+  if (!useSince) return;
+  USE.ms += Date.now() - useSince;
+  useSince = document.visibilityState === 'visible' ? Date.now() : 0;
+  saveUse();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { if (!useSince) useSince = Date.now(); }
+  else bankUse();
+});
+addEventListener('pagehide', bankUse);
+setInterval(bankUse, 60000); // survive a kill that never fires pagehide
+
 /* one-off dialog helper + the first-use explainer for the favourite-zoom presets */
 function showDialog(title, html) {
   document.getElementById('dlgTitle').textContent = title;
@@ -2444,7 +2518,11 @@ function showDialog(title, html) {
   document.getElementById('dlgShade').classList.add('on');
   document.getElementById('dlg').classList.add('on');
 }
-function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
+function closeDialog() {
+  // tapping the backdrop while the intro is up counts as Skip — otherwise the shade goes
+  // and the card is left floating over the map with no way to answer it
+  if (document.getElementById('introDlg').classList.contains('on')) { closeIntro(false); return; }
+  document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
 document.getElementById('dlgOk').onclick = closeDialog;
 document.getElementById('dlgShade').onclick = closeDialog;
 // first tap/hold of min or max explains favourite zoom; the gesture that triggered it is consumed
@@ -4491,7 +4569,6 @@ async function handleFiles(files) {
 }
 document.getElementById('fileInput').addEventListener('change', e => { handleFiles([...e.target.files]); e.target.value = ''; });
 document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
-document.getElementById('emptyLoad').onclick = () => document.getElementById('fileInput').click();
 document.getElementById('baseBtn').onclick = () => document.getElementById('baseInput').click();
 document.getElementById('baseInput').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
@@ -4757,6 +4834,9 @@ function applyCueEditPaint(on) {
 function refreshEmpty() {
   const on = !S.tracks.length && !S.heat;
   document.getElementById('emptyState').classList.toggle('on', on);
+  // the training ride is a first-visit offer — once you've seen it, an empty screen
+  // shouldn't keep pitching it. Still reachable any time from ☰ → Demo.
+  document.getElementById('emptyTrain').style.display = S.set.seenIntro ? 'none' : '';
   // known packs (provenance survives "Clear all data") get a one-tap re-download
   const ep = document.getElementById('emptyPacks');
   ep.innerHTML = '';
@@ -6047,6 +6127,7 @@ async function boot() {
   fitSelected();
   if (!S.demo) startGPS(); // show the location dot from the start, not only while navigating
   startFriends(); // ride-name socket up from boot: turn-point edits sync while planning too
+  maybeIntro(); // first launch only — after the map is up, so it lands on a real screen
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
