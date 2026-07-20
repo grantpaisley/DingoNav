@@ -673,7 +673,7 @@
   <div class="row"><label for="introName">Your name</label><input type="text" id="introName" maxlength="12" placeholder="Grant"></div>
   <div class="row"><label for="introEmail">Email</label><input type="text" id="introEmail" maxlength="60" placeholder="you@example.com"></div>
   <div class="hint">Your name and location are shown to other riders on the same ride.</div>
-  <div class="btnRow"><button class="btn primary" id="introSave">Start riding</button><button class="btn" id="introSkip">Skip</button></div>
+  <div class="btnRow"><button class="btn primary" id="introSave">Start demo ride</button><button class="btn" id="introSkip">Skip</button></div>
 </div>
 <div id="demoPick"><h4>Demo ride</h4>
   <button class="dpBtn" id="dpTrain"><b>Training ride</b><span>learn DingoNav on a guided fake ride — no track needed</span></button>
@@ -2464,7 +2464,11 @@ function refreshPresets() {
    Asked once, on the very first launch: who you are, because the friend-share puts your
    name and position in front of everyone else on the same ride. Skippable — someone who
    just wants to ride shouldn't be held at a form — and either way we never ask again;
-   both fields stay editable in Settings → Account. */
+   both fields stay editable in Settings → Account.
+
+   This card IS the first-time training offer: its primary button saves and rolls straight
+   into the training ride, which is why the empty screen's own offer retires afterwards.
+   Skipping declines both; ☰ → Demo is the way back in. */
 function maybeIntro() {
   if (S.set.seenIntro) return;
   document.getElementById('introName').value = S.set.name || '';
@@ -2482,7 +2486,8 @@ function closeIntro(save) {
   document.getElementById('dlgShade').classList.remove('on');
   document.getElementById('introDlg').classList.remove('on');
 }
-document.getElementById('introSave').onclick = () => closeIntro(true);
+// the button says "Start demo ride", so it had better start one
+document.getElementById('introSave').onclick = () => { closeIntro(true); startTraining(); };
 document.getElementById('introSkip').onclick = () => closeIntro(false);
 
 /* ---------------- usage counters ----------------
