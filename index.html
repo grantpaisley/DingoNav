@@ -191,6 +191,21 @@
   #tpBtns button{flex:1; padding:12px; border:1px solid #2a3540; border-radius:12px;
     background:var(--panel2); color:var(--fg); font-size:15px; font-weight:700; cursor:pointer}
   #tpBtns button.go{background:var(--ok); border-color:var(--ok); color:#04240f; font-weight:800}
+  /* ride briefing — the last thing between the rider and moving, so it reads at a glance */
+  #briefDlg{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(90vw,380px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
+    padding:18px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #briefDlg.on{display:block}
+  #briefName{font-size:21px; font-weight:800; line-height:1.2}
+  #briefMode{font-size:13px; color:var(--accent); text-transform:uppercase; letter-spacing:.06em; margin-bottom:14px}
+  #briefRows{display:grid; grid-template-columns:auto 1fr; gap:8px 14px; font-size:15px}
+  #briefRows .bl{color:var(--dim)}
+  #briefRows .bv{text-align:right; font-variant-numeric:tabular-nums}
+  #briefRows .bv.warn{color:var(--warn); font-weight:700}
+  #briefBtns{display:flex; gap:10px; margin-top:18px}
+  #briefBtns button{flex:1; padding:14px; border:1px solid #2a3540; border-radius:12px;
+    background:var(--panel2); color:var(--fg); font-size:16px; font-weight:700; cursor:pointer}
+  #briefBtns button.go{background:var(--ok); border-color:var(--ok); color:#04240f; font-weight:800}
 
   /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design)
      (#colourPick shares the chooser look — ☰ Track colour tile) ---------- */
@@ -719,6 +734,16 @@
   <div id="tpRev"><span>Ride reversed</span><span id="tpRevSw"></span></div>
   <div id="tpBtns"></div>
 </div>
+<!-- ride briefing: what you're about to set off on, confirmed before the screen goes to riding chrome -->
+<div id="briefDlg">
+  <div id="briefName"></div>
+  <div id="briefMode"></div>
+  <div id="briefRows"></div>
+  <div id="briefBtns">
+    <button id="briefCancel">Back</button>
+    <button id="briefGo" class="go">Ride</button>
+  </div>
+</div>
 <div id="demoPick"><h4>Demo ride</h4>
   <button class="dpBtn" id="dpTrain"><b>Training ride</b><span>learn DingoNav on a guided fake ride — no track needed</span></button>
   <button class="dpBtn" id="dpPlain"><b>Plain demo</b><span id="dpPlainSub">replay the selected track at 30 km/h</span></button>
@@ -977,7 +1002,7 @@ const S = {
     profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
     varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure', bigLeft: '',
-    navMode: 'follow' },  // follow | explore | snap — survives restarts by design
+    navMode: 'follow', startBrief: true },  // navMode: follow | explore | snap — survives restarts by design
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
@@ -2609,6 +2634,7 @@ function closeDialog() {
   // and the card is left floating over the map with no way to answer it
   if (document.getElementById('introDlg').classList.contains('on')) { closeIntro(false); return; }
   if (document.getElementById('trkPick').classList.contains('on')) { closeTrackPicker(false); return; } // backdrop = leave things alone
+  if (document.getElementById('briefDlg').classList.contains('on')) { closeBrief(false); return; } // backdrop never starts a ride
   document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
 document.getElementById('dlgOk').onclick = closeDialog;
 document.getElementById('dlgShade').onclick = closeDialog;
@@ -3140,8 +3166,55 @@ function stopNav() {
   flushProg(); // travelled/missed spans stay on the map for post-ride review
   archiveRide(); // the ridden path joins the own-rides heat + GPX archive
 }
-document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
-document.getElementById('startBtn').onclick = () => { if (!S.nav) startNav(); }; // on-map START — stopping lives in ☰
+/* ---------------- ride briefing ----------------
+   The last screen before the chrome switches to riding: what you're about to set off on,
+   in the terms you'd want reminded — which route, how far, how long, which way round, and
+   which of the three modes is driving. Cheap to confirm, and catches the two mistakes that
+   only show up once you're moving: riding a track backwards, and being in the wrong mode. */
+function briefTime(m) {
+  const spd = vehVal('defSpd'); // per-vehicle cruising estimate; no ride history to average yet
+  if (!spd || !m) return null;
+  const min = Math.round(m / spd / 60);
+  return min < 60 ? min + ' min' : Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') + ' m';
+}
+function openBrief() {
+  if (S.nav) return;
+  if (!S.set.startBrief) { startNav(); return; } // rider turned the reminder off
+  const md = navMode(), trk = navTrack();
+  document.getElementById('briefName').textContent =
+    trk ? trk.name : md === 'explore' ? 'Explore' : md === 'snap' ? 'Snap' : 'Free ride';
+  document.getElementById('briefMode').textContent =
+    NAV_MODE_LABEL[md] + { follow: ' · one track', explore: ' · no track', snap: ' · any track' }[md];
+  const rows = [];
+  if (trk) {
+    rows.push(['Distance', (trk.lengthM / 1000).toFixed(1) + ' km']);
+    const t = briefTime(trk.lengthM); if (t) rows.push(['Time', '~' + t]);
+    rows.push(['Cues', trk.alerts ? trk.alerts.length : 'analysing…']);
+    // the one that bites: set days ago in the picker, invisible once you're moving
+    rows.push(['Direction', trk.reverse ? 'REVERSE' : 'Forward', trk.reverse]);
+  } else if (md === 'snap') {
+    rows.push(['Tracks loaded', S.tracks.length]);
+    rows.push(['Direction', 'auto — set on latch']);
+  } else {
+    rows.push(['Records', 'breadcrumb, speed, compass']);
+    rows.push(['Cues', 'none']);
+  }
+  rows.push(['Vehicle', { walk: 'Walk', mtb: 'MTB', enduro: 'Enduro', adventure: 'ADV' }[S.set.vehicle] || S.set.vehicle]);
+  document.getElementById('briefRows').innerHTML = rows.map(r =>
+    '<span class="bl">' + escHtml(r[0]) + '</span><span class="bv' + (r[2] ? ' warn' : '') + '">'
+    + escHtml(String(r[1])) + '</span>').join('');
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('briefDlg').classList.add('on');
+}
+function closeBrief(go) {
+  document.getElementById('dlgShade').classList.remove('on');
+  document.getElementById('briefDlg').classList.remove('on');
+  if (go) startNav();
+}
+document.getElementById('briefGo').onclick = () => closeBrief(true);
+document.getElementById('briefCancel').onclick = () => closeBrief(false);
+document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : openBrief();
+document.getElementById('startBtn').onclick = () => { if (!S.nav) openBrief(); }; // on-map START — stopping lives in ☰
 // START/STOP is one plain-tap tile in the ☰ grid — the two-tap path (☰ → tile) is the
 // mis-tap protection, so the old hold-to-stop ring is gone.
 
@@ -5734,6 +5807,7 @@ const SETTINGS = [
   // Nav
   { sec: 'nav', k: 'sound', t: 'toggle', l: 'Turn beeps', id: 'setSound', put: v => setSound(v) }, // setSound persists + syncs every mute face
   { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Departure chime (turn done)', id: 'setConfirm' },
+  { sec: 'nav', k: 'startBrief', t: 'toggle', l: 'Ride briefing before START', id: 'setStartBrief' },
   { sec: 'nav', k: 'vehicle', t: 'seg', l: 'Vehicle (alerts + zoom)', segId: 'vehSeg',
     opts: [['walk', 'Walk'], ['mtb', 'MTB'], ['enduro', 'Enduro'], ['adventure', 'ADV']],
     apply: () => { refreshPresets(); renderSettings('adv'); } }, // presets + adv overrides are per-vehicle
