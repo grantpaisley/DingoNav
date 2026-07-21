@@ -149,21 +149,7 @@
   #dlgMsg b{color:var(--accent)}
   #dlgOk{margin-top:18px; width:100%; padding:13px; border:none; border-radius:12px;
     background:var(--accent); color:#00252b; font-size:16px; font-weight:800; cursor:pointer}
-  /* first-visit capture — same card as #dlg, but it carries fields */
-  #introDlg{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
-    width:min(88vw,360px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
-    padding:20px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
-  #introDlg.on{display:block}
-  #introDlg h4{font-size:18px; margin-bottom:14px}
-  #introDlg .row{display:block; margin-bottom:12px} /* the global .row is a flex pair — stack here */
-  #introDlg label{display:block; font-size:13px; color:var(--dim); margin-bottom:5px}
-  #introDlg input{width:100%; box-sizing:border-box; padding:11px 12px; font-size:16px;
-    background:var(--panel2); border:1px solid #2a3540; border-radius:10px; color:var(--fg)}
-  #introDlg .hint{font-size:13px; color:var(--dim); line-height:1.5; margin:14px 0 4px}
-  #introDlg .btnRow{display:flex; gap:10px; margin-top:16px}
-  #introDlg .btn{flex:1; padding:13px; border:1px solid #2a3540; border-radius:12px;
-    background:var(--panel2); color:var(--fg); font-size:16px; font-weight:700; cursor:pointer}
-  #introDlg .btn.primary{background:var(--accent); border-color:var(--accent); color:#00252b; font-weight:800}
+  /* first-visit capture lives in the startup card now (#suIntro) — see the block there */
   /* track picker — one card, two modes (rider-asked 'pick' / Follow-mode 'off') */
   #trkPick{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
     width:min(90vw,380px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
@@ -544,10 +530,80 @@
   #friendStatus,#baseStatus{font-size:13px; color:var(--dim); padding:4px}
   .friendPop .maplibregl-popup-content{background:#1a2530; color:#e8eef3; border-radius:10px; padding:8px 12px; font-size:13px; line-height:1.35; box-shadow:0 4px 16px rgba(0,0,0,.5)}
   .friendPop .maplibregl-popup-tip{border-top-color:#1a2530; border-bottom-color:#1a2530}
-  #emptyState{position:fixed; inset:0; display:none; z-index:5; align-items:center; justify-content:center; flex-direction:column; gap:16px; pointer-events:none}
-  #emptyState.on{display:flex}
-  #emptyState .big{font-size:22px; font-weight:700}
-  #emptyState .btn{flex:none; padding:16px 30px; font-size:17px; pointer-events:auto}
+  /* ---------- startup / readiness screen ----------
+     ONE surface, two CSS states. `.loading` = boot is still working (opaque card,
+     determinate bar, the step it is on, ride-name entry). Dropping `.loading` leaves
+     the old #emptyState behaviour: transparent, map draggable behind, pack
+     re-download buttons. `.bye` is the 240 ms cross-fade between the two.
+     z 39 while loading — deliberately UNDER #dlgShade(40)/#dlg(41) so a dialog raised
+     during boot still lands on top, and over panel(20)/glove(25)/toast(30). */
+  #startup{position:fixed; inset:0; display:none; z-index:5; flex-direction:column;
+    align-items:center; justify-content:center; gap:16px; pointer-events:none;
+    padding:0 16px calc(var(--chromeB,0px) + 24px)}
+  #startup.on, #startup.bye{display:flex}
+  #startup.loading, #startup.bye{z-index:39; padding:0 16px}
+  #startup.loading{pointer-events:auto}
+  #startup.bye{pointer-events:none}
+  #suShade{position:fixed; inset:0; background:var(--bg); transition:opacity .22s ease}
+  #startup:not(.loading):not(.bye) #suShade{display:none}
+  /* Scrolls rather than squeezes: the first-run form adds ~190px and the slow callout
+     another ~150, which overflows 720x720 and certainly the short-viewport case. Tap
+     targets stay 64px — a gloved form should scroll, not shrink. */
+  #suCard{position:relative; display:none; width:min(88vw,420px); background:var(--panel);
+    border:1px solid #2a3540; border-radius:16px; padding:22px 20px;
+    max-height:88vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    box-shadow:0 8px 40px rgba(0,0,0,.6); transition:opacity .22s ease}
+  #startup.loading #suCard, #startup.bye #suCard{display:block}
+  #startup.bye #suShade, #startup.bye #suCard{opacity:0}
+  #suEmpty{display:flex; flex-direction:column; align-items:center; gap:16px}
+  #startup.loading #suEmpty{display:none}
+  .suBrand{font-size:26px; font-weight:800}
+  #suEmpty .suBrand{font-size:22px; font-weight:700}
+  .suBlurb{font-size:14px; color:var(--dim); line-height:1.45; margin-top:4px}
+  /* the app's first and only loading bar — #progress is a ride canvas, not this */
+  #suBar{height:14px; margin:18px 0 8px; border-radius:999px; background:var(--panel2);
+    border:1px solid #2a3540; overflow:hidden}
+  #suFill{display:block; height:100%; width:0; border-radius:999px; background:var(--accent);
+    transition:width .25s ease}
+  #startup.indet #suFill{width:38%; transition:none; animation:suSlide 1.2s ease-in-out infinite}
+  @keyframes suSlide{0%{transform:translateX(-110%)}100%{transform:translateX(290%)}}
+  #suStep{display:flex; justify-content:space-between; gap:10px; font-size:15px; font-weight:600;
+    font-variant-numeric:tabular-nums}
+  #suPct{color:var(--dim); flex:none}
+  #suNote{font-size:12.5px; color:var(--dim); margin-top:4px; min-height:1.3em; line-height:1.3}
+  /* card fields — never block boot; commit on blur/Enter, not per keystroke */
+  .suLbl{display:block; font-size:15px; font-weight:600; margin:18px 0 6px}
+  .suLbl span{display:block; font-size:12.5px; font-weight:400; color:var(--dim); margin-top:2px}
+  #suCard input{width:100%; box-sizing:border-box; height:64px; background:var(--bg);
+    border:1px solid #2a3540; color:var(--fg); border-radius:12px; padding:0 14px;
+    font-size:20px; font-family:inherit}
+  #suCard input:focus{outline:none; border-color:var(--accent)}
+  /* first run only — the old #introDlg, gated on S.set.seenIntro via .firstrun */
+  #suIntro, #suIntroBtns{display:none}
+  #startup.firstrun #suIntro{display:block}
+  /* sticky: the card scrolls on a first run, and the primary action must never be the
+     thing below the fold — a gloved rider should not have to scroll to find it */
+  #startup.firstrun #suIntroBtns{display:flex; gap:10px; margin-top:18px;
+    position:sticky; bottom:-22px; background:var(--panel); padding:10px 0 22px;
+    box-shadow:0 -10px 14px -6px var(--panel)}
+  #suIntroBtns .btn{flex:1 1 0; padding:16px 12px}
+  .suGday{font-size:15px; font-weight:600; margin-top:18px; padding-top:16px;
+    border-top:1px solid #2a3540}
+  #startup .btn{flex:none; min-height:64px; padding:16px 30px; font-size:17px; pointer-events:auto}
+  #suSlow{display:none} #startup.slow #suSlow{display:block}
+  /* day mode: #startup is OUTSIDE #panel, so it inherits none of the overrides below */
+  body.daymode #startup{--panel:#eef1f4; --panel2:#ffffff; --bg:#e4e9ee; --fg:#15202b;
+    --dim:#5a6a78; color:var(--fg)}
+  body.daymode #suCard, body.daymode #suCard input, body.daymode #suBar,
+  body.daymode #startup .btn{border-color:#c9c9ce}
+  body.daymode .suGday{border-top-color:#c9c9ce}
+  body.daymode #startup .btn.primary{color:#fff}      /* #00252b on #007AFF fails in sun */
+  /* The ready-empty text floats over the live map, and what is BEHIND it does not
+     track the theme: with no basemap the map renders dark even in day mode. So it
+     carries its own plate rather than relying on contrast with the map. */
+  #suEmptyHead{background:var(--panel); border:1px solid #2a3540; border-radius:14px;
+    padding:14px 22px; text-align:center; box-shadow:0 4px 18px rgba(0,0,0,.45)}
+  body.daymode #suEmptyHead{border-color:#c9c9ce; box-shadow:0 4px 18px rgba(0,0,0,.18)}
 
   /* ---------- responsive: landscape / split-screen (short viewports) ---------- */
   @media (max-height: 500px) {
@@ -582,6 +638,15 @@
     .gtile{height:min(24vh,110px); gap:3px}
     .gtile .gi{font-size:24px}
     .gtile .gl{font-size:11px}
+    /* startup card: neither blessed viewport hits this (both are 720 tall) — split-screen only.
+       The card scrolls, so this only trims the chrome; it never shrinks a tap target below 52px. */
+    #suCard{padding:16px; max-height:92vh}
+    #suBar{margin:12px 0 6px}
+    #suCard input{height:52px; font-size:18px}
+    .suLbl{margin:12px 0 6px}
+    .suGday{margin-top:12px; padding-top:10px}
+    #startup.firstrun #suIntroBtns{margin-top:12px}
+    #startup .btn{min-height:52px; padding:12px 22px}
   }
 
   /* ---------- editable screen layout (edit mode) ----------
@@ -717,14 +782,8 @@
 <div id="toast"></div>
 <div id="dlgShade"></div>
 <div id="dlg"><h4 id="dlgTitle"></h4><div id="dlgMsg"></div><button id="dlgOk">Got it</button></div>
-<!-- first visit only: who you are, so other riders on the same ride can see you -->
-<div id="introDlg">
-  <h4>G'day</h4>
-  <div class="row"><label for="introName">Your name</label><input type="text" id="introName" maxlength="12" placeholder="Grant"></div>
-  <div class="row"><label for="introEmail">Email</label><input type="text" id="introEmail" maxlength="60" placeholder="you@example.com"></div>
-  <div class="hint">Your name and location are shown to other riders on the same ride.</div>
-  <div class="btnRow"><button class="btn primary" id="introSave">Start demo ride</button><button class="btn" id="introSkip">Skip</button></div>
-</div>
+<!-- first visit only (who you are) now lives inside the startup card as #suIntro,
+     so the cold-boot download is spent on setup instead of a bare progress bar -->
 <!-- track picker: long-press a track / tap the bottom bar, or Follow mode noticing you
      left the route while sitting on another track you've loaded -->
 <div id="trkPick">
@@ -782,12 +841,54 @@
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
 <div id="lockPill" title="centre lock — long-press map to unlock"><svg class="ic"><use href="#i-lock"/></svg> locked</div>
 
-<div id="emptyState">
-  <div class="big">DingoNav</div>
-  <div style="color:var(--dim)">No tracks loaded yet</div>
-  <div id="emptyPacks" style="display:flex; flex-direction:column; gap:10px"></div>
-  <!-- loading files lives in settings; the training ride is a first-visit offer only -->
-  <button class="btn primary" id="emptyTrain">Try the training ride</button>
+<!-- Startup / readiness screen. `loading` is in the MARKUP so the card paints before
+     the app script runs. The card is up while boot is working OR while first-run
+     setup is unanswered — the readiness half carries no seen-flag (a warm launch
+     just flashes it); only the .firstrun block is gated, on S.set.seenIntro.
+     Dropping `loading` hands the same element to refreshEmpty(), which owns the
+     no-tracks state from then on (this absorbed the old #emptyState). -->
+<div id="startup" class="on loading">
+  <div id="suShade"></div>
+  <div id="suCard">
+    <div class="suBrand">DingoNav</div>
+    <div class="suBlurb">Offline GPX follower — your tracks, your maps, no signal needed.</div>
+    <div id="suBar"><i id="suFill"></i></div>
+    <div id="suStep"><span id="suStepTxt">Starting…</span><span id="suPct"></span></div>
+    <div id="suNote"></div>
+    <!-- first run only: the old #introDlg, folded in so the cold-boot download is
+         spent on setup instead of a bare progress bar -->
+    <div id="suIntro">
+      <div class="suGday">G'day — two things before you ride.</div>
+      <label class="suLbl" for="introName">Your name
+        <span>shown to other riders on the same ride</span></label>
+      <input id="introName" type="text" maxlength="12" placeholder="Grant"
+        autocomplete="off" enterkeyhint="next">
+      <label class="suLbl" for="introEmail">Email
+        <span>optional — for ride packs and updates</span></label>
+      <input id="introEmail" type="email" maxlength="60" placeholder="you@example.com"
+        autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next">
+    </div>
+    <label class="suLbl" id="suNameLbl" for="suName">Ride name
+      <span>optional — everyone who types the same name sees each other on the map</span></label>
+    <input id="suName" type="text" maxlength="24" placeholder="e.g. watagans-42"
+      autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done">
+    <div class="btnRow" id="suIntroBtns">
+      <button class="btn primary" id="introSave">Start demo ride</button>
+      <button class="btn" id="introSkip">Skip</button>
+    </div>
+    <div class="callout" id="suSlow">The offline map is a one-time ~41 MB download, stored on the
+      device — later opens are instant.
+      <div class="btnRow"><button class="btn" id="suSkip">Continue without it</button></div></div>
+  </div>
+  <div id="suEmpty">
+    <div id="suEmptyHead">
+      <div class="suBrand">DingoNav</div>
+      <div style="color:var(--dim)">No tracks loaded yet</div>
+    </div>
+    <div id="emptyPacks" style="display:flex; flex-direction:column; gap:10px"></div>
+    <!-- loading files lives in settings; the training ride is a first-visit offer only -->
+    <button class="btn primary" id="emptyTrain">Try the training ride</button>
+  </div>
 </div>
 
 <div id="gloveBtn" class="left" title="ride controls">▦</div>
@@ -972,8 +1073,64 @@ const idb = {
   all() { return new Promise((res, rej) => { const q = idb.tx('readonly').getAll(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
   // keys only — tile purges must not haul thousands of blobs into memory
   keys() { return new Promise((res, rej) => { const q = idb.tx('readonly').getAllKeys(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  // many gets in ONE readonly tx — boot reads its handful of records without
+  // getAll() structured-cloning every cue cache and tile record in the store
+  getMany(ids) {
+    return new Promise((res, rej) => {
+      if (!ids.length) return res([]);
+      const st = idb.tx('readonly'), out = new Array(ids.length);
+      let left = ids.length;
+      ids.forEach((id, i) => {
+        const q = st.get(id);
+        q.onsuccess = () => { out[i] = q.result; if (!--left) res(out); };
+        q.onerror = () => rej(q.error);
+      });
+    });
+  },
   clear() { return new Promise((res, rej) => { const q = idb.tx('readwrite').clear(); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
 };
+/* Ids boot never needs: tile pyramids and cached cue analyses (the store's bulk),
+   plus the singletons boot reads by name anyway. Everything else is fetched and
+   dispatched on rec.kind — the id prefix is NOT the kind ('ride-<uuid>' is a bundle
+   track from addFile, 'ride-<timestamp>' is a ride archive from archiveRide). */
+const BOOT_SKIP = /^(basemap|hillshade|trail|prog|sat-meta|strava-ride-meta|strava-hike-meta)$|^(sattile-|stravaridetile-|stravahiketile-|cue)/;
+
+/* fetch -> Blob with byte progress, for the two big basemap downloads.
+   onProg(loaded, total) fires once with (0, total) before the first byte, on every
+   chunk, and once more at completion. total is the byte count when known, or 0 for
+   "indeterminate" — a gzipping host reports the COMPRESSED length, so an overrun
+   drops to indeterminate mid-flight rather than reporting >100%. Returns a Blob, so
+   the callers' idb.put path is byte-identical to the resp.blob() it replaces. */
+async function fetchBlobProgress(url, onProg) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const cl = parseInt(resp.headers.get('content-length') || '0', 10);
+  const total = isFinite(cl) && cl > 0 ? cl : 0;
+  const type = resp.headers.get('content-type') || 'application/octet-stream';
+  // no streaming body (old WebView, opaque response) — degrade to a plain blob read
+  if (!resp.body || typeof resp.body.getReader !== 'function') {
+    if (onProg) onProg(0, total);
+    const b = await resp.blob();
+    if (onProg) onProg(b.size, b.size);
+    return b;
+  }
+  const reader = resp.body.getReader(), chunks = [];
+  let loaded = 0;
+  if (onProg) onProg(0, total);
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); loaded += value.length;
+    if (onProg) onProg(loaded, loaded > total ? 0 : total); // overrun => the header lied
+  }
+  if (onProg) onProg(loaded, loaded);
+  return new Blob(chunks, { type });
+}
+// leading bytes guard: a captive portal's HTML login page must never be stored as a basemap
+async function isPMTiles(blob) {
+  try { return new TextDecoder().decode(new Uint8Array(await blob.slice(0, 7).arrayBuffer())) === 'PMTiles'; }
+  catch (e) { return false; }
+}
 
 /* ---------------- geometry helpers (nav math in local metres) ---------------- */
 const R_LAT = 110540, R_LON = 111320;
@@ -1557,6 +1714,12 @@ async function analyzeRoute(trk) {
 }
 async function analyzeRouteInner(trk) {
   {
+    // The map now boots before the basemap finishes downloading, so ANY caller
+    // (boot, track selection, pack load) can land here with basePM still null.
+    // decodeCorridor would return an empty grid and the result would be cached
+    // under a 'cue7-…-none' key — a route with zero turn cues, and nothing
+    // re-triggers analysis. Wait for the basemap to arrive or be ruled out.
+    await baseReady;
     // geomHash is in the key because a pack refresh can change a track's
     // geometry while its id (ride-<uuid>) stays stable across revisions
     const key = 'cue7-' + trk.id + '-' + (trk.geomHash || '0') + '-' + (S.heat ? S.heat.count : 0) + '-' + basePMKey;
@@ -1809,8 +1972,50 @@ async function setMapStyle(name) {
   toast('Map style: ' + curStyle().label);
 }
 
+/* The pmtiles protocol registry, hoisted: basemap and hillshade blobs can arrive
+   AFTER the map exists, and each has to register its key before any style names it.
+   pmtiles.js looks keys up at tile-request time, but a missing key silently falls
+   back to fetching the bare name and 404s every tile — so attach before re-styling. */
+let pmProtocol = null;
+/* Resolves once the basemap is registered OR known to be absent. Cue analysis MUST
+   await this: decodeCorridor returns an empty grid without basePM, and
+   analyzeRouteInner would cache that empty result under a 'cue7-…-none' key, leaving
+   the rider on a route with no turn cues. Always resolves, never rejects — it sits on
+   the boot critical path, so an offline boot must fall through rather than hang.
+   Starts PENDING, so an analysis kicked off before initMap runs waits too; boot's
+   finally settles it even if initMap throws, so nothing can wedge on it. */
+let baseSettle = null;
+let baseReady = new Promise(res => { baseSettle = res; });
+function attachBase(blob, name) {
+  basePM = new pmtiles.PMTiles(new pmtiles.FileSource(new File([blob], 'base')));
+  basePMKey = name + ':' + blob.size;   // part of the cue cache key
+  pmProtocol.add(basePM);
+  hasBasemap = true;
+  baseUrlRef = new URL('basemap/', location.href).href;
+  setBaseStatus('Basemap: ' + name + ' (' + (blob.size / 1e6).toFixed(0) + ' MB, on device)');
+}
+function attachHill(blob, name) {
+  pmProtocol.add(new pmtiles.PMTiles(new pmtiles.FileSource(new File([blob], 'hillshade'))));
+  hasHillshade = true;
+  setHillStatus('Terrain: ' + name + ' (' + (blob.size / 1e6).toFixed(0) + ' MB, on device)');
+}
+/* Re-apply the style on a live map, for a basemap/hillshade that landed after boot.
+   Mirrors setMapStyle()'s swap path exactly, minus the settings write and the toast —
+   this is not a user style change. That path is exercised by the style picker on
+   every use, which is why this reuses it rather than splicing sources in by hand. */
+async function reStyle() {
+  if (!map || !mapReady) return;
+  map.setStyle(await buildStyle());
+  await new Promise(res => {
+    const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 200);
+    map.once('idle', () => { clearInterval(t); res(); });
+  });
+  addOverlays(); refreshPosLayers(); drawProgress(true);
+  if (S.cueEdit) applyCueEditPaint(true);
+}
+
 async function initMap() {
-  const protocol = new pmtiles.Protocol();
+  const protocol = pmProtocol = new pmtiles.Protocol();
   maplibregl.addProtocol('pmtiles', protocol.tile);
 
   // Strava corridor tiles served from IDB (baked into the .dingonav bundle).
@@ -1835,59 +2040,16 @@ async function initMap() {
     return { data: STRAVA_BLANK.buffer };
   });
 
-  // basemap: IDB blob -> else fetch alongside the app -> else plain dark background
-  let baseBlob = null, baseName = '';
-  try { const rec = await idb.get('basemap'); if (rec) { baseBlob = rec.blob; baseName = rec.name; } } catch (e) {}
-  if (!baseBlob) {
-    try {
-      toast('Downloading offline basemap…');
-      const resp = await fetch('basemap/central-coast.pmtiles');
-      if (resp.ok) {
-        baseBlob = await resp.blob(); baseName = 'central-coast.pmtiles';
-        await idb.put({ id: 'basemap', name: baseName, kind: 'basemap', blob: baseBlob });
-        toast('Basemap stored for offline use (' + (baseBlob.size / 1e6).toFixed(0) + ' MB)');
-      }
-    } catch (e) {}
-  }
-  if (baseBlob) {
-    basePM = new pmtiles.PMTiles(new pmtiles.FileSource(new File([baseBlob], 'base')));
-    basePMKey = baseName + ':' + baseBlob.size;
-    protocol.add(basePM);
-    hasBasemap = true;
-    baseUrlRef = new URL('basemap/', location.href).href;
-    setBaseStatus('Basemap: ' + baseName + ' (' + (baseBlob.size / 1e6).toFixed(0) + ' MB, on device)');
-  } else {
-    setBaseStatus('no basemap — tracks on dark background');
-  }
+  // Everything the FIRST style needs is already on the device: cached blobs + sat meta.
+  // Satellite meta must load BEFORE the first buildStyle() — the 'satellite' style
+  // branch needs it, else a reload with Sat pre-selected renders empty.
+  let baseRec = null, hillRec = null;
+  try { [baseRec, hillRec, satMeta] = await idb.getMany(['basemap', 'hillshade', 'sat-meta']); } catch (e) {}
+  if (baseRec && baseRec.blob) attachBase(baseRec.blob, baseRec.name);
+  else setBaseStatus('no basemap — tracks on dark background');
+  if (hillRec && hillRec.blob) attachHill(hillRec.blob, hillRec.name);
+  else setHillStatus('no terrain shading (optional)');
 
-  // optional terrain DEM for hillshade: IDB blob -> else fetch alongside the app -> else absent
-  let hillBlob = null, hillName = '';
-  try { const rec = await idb.get('hillshade'); if (rec) { hillBlob = rec.blob; hillName = rec.name; } } catch (e) {}
-  if (!hillBlob && hasBasemap) {
-    try {
-      const resp = await fetch('basemap/hillshade.pmtiles');
-      if (resp.ok) {
-        const blob = await resp.blob();
-        // guard against SPA-fallback HTML masquerading as the file
-        const magic = new TextDecoder().decode(new Uint8Array(await blob.slice(0, 7).arrayBuffer()));
-        if (magic === 'PMTiles') {
-          hillBlob = blob; hillName = 'hillshade.pmtiles';
-          await idb.put({ id: 'hillshade', name: hillName, kind: 'hillshade', blob: hillBlob });
-          toast('Terrain shading stored for offline use (' + (hillBlob.size / 1e6).toFixed(0) + ' MB)');
-        }
-      }
-    } catch (e) {}
-  }
-  if (hillBlob) {
-    protocol.add(new pmtiles.PMTiles(new pmtiles.FileSource(new File([hillBlob], 'hillshade'))));
-    hasHillshade = true;
-    setHillStatus('Terrain: ' + hillName + ' (' + (hillBlob.size / 1e6).toFixed(0) + ' MB, on device)');
-  } else {
-    setHillStatus('no terrain shading (optional)');
-  }
-  // Satellite meta must load BEFORE the first buildStyle() — the 'satellite'
-  // style branch needs it, else a reload with Sat pre-selected renders empty.
-  try { satMeta = await idb.get('sat-meta'); } catch (e) {}
   const style = await buildStyle();
   map = new maplibregl.Map({
     container: 'map', style,
@@ -1943,11 +2105,42 @@ async function initMap() {
     const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 250);
     map.once('load', () => { clearInterval(t); res(); });
   });
-  try { stravaRideMeta = await idb.get('strava-ride-meta'); } catch (e) {}
-  try { stravaHikeMeta = await idb.get('strava-hike-meta'); } catch (e) {}
+  try { [stravaRideMeta, stravaHikeMeta] = await idb.getMany(['strava-ride-meta', 'strava-hike-meta']); } catch (e) {}
   // satMeta already loaded above (before buildStyle); no need to re-read here.
   mapReady = true; // before addOverlays — its refreshMapData() call needs this
   addOverlays();
+
+  // Nothing cached -> fetch both in PARALLEL, off the critical path. The map is
+  // already on screen; each arrival upgrades the live style in place. Neither
+  // promise ever rejects — baseReady is awaited on the boot critical path.
+  const basePending = (async () => {
+    if (hasBasemap) return;
+    bootPhase('basemap');
+    try {
+      const blob = await fetchBlobProgress('basemap/central-coast.pmtiles', bootBytes);
+      // a captive portal's HTML login page must not be stored as the basemap —
+      // it would poison the store permanently (this guard only covered hillshade before)
+      if (!(await isPMTiles(blob))) throw new Error('not a pmtiles archive');
+      await idb.put({ id: 'basemap', name: 'central-coast.pmtiles', kind: 'basemap', blob });
+      attachBase(blob, 'central-coast.pmtiles');
+      toast('Basemap stored for offline use (' + (blob.size / 1e6).toFixed(0) + ' MB)');
+      await reStyle();
+    } catch (e) { console.warn('basemap download failed', e); }
+  })();
+  basePending.then(baseSettle, baseSettle); // settle either way — never leave a waiter hanging
+  const hillPending = (async () => {
+    if (hasHillshade) return;
+    try {
+      const blob = await fetchBlobProgress('basemap/hillshade.pmtiles', null);
+      if (!(await isPMTiles(blob))) return; // SPA-fallback HTML masquerading as the file
+      await idb.put({ id: 'hillshade', name: 'hillshade.pmtiles', kind: 'hillshade', blob });
+      attachHill(blob, 'hillshade.pmtiles');
+      toast('Terrain shading stored for offline use (' + (blob.size / 1e6).toFixed(0) + ' MB)');
+    } catch (e) { console.warn('hillshade download failed', e); }
+  })();
+  // hillshade is cosmetic and lands after the startup screen is gone — one final
+  // re-style folds it in whenever it arrives
+  Promise.all([basePending, hillPending]).then(reStyle);
 }
 function clsMatch() { return ['match', ['get', 'class'], 'other', ADV('colOther'), 'plan', ADV('colPlan'), ADV('colOwn')]; }
 /* route widths: total px interpolated overview→nav zoom; the core keeps its share
@@ -2580,13 +2773,17 @@ function refreshPresets() {
 
    This card IS the first-time training offer: its primary button saves and rolls straight
    into the training ride, which is why the empty screen's own offer retires afterwards.
-   Skipping declines both; ☰ → Demo is the way back in. */
-function maybeIntro() {
-  if (S.set.seenIntro) return;
+   Skipping declines both; ☰ → Demo is the way back in.
+
+   It is no longer a dialog of its own: it lives inside the startup card, so a cold
+   first run spends its ~41 MB download on setup rather than a bare progress bar, and
+   the rider is never shown a progress screen followed immediately by a modal. */
+function introPending() { return !S.set.seenIntro; }
+function armIntro() {
+  if (!introPending()) return;
+  document.getElementById('startup').classList.add('firstrun');
   document.getElementById('introName').value = S.set.name || '';
   document.getElementById('introEmail').value = S.set.email || '';
-  document.getElementById('dlgShade').classList.add('on');
-  document.getElementById('introDlg').classList.add('on');
 }
 function closeIntro(save) {
   if (save) {
@@ -2595,11 +2792,21 @@ function closeIntro(save) {
   }
   S.set.seenIntro = 1; // asked once, answered or not
   saveSet(); renderSettings(); refreshEmpty(); startFriends(); // name change re-announces us
-  document.getElementById('dlgShade').classList.remove('on');
-  document.getElementById('introDlg').classList.remove('on');
+  document.getElementById('startup').classList.remove('firstrun');
+  // The card may still be mid-download. suHandOff() is a no-op until boot drops
+  // `loading`, and bootDone() re-runs it — so answering early simply releases the
+  // hold, and the card goes on showing progress until the map is actually ready.
+  suHandOff();
 }
-// the button says "Start demo ride", so it had better start one
-document.getElementById('introSave').onclick = () => { closeIntro(true); startTraining(); };
+/* the button says "Start demo ride", so it had better start one — but on a cold boot
+   the map is minutes away. Arm it instead of firing: the rider does their setup during
+   the download and the ride begins the moment the map is up. bootDone() fires it. */
+let demoArmed = false;
+document.getElementById('introSave').onclick = () => {
+  demoArmed = true; closeIntro(true);
+  if (SU.done) { demoArmed = false; startTraining(); } // already booted — go now
+  else toast('Demo ride starts as soon as the map is ready');
+};
 document.getElementById('introSkip').onclick = () => closeIntro(false);
 
 /* ---------------- usage counters ----------------
@@ -2636,9 +2843,8 @@ function showDialog(title, html) {
   document.getElementById('dlg').classList.add('on');
 }
 function closeDialog() {
-  // tapping the backdrop while the intro is up counts as Skip — otherwise the shade goes
-  // and the card is left floating over the map with no way to answer it
-  if (document.getElementById('introDlg').classList.contains('on')) { closeIntro(false); return; }
+  // the first-visit intro used to live here and needed a backdrop=Skip rule; it is part
+  // of the startup card now, which has its own shade and is deliberately not tap-to-dismiss
   if (document.getElementById('trkPick').classList.contains('on')) { closeTrackPicker(false); return; } // backdrop = leave things alone
   if (document.getElementById('briefDlg').classList.contains('on')) { closeBrief(false); return; } // backdrop never starts a ride
   document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
@@ -5282,9 +5488,160 @@ function applyCueEditPaint(on) {
   map.setLayoutProperty('mark-squares', 'visibility', on ? 'none' : 'visible');
   map.setLayoutProperty('alert-glyphs', 'visibility', on ? 'none' : 'visible');
 }
+/* ---------------- startup / readiness screen ----------------
+   Up from the very first paint (class="on loading" in the markup), down the moment
+   boot stops blocking. Handing over = removing `.loading`, after which refreshEmpty()
+   owns the element exactly as it owned #emptyState. No seen-flag anywhere: on a warm
+   launch this just flashes, which is correct for a readiness surface. */
+const SU = { done: false, pct: 0, phase: '', base: null, span: 0, t0: performance.now() };
+/* [key, line shown, share of the bar] — the wall-clock shape of a COLD first run;
+   the 41 MB basemap dominates. On a warm launch the metered phases never fire and
+   the bar simply jumps, which is right: it is a readiness meter, not an ETA. */
+const BOOT_STEPS = [
+  ['idb',       'Opening storage',              4],
+  ['tracks',    'Loading your tracks',          8],
+  ['share',     'Fetching the shared ride',    10],
+  ['map',       'Starting the map',             8],
+  ['basemap',   'Downloading the offline map', 56],
+  ['cues',      'Reading the route',           14],
+];
+const BOOT_TOTAL = BOOT_STEPS.reduce((a, s) => a + s[2], 0);
+function suEl(id) { return document.getElementById(id); }
+function suSetPct(p) { // monotonic — a skipped phase must never rewind the bar
+  SU.pct = Math.max(SU.pct, Math.min(100, p));
+  suEl('suFill').style.width = SU.pct.toFixed(1) + '%';
+  suEl('suPct').textContent = SU.pct >= 1 ? Math.round(SU.pct) + '%' : '';
+}
+/* ---- the three functions boot() calls ---- */
+function bootPhase(name, detail) {
+  console.log('[boot]', name, (performance.now() - SU.t0).toFixed(0) + 'ms', detail || '');
+  if (SU.done) return;
+  clearTimeout(SU.nudgeT);
+  suEl('startup').classList.remove('indet');
+  let acc = 0, row = null;
+  for (const s of BOOT_STEPS) { if (s[0] === name) { row = s; break; } acc += s[2]; }
+  if (!row) return;                                  // unknown key: leave the bar alone
+  SU.phase = name; SU.base = acc; SU.span = row[2];
+  suEl('suStepTxt').textContent = detail ? row[1] + ' — ' + detail : row[1];
+  suSetPct(acc / BOOT_TOTAL * 100);
+  // an unmetered phase still has to look alive: creep to its midpoint
+  SU.nudgeT = setTimeout(() => suSetPct((acc + row[2] * .5) / BOOT_TOTAL * 100), 400);
+}
+function bootBytes(loaded, total) {
+  if (SU.done || SU.base === null) return;
+  const su = suEl('startup');
+  if (!total) { su.classList.add('indet'); return; } // no content-length -> stripe it
+  su.classList.remove('indet');
+  clearTimeout(SU.nudgeT);
+  suSetPct((SU.base + SU.span * Math.min(1, loaded / total)) / BOOT_TOTAL * 100);
+  const row = BOOT_STEPS.find(s => s[0] === SU.phase);
+  suEl('suStepTxt').textContent = (row ? row[1] : 'Working') + ' — ' +
+    (loaded / 1e6).toFixed(0) + ' / ' + (total / 1e6).toFixed(0) + ' MB';
+}
+function bootDone() {
+  if (SU.done) return;
+  SU.done = true;
+  console.log('[boot] ready', (performance.now() - SU.t0).toFixed(0) + 'ms');
+  clearTimeout(SU.silentT); clearTimeout(SU.nudgeT); clearTimeout(SU.slowT); clearTimeout(SU.deadT);
+  suSetPct(100);
+  suEl('suStepTxt').textContent = 'Ready';
+  // A demo armed during the download starts the moment the map can actually show it.
+  // startTraining FIRST: it adds the training track, and its own refreshEmpty() is a
+  // no-op while `loading` is still set. Handing off first would run refreshEmpty()
+  // against a still-empty track list and leave "No tracks loaded yet" over the ride.
+  // try/catch, NOT try/finally-free: startTraining() calls audio(), which can throw
+  // when it runs from here instead of from the tap that armed it (no gesture context).
+  // The card coming down must never depend on the demo succeeding — this is the
+  // surface a rider is stuck behind on the roadside.
+  if (demoArmed) {
+    demoArmed = false;
+    // reStyle() is not awaited by boot(), so the basemap swap can still be in flight
+    // here — and startTraining's fitBounds throws on a half-loaded style. Wait for
+    // idle, but never longer than 1.5 s: a card that outlives its own reason to exist
+    // is the one failure this screen must not have.
+    let fired = false;
+    const go = () => {
+      if (fired) return; fired = true;
+      try { startTraining(); }
+      catch (e) { console.error('[dingonav] armed demo failed to start', e); toast('Could not start the demo — tap ☰ → Demo'); }
+      suHandOff();   // unconditional: the card comes down whether or not the demo did
+    };
+    // isStyleLoaded() is NOT enough: reStyle() replaces the style and re-adds the
+    // overlay sources afterwards, so there is a window where the style reports loaded
+    // but map.getSource('heat') is undefined and refreshMapData throws. Poll for the
+    // sources themselves, capped — the demo is worth a short wait, never a hang.
+    const overlaysUp = () => { try { return mapReady && map && map.isStyleLoaded() && !!map.getSource('heat'); } catch (e) { return false; } };
+    if (overlaysUp()) go();
+    else {
+      const t = setInterval(() => { if (overlaysUp()) { clearInterval(t); go(); } }, 120);
+      setTimeout(() => { clearInterval(t); go(); }, 3000); // give up waiting, go anyway
+    }
+    return;
+  }
+  // First run, still unanswered: the card HOLDS. This is the one case where being
+  // ready is not reason enough to go — closeIntro() releases it. A warm launch
+  // reaches here in ~200 ms, so without the hold a first-timer would never see it.
+  if (introPending()) { suEl('suStepTxt').textContent = 'Ready when you are'; return; }
+  // mid-typing: do not yank the keyboard out from under a gloved hand — hand over on blur
+  const inp = suEl('suName');
+  // arrow-wrapped: a bare handler would pass the blur event in as `force`
+  if (document.activeElement === inp) { inp.onblur = () => suHandOff(); return; }
+  suHandOff();
+}
+/* the one-way transition: loading -> (ready-empty | dismissed). Refuses while boot is
+   still working or first-run setup is unanswered, so every caller can be naive.
+   `force` is the rider overriding that deliberately — only #suSkip passes it. */
+function suHandOff(force) {
+  const su = suEl('startup');
+  if (!su.classList.contains('loading')) return;     // idempotent
+  if (!force && (!SU.done || introPending())) return; // not ready, or still asking
+  // Everything below the class change is best-effort. bootDone can land while
+  // reStyle() is mid-swap, when map-touching helpers throw on missing sources — and
+  // a throw in any of them must NOT leave the rider stuck behind this card. Drop
+  // `loading` FIRST so the screen is already committed to going before anything
+  // that can fail runs.
+  su.classList.remove('loading');    // refreshEmpty() owns the element from here on
+  su.classList.add('bye');           // ...card + shade stay up for the cross-fade
+  setTimeout(() => su.classList.remove('bye', 'indet', 'slow'), 240); // = the .22s transition
+  try { suCommitName(); } catch (e) { console.warn('[dingonav] ride name commit failed', e); }
+  try { refreshEmpty(); } catch (e) { console.warn('[dingonav] refreshEmpty failed', e); su.classList.remove('on'); }
+}
+/* ---- ride name: ONE writer, shared with Settings -> Account ---- */
+function setRideCode(v) {
+  v = String(v || '').trim();
+  if (v === (S.set.code || '')) return;   // unchanged -> no socket churn
+  S.set.code = v; S.set.codeAuto = 0;     // typed by hand: bundle loads stop overriding it
+  saveSet();
+  const ce = document.getElementById('rideCode'); if (ce) ce.value = v;   // Settings row
+  const se = suEl('suName'); if (se) se.value = v;                        // this card
+  S.friends.clear(); if (mapReady) refreshFriends(); // old topic's dots must not linger
+  startFriends();                          // safe re-entry: connectFriendWS disarms the old socket
+}
+function suCommitName() { const i = suEl('suName'); if (i) setRideCode(i.value); }
+{
+  armIntro();   // before first paint: a first-timer's card comes up already asking
+  const inp = suEl('suName');
+  inp.value = S.set.code || '';
+  inp.onchange = suCommitName;                        // blur/Enter, matching regRow()'s text rows
+  inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); };
+  // "Continue without it" = stop waiting, let me ride. If the intro is still open it
+  // counts as skipping that too — one button, one intent, and no second nag next launch.
+  suEl('suSkip').onclick = () => {
+    if (introPending()) closeIntro(false);
+    toast('Carrying on — the map finishes in the background');
+    suHandOff(true);
+  };
+  // watchdogs — this screen must never trap a rider on the roadside
+  SU.silentT = setTimeout(() => suEl('startup').classList.add('indet'), 1500); // boot never called bootPhase
+  SU.slowT = setTimeout(() => suEl('startup').classList.add('slow'), 8000);    // offer the escape hatch
+  SU.deadT = setTimeout(() => { console.warn('[dingonav] boot watchdog fired'); bootDone(); }, 90000);
+}
 function refreshEmpty() {
+  const su = document.getElementById('startup');
   const on = !S.tracks.length && !S.heat;
-  document.getElementById('emptyState').classList.toggle('on', on);
+  // while boot still owns the surface it stays up regardless of track count;
+  // suHandOff() re-runs this the moment `loading` comes off.
+  if (!su.classList.contains('loading')) su.classList.toggle('on', on);
   // the training ride is a first-visit offer — once you've seen it, an empty screen
   // shouldn't keep pitching it. Still reachable any time from ☰ → Demo.
   document.getElementById('emptyTrain').style.display = S.set.seenIntro ? 'none' : '';
@@ -5307,6 +5664,9 @@ function toast(msg) {
   el.textContent = msg; el.style.display = 'block';
   clearTimeout(toastT); toastT = setTimeout(() => el.style.display = 'none', 3500);
   console.log('[dingonav]', msg);
+  // boot toasts sit under the startup screen (z39 > toast z30) — echo them onto the card
+  const su = document.getElementById('startup');
+  if (su && su.classList.contains('loading')) document.getElementById('suNote').textContent = msg;
 }
 
 /* settings wiring: every toggle/segment/slider row is GENERATED from the
@@ -5825,8 +6185,10 @@ const SETTINGS = [
     apply: () => { renderMain(); vargUI(); } }, // the pill takes whichever one is left over
   { sec: 'account', k: 'name', t: 'text', l: 'Your name', id: 'myName', max: 12, ph: 'Grant' },
   { sec: 'account', k: 'email', t: 'text', l: 'Email', id: 'myEmail', max: 60, ph: 'you@example.com' },
+  // put:, not apply: — regSet assigns S.set[k] BEFORE calling apply, which would make
+  // setRideCode's no-op guard swallow every edit. One writer, shared with the startup card.
   { sec: 'ride', k: 'code', t: 'text', l: 'Ride name', id: 'rideCode', max: 24, ph: 'e.g. watagans-42',
-    apply: () => { S.set.codeAuto = 0; saveSet(); startFriends(); } }, // typed by hand — bundles stop overriding it
+    put: v => setRideCode(v) }, // typed by hand — bundles stop overriding it
   // General
   { sec: 'map', k: 'hillshade', t: 'toggle', l: 'Terrain shading', id: 'setHill', apply: applyHill },
   { sec: 'map', k: 'stravaRide', t: 'toggle', l: 'Strava rides (blue)', id: 'setStravaRide', apply: applyStrava },
@@ -6497,10 +6859,30 @@ applyLayout(); // boot: saved layout applies before the first paint settles
 
 /* ---------------- boot ---------------- */
 async function boot() {
+  // First, not last: the shell must be durable before the 41 MB basemap starts — a
+  // rider who backgrounds the app mid-download otherwise gets nothing cached at all
+  // and no working offline app on the next open. ~2.7 MB against 41.5 MB, and most
+  // of it is already in the HTTP cache from the page load.
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  bootPhase('idb');
   await idb.open();
-  const recs = (await idb.all()).filter(r => r.kind === 'gpx' || r.kind === 'heatmap' || r.kind === 'pack' || !r.kind);
+  // Keys first, then targeted gets: getAll() structured-clones EVERY record in the
+  // store (cue caches, ride archives, thousands of tile records) and boot wants a
+  // handful. BOOT_SKIP only ever excludes — kind still comes from the record, because
+  // the id prefix does not determine it (see the note on BOOT_SKIP).
+  let scanned = [];
+  try {
+    const keys = (await idb.keys()).filter(k => typeof k === 'string' && !BOOT_SKIP.test(k));
+    scanned = (await idb.getMany(keys)).filter(Boolean);
+  } catch (e) { console.warn('record scan failed', e); }
+  const recs = scanned.filter(r => r.kind === 'gpx' || r.kind === 'heatmap' || r.kind === 'pack' || !r.kind);
+  S.rides = scanned.filter(r => r.kind === 'ride').sort((a, b) => a.ts - b.ts);
   recs.sort((a, b) => (a.kind === 'heatmap' ? -1 : 1) - (b.kind === 'heatmap' ? -1 : 1));
   let heatLoaded = false;
+  if (recs.length) bootPhase('tracks');
+  let yieldAt = performance.now() + 24, restored = 0;
   for (const r of recs) {
     try {
       if (r.kind === 'pack') {
@@ -6520,6 +6902,21 @@ async function boot() {
         S.tracks.push(trk);
       }
     } catch (e) { console.warn('restore failed', r.name, e); }
+    restored++;
+    // parseGPX + processTrack is one unbroken synchronous block per track; without a
+    // yield the startup screen cannot paint its progress at all. Time-budgeted, so a
+    // small store pays nothing. rAF, not setTimeout(0) — nested timeouts clamp to 4 ms.
+    // Skipped entirely when the tab is hidden: rAF NEVER fires there, and there is no
+    // paint to wait for anyway — yielding would wedge boot outright.
+    if (!document.hidden && performance.now() > yieldAt) {
+      bootPhase('tracks', restored + ' of ' + recs.length);
+      // raced against a timer: the tab can be hidden between the check and the frame
+      await new Promise(res => {
+        let done = false; const fin = () => { if (!done) { done = true; res(); } };
+        requestAnimationFrame(fin); setTimeout(fin, 100);
+      });
+      yieldAt = performance.now() + 24;
+    }
   }
   if (!recs.length) {
     try {
@@ -6532,6 +6929,11 @@ async function boot() {
       }
     } catch (e) {}
   }
+  // GPS from here, not after the map: the permission prompt must not wait behind a
+  // 41 MB download. Placed AFTER the restore loop on purpose — processTrack has
+  // already anchored REF, so onFix's own setRef fallback stays dormant and the
+  // projection origin is unchanged. Every onFix callee already guards on mapReady.
+  if (!S.demo) startGPS(); // show the location dot from the start, not only while navigating
   // Shared link, two params:
   //   ?b=<slug>      — a pack in the Dingo shares repo, resolved at HEAD so
   //                    refreshing the pack updates links already handed out
@@ -6545,9 +6947,8 @@ async function boot() {
   if (slug) shared = await resolveShareUrl(slug);
   if (shared) {
     try {
-      const resp = await fetch(shared);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const blob = await resp.blob();
+      bootPhase('share');
+      const blob = await fetchBlobProgress(shared, bootBytes);
       const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
       const isZip = head[0] === 0x50 && head[1] === 0x4B; // 'PK'
       // remember where this came from (pack slug, or the full legacy URL) so
@@ -6586,24 +6987,40 @@ async function boot() {
   // No tile reload needed on this path: the import above is fully awaited
   // before initMap() below, which reads basemap/strava/sat tiles from IDB.
   // backtrack trail from the last ride survives an app restart
-  try { const tr = await idb.get('trail'); if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; } } catch (e) {}
-  try { const pr = await idb.get('prog'); if (pr && pr.spans) S.prog = { track: pr.track || null, spans: pr.spans, prevIdx: null }; } catch (e) {}
-  try { S.rides = (await idb.all()).filter(r => r.kind === 'ride').sort((a, b) => a.ts - b.ts); } catch (e) {}
+  // (S.rides came from the single keys-only scan above — no second full store read)
+  try {
+    const [tr, pr] = await idb.getMany(['trail', 'prog']);
+    if (tr && tr.pts) { S.trail = tr.pts; S.trailTrack = tr.trackId || null; }
+    if (pr && pr.spans) S.prog = { track: pr.track || null, spans: pr.spans, prevIdx: null };
+  } catch (e) {}
   // boot: nothing pre-selected — all tracks show on the map, tap one to pick it
   refreshTrackList(); refreshEmpty(); updateBottomBar();
-  await initMap(); // cue analysis needs basePM, so it runs after the map boots
-  if (S.sel >= 0 && !S.tracks[S.sel].alerts)
-    analyzeRoute(S.tracks[S.sel]).then(() => { updateBottomBar(); refreshMapData(); });
-  fitSelected();
-  if (!S.demo) startGPS(); // show the location dot from the start, not only while navigating
-  startFriends(); // ride-name socket up from boot: turn-point edits sync while planning too
-  maybeIntro(); // first launch only — after the map is up, so it lands on a real screen
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+  bootPhase('map');
+  // returns as soon as the map is on screen; the basemap may still be coming.
+  // If it throws before arming baseSettle, settle here — boot awaits baseReady
+  // below, so an unsettled promise would deadlock the rest of this function.
+  try { await initMap(); } catch (e) { console.error('[dingonav] map init failed', e); baseSettle(); }
+  fitSelected();   // llBounds are lat/lon — independent of the basemap
+  startFriends();  // ride-name socket up from boot: turn-point edits sync while planning too
+  // maybeIntro() used to fire here, raising a second modal the moment the map
+  // appeared. The intro now lives inside the startup card and is already on screen
+  // by this point — bootDone() decides whether to hold for it.
+  // Hold the startup screen until the basemap is in: without it a first-run rider
+  // would be dismissed onto an empty dark void. analyzeRouteInner awaits baseReady
+  // too, so this is about WHEN the screen goes, not about cue correctness.
+  await baseReady;
+  if (S.sel >= 0 && !S.tracks[S.sel].alerts) {
+    bootPhase('cues');
+    await analyzeRoute(S.tracks[S.sel]).then(() => { updateBottomBar(); refreshMapData(); });
   }
 }
 window.__nav = S;
-boot();
+// .finally, not the happy path: a thrown boot must still drop the startup screen.
+// baseSettle too — if initMap threw before arming it, an analyzeRoute waiting on
+// baseReady would otherwise hang forever.
+boot()
+  .catch(e => console.error('[dingonav] boot failed', e))
+  .finally(() => { baseSettle(); bootDone(); });
 </script>
 </body>
 </html>
