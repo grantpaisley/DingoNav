@@ -64,20 +64,24 @@
   body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 106px); left:16px}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 256px)}
   body.navving #lockPill{top:calc(env(safe-area-inset-top) + 292px)}
-  /* Stark Varg battery/mode pill — top-right, under the mute button while riding.
+  /* Stark Varg pill — the SECOND number slot: it carries whatever the big left readout
+     didn't take (battery if the big one is speed, speed if the big one is battery). Sits
+     immediately left of the box button and matches its height, so the two read as one row.
      Doubles as the BLE handoff switch: the bike allows ONE connection, so
      tap = release it to the Stark app (tuning), tap again = take it back. */
-  #vargPill{position:fixed; top:calc(env(safe-area-inset-top) + 12px); right:10px; z-index:12;
-    background:rgba(14,18,22,.85); border:1px solid #2a3540; border-radius:12px; padding:6px 11px;
-    font-size:17px; font-weight:700; display:none; align-items:center; gap:8px;
+  #vargPill{position:fixed; top:calc(env(safe-area-inset-top) + 10px); right:108px; z-index:12;
+    height:88px; box-sizing:border-box;
+    background:rgba(14,18,22,.85); border:1px solid #2a3540; border-radius:24px; padding:0 18px;
+    font-size:26px; font-weight:700; display:none; align-items:center; gap:8px;
     font-variant-numeric:tabular-nums; cursor:pointer}
   #vargPill.on{display:flex}
-  #vargPill .vm{font-size:13px; font-weight:800; color:var(--accent)}
+  #vargPill .vm{font-size:15px; font-weight:800; color:var(--accent)}
+  #vargPill .u{font-size:15px; font-weight:600; color:var(--dim)}
   #vargPill.low{border-color:var(--bad); color:var(--bad)}
   #vargPill.wait{color:var(--dim)} #vargPill.wait .vm{color:var(--dim)}
-  #vargPill.rel{border-style:dashed; color:var(--dim); font-size:13px; font-weight:600}
-  /* riding: battery lives in the main number slot; the handoff pill is a stopped activity */
-  body.navving #vargPill{display:none !important}
+  #vargPill.rel{border-style:dashed; color:var(--dim); font-size:15px; font-weight:600}
+  /* riding: the pill stays visible AND live — it's a number slot and a control, at full
+     brightness rather than dimmed like the rest of the ride chrome */
   /* Varg reverse/crawl takeover — whole screen tinted, the word itself knocked out
      to full transparency (SVG mask), pulsing. Above panel/glove: nothing should
      out-shout "you are in reverse". */
@@ -86,15 +90,24 @@
   #vargOver text{font:900 16vw system-ui,sans-serif; letter-spacing:.02em}
   @keyframes vgPulse{0%,100%{opacity:1}50%{opacity:.55}}
   /* mode digit: a bare number on the opposite edge to the main one — the centre stays clear.
-     Squarish screens fade it 4s after a change (JS adds .fade); wide keeps it resident. */
-  #vargModeBig{position:fixed; right:12px; top:calc(env(safe-area-inset-top) + 12px); z-index:10; background:none;
-    padding:0 6px; font-size:138px; font-weight:800; display:none; pointer-events:none;
+     The digit is resident; the settings block underneath is the thing that fades (see #vargModeDetail). */
+  /* now the digit is resident it must clear the box button on BOTH screens, not just while riding */
+  #vargModeBig{position:fixed; right:16px; top:calc(env(safe-area-inset-top) + 106px); z-index:10; background:none;
+    padding:0 6px; font-size:138px; font-weight:800; display:none; pointer-events:none; text-align:right;
     text-shadow:0 2px 14px rgba(0,0,0,.9), 0 0 5px rgba(0,0,0,.7);
-    font-variant-numeric:tabular-nums; transition:opacity .6s}
+    font-variant-numeric:tabular-nums}
   #vargModeBig.on{display:block}
-  #vargModeBig.fade{opacity:0}
-  /* riding: the box button owns the top-right corner — the mode digit sits below it, slightly inboard */
-  body.navving #vargModeBig{top:calc(env(safe-area-inset-top) + 106px); right:16px}
+  /* the digit alone takes the tap — the map keeps the rest of the corner */
+  #vargModeNum{display:block; line-height:.92; pointer-events:auto; cursor:pointer}
+  #vargModeBig.neutral #vargModeNum{color:var(--ok)}
+  /* what the mode actually is: values right-aligned, labels left-aligned, 4s then gone */
+  #vargModeDetail{display:grid; grid-template-columns:auto auto; column-gap:10px; justify-content:end;
+    font-size:22px; font-weight:700; line-height:1.35; margin-top:4px; transition:opacity .6s}
+  #vargModeDetail.fade{opacity:0}
+  #vargModeDetail .v{text-align:right}
+  #vargModeDetail .l{text-align:left; color:var(--dim)}
+  #vargModeDetail .n{grid-column:1/-1; text-align:right; color:var(--ok)}
+  /* the box button owns the top-right corner — the mode digit sits below it, slightly inboard */
   /* indicator telltales — big translucent glyphs across the top, same visual
      language as the speed/mode readouts. Each hidden until its bit is live, so
      nothing shows unless a blinker/beam is actually on. */
@@ -136,6 +149,49 @@
   #dlgMsg b{color:var(--accent)}
   #dlgOk{margin-top:18px; width:100%; padding:13px; border:none; border-radius:12px;
     background:var(--accent); color:#00252b; font-size:16px; font-weight:800; cursor:pointer}
+  /* first-visit capture lives in the startup card now (#suIntro) — see the block there */
+  /* track picker — one card, two modes (rider-asked 'pick' / Follow-mode 'off') */
+  #trkPick{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(90vw,380px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
+    padding:16px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #trkPick.on{display:block}
+  #trkPick h4{font-size:17px; margin-bottom:2px}
+  #trkPick.off h4{color:var(--bad)}
+  #tpSub{font-size:12px; color:var(--dim); margin-bottom:12px}
+  #tpList{display:flex; flex-direction:column; gap:6px; max-height:44vh; overflow-y:auto}
+  .tpRow{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px;
+    border:1px solid #2a3540; cursor:pointer}
+  .tpRow.sel{border-color:var(--accent); background:rgba(0,229,255,.08)}
+  .tpRow .dot{width:10px; height:10px; border-radius:50%; flex:none; background:var(--dim)}
+  .tpRow.on .dot{background:var(--ok)} .tpRow.left .dot{background:var(--bad)}
+  .tpName{font-size:15px; color:var(--fg)}
+  .tpMeta{font-size:12px; color:var(--dim)}
+  .tpRow.on .tpMeta{color:var(--ok)} .tpRow.left .tpMeta{color:var(--bad)}
+  #tpRev{display:flex; align-items:center; justify-content:space-between; margin-top:14px;
+    padding-top:12px; border-top:1px solid #2a3540; font-size:14px; color:var(--dim)}
+  #tpRevSw{width:52px; height:30px; border-radius:15px; background:#2a3540; position:relative; cursor:pointer; flex:none}
+  #tpRevSw::after{content:''; position:absolute; top:3px; left:3px; width:24px; height:24px;
+    border-radius:50%; background:var(--fg); transition:left .18s}
+  #tpRevSw.rev{background:var(--warn)} #tpRevSw.rev::after{left:25px}
+  #tpBtns{display:flex; gap:10px; margin-top:14px}
+  #tpBtns button{flex:1; padding:12px; border:1px solid #2a3540; border-radius:12px;
+    background:var(--panel2); color:var(--fg); font-size:15px; font-weight:700; cursor:pointer}
+  #tpBtns button.go{background:var(--ok); border-color:var(--ok); color:#04240f; font-weight:800}
+  /* ride briefing — the last thing between the rider and moving, so it reads at a glance */
+  #briefDlg{position:fixed; z-index:41; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(90vw,380px); background:var(--panel); border:1px solid #2a3540; border-radius:16px;
+    padding:18px; display:none; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #briefDlg.on{display:block}
+  #briefName{font-size:21px; font-weight:800; line-height:1.2}
+  #briefMode{font-size:13px; color:var(--accent); text-transform:uppercase; letter-spacing:.06em; margin-bottom:14px}
+  #briefRows{display:grid; grid-template-columns:auto 1fr; gap:8px 14px; font-size:15px}
+  #briefRows .bl{color:var(--dim)}
+  #briefRows .bv{text-align:right; font-variant-numeric:tabular-nums}
+  #briefRows .bv.warn{color:var(--warn); font-weight:700}
+  #briefBtns{display:flex; gap:10px; margin-top:18px}
+  #briefBtns button{flex:1; padding:14px; border:1px solid #2a3540; border-radius:12px;
+    background:var(--panel2); color:var(--fg); font-size:16px; font-weight:700; cursor:pointer}
+  #briefBtns button.go{background:var(--ok); border-color:var(--ok); color:#04240f; font-weight:800}
 
   /* ---------- training ride: demo chooser + coach cards + spotlight (2026-07-19 design)
      (#colourPick shares the chooser look — ☰ Track colour tile) ---------- */
@@ -189,12 +245,16 @@
      points at true north (straight up in north-up mode) */
   #orientNeedle{position:absolute; inset:0; display:flex; justify-content:center;
     pointer-events:none; will-change:transform}
-  #orientNeedle::before{content:''; width:0; height:0; border:7px solid transparent;
-    border-bottom:12px solid var(--bad); margin-top:4px}
+  /* hard against the button's top border — at 4px it collided with the glyph on short
+     screens, where the button is only 52px tall and the 40px N leaves nothing spare */
+  #orientNeedle::before{content:''; width:0; height:0; border:6px solid transparent;
+    border-bottom:11px solid var(--bad); margin-top:1px}
+  /* the glyph steps down out of the needle's way rather than the needle riding over it */
+  #orientCtl #orientGlyph{margin-top:8px; line-height:1}
   #baseRow{position:fixed; left:0; right:0; bottom:calc(var(--chromeB,0px) + 8px); z-index:16;
     display:flex; align-items:flex-end; padding:0 10px; pointer-events:none}
-  #baseRow .ctl{pointer-events:auto}
-  /* landscape: ☰ hard left, dot hard right, − / + together in the centre */
+  #baseRow .ctl, #baseRow #startBtn{pointer-events:auto}
+  /* landscape: ☰ hard left, dot hard right, − / + together in the centre, START after the + */
   #zoomOut{margin-left:auto} #zoomIn{margin-left:10px} #dotBtn{margin-left:auto}
   /* the dot is the one round face — centre-on-me; wears the centre-lock ring */
   body:not(.portrait) #baseRow #dotBtn{width:96px; height:96px; border-radius:50%; font-size:44px}
@@ -207,12 +267,19 @@
   body.turnmode #zoomOut, body.turnmode #zoomIn{display:none}
   body.portrait.turnmode #baseRow .ctl{flex:0 0 25vw}
   body.portrait.turnmode #baseRow #dotBtn{margin-left:auto}
-  /* START: green, above the dot, stopped-with-a-track only */
-  #startBtn{position:fixed; right:10px; bottom:calc(var(--chromeB,0px) + 112px); z-index:16;
+  /* START: green, stopped-with-a-track only. In landscape it's an in-flow member of the
+     base row, sitting in the gap between the + and the dot. */
+  /* margin-left:auto here makes THREE auto margins in the row (zoomOut, START, dot), so
+     the free space splits into equal thirds and START lands midway between + and the dot.
+     With START hidden it falls back to the original two-auto split, ☰ | − + | ◎. */
+  #startBtn{margin-left:auto; z-index:16; flex:none;
     height:68px; padding:0 32px; border:none; border-radius:18px; background:var(--ok); color:#04240f;
     font-size:22px; font-weight:800; letter-spacing:.03em; cursor:pointer; display:none;
     box-shadow:0 4px 18px rgba(0,0,0,.45)}
   body:not(.navving) #startBtn.on{display:block}
+  /* portrait / square: the row is four equal quarters and has no room for a fifth item —
+     START comes back out of flow and floats above the dot, as before */
+  body.portrait #startBtn{position:fixed; right:10px; bottom:calc(var(--chromeB,0px) + 112px); margin-left:0}
   /* ride-direction toggle: START's twin above ☰ (bottom-left); amber when reversed.
      Stopped-screen only — never during navigation. */
   #revToggle{position:fixed; left:10px; bottom:calc(var(--chromeB,0px) + 112px); z-index:16;
@@ -262,6 +329,8 @@
   .gtile{height:min(26vh,180px); border-radius:18px; background:var(--panel2); border:2px solid #2a3540;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer}
   .gtile:active{background:#26313d}
+  .gtile .gs{font-size:12px; color:var(--dim); margin-top:-4px; text-align:center; padding:0 6px}
+  .gtile.active .gs{color:var(--accent); opacity:.8}
   .gtile.active{border-color:var(--accent)}
   .gtile .gi{font-size:42px; line-height:1; display:flex; align-items:center; justify-content:center; gap:10px}
   .gtile .gi .gv{font-size:26px; font-weight:800; font-variant-numeric:tabular-nums}
@@ -382,7 +451,7 @@
   body.daymode #dotBtn{background:rgba(245,245,247,.92); border-color:#c9c9ce; color:#1d1d1f}
   body.daymode #hudSpeed, body.daymode #vargModeBig{color:#15202b;
     text-shadow:0 1px 8px rgba(255,255,255,.85), 0 0 3px rgba(255,255,255,.7)}
-  body.daymode #hudSpeed small{color:#3f4a55}
+  body.daymode #hudSpeed small, body.daymode #vargModeDetail .l{color:#3f4a55}
   body.daymode #hudSpeed.cd, body.daymode #hudSpeed.cd small{color:#b45309}
   body.daymode #hudSpeed.low, body.daymode #hudSpeed.low small{color:#c22a2a}
   body.daymode #hudBox{background:rgba(255,255,255,.72); border-bottom-color:#d0d5db}
@@ -477,8 +546,12 @@
   #startup.bye{pointer-events:none}
   #suShade{position:fixed; inset:0; background:var(--bg); transition:opacity .22s ease}
   #startup:not(.loading):not(.bye) #suShade{display:none}
+  /* Scrolls rather than squeezes: the first-run form adds ~190px and the slow callout
+     another ~150, which overflows 720x720 and certainly the short-viewport case. Tap
+     targets stay 64px — a gloved form should scroll, not shrink. */
   #suCard{position:relative; display:none; width:min(88vw,420px); background:var(--panel);
     border:1px solid #2a3540; border-radius:16px; padding:22px 20px;
+    max-height:88vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
     box-shadow:0 8px 40px rgba(0,0,0,.6); transition:opacity .22s ease}
   #startup.loading #suCard, #startup.bye #suCard{display:block}
   #startup.bye #suShade, #startup.bye #suCard{opacity:0}
@@ -498,19 +571,32 @@
     font-variant-numeric:tabular-nums}
   #suPct{color:var(--dim); flex:none}
   #suNote{font-size:12.5px; color:var(--dim); margin-top:4px; min-height:1.3em; line-height:1.3}
-  /* ride name — never blocks boot; commits on blur/Enter, not per keystroke */
-  #suNameLbl{display:block; font-size:15px; font-weight:600; margin:18px 0 6px}
-  #suNameLbl span{display:block; font-size:12.5px; font-weight:400; color:var(--dim); margin-top:2px}
-  #suName{width:100%; height:64px; background:var(--bg); border:1px solid #2a3540; color:var(--fg);
-    border-radius:12px; padding:0 14px; font-size:20px; font-family:inherit}
-  #suName:focus{outline:none; border-color:var(--accent)}
+  /* card fields — never block boot; commit on blur/Enter, not per keystroke */
+  .suLbl{display:block; font-size:15px; font-weight:600; margin:18px 0 6px}
+  .suLbl span{display:block; font-size:12.5px; font-weight:400; color:var(--dim); margin-top:2px}
+  #suCard input{width:100%; box-sizing:border-box; height:64px; background:var(--bg);
+    border:1px solid #2a3540; color:var(--fg); border-radius:12px; padding:0 14px;
+    font-size:20px; font-family:inherit}
+  #suCard input:focus{outline:none; border-color:var(--accent)}
+  /* first run only — the old #introDlg, gated on S.set.seenIntro via .firstrun */
+  #suIntro, #suIntroBtns{display:none}
+  #startup.firstrun #suIntro{display:block}
+  /* sticky: the card scrolls on a first run, and the primary action must never be the
+     thing below the fold — a gloved rider should not have to scroll to find it */
+  #startup.firstrun #suIntroBtns{display:flex; gap:10px; margin-top:18px;
+    position:sticky; bottom:-22px; background:var(--panel); padding:10px 0 22px;
+    box-shadow:0 -10px 14px -6px var(--panel)}
+  #suIntroBtns .btn{flex:1 1 0; padding:16px 12px}
+  .suGday{font-size:15px; font-weight:600; margin-top:18px; padding-top:16px;
+    border-top:1px solid #2a3540}
   #startup .btn{flex:none; min-height:64px; padding:16px 30px; font-size:17px; pointer-events:auto}
   #suSlow{display:none} #startup.slow #suSlow{display:block}
   /* day mode: #startup is OUTSIDE #panel, so it inherits none of the overrides below */
   body.daymode #startup{--panel:#eef1f4; --panel2:#ffffff; --bg:#e4e9ee; --fg:#15202b;
     --dim:#5a6a78; color:var(--fg)}
-  body.daymode #suCard, body.daymode #suName, body.daymode #suBar,
+  body.daymode #suCard, body.daymode #suCard input, body.daymode #suBar,
   body.daymode #startup .btn{border-color:#c9c9ce}
+  body.daymode .suGday{border-top-color:#c9c9ce}
   body.daymode #startup .btn.primary{color:#fff}      /* #00252b on #007AFF fails in sun */
   /* The ready-empty text floats over the live map, and what is BEHIND it does not
      track the theme: with no basemap the map renders dark even in day mode. So it
@@ -529,14 +615,17 @@
     body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px); left:12px}
     body.navving #holdPill{top:calc(env(safe-area-inset-top) + 148px)}
     body.navving #lockPill{top:calc(env(safe-area-inset-top) + 182px)}
-    #vargModeBig{font-size:76px}
-    body.navving #vargModeBig{top:calc(env(safe-area-inset-top) + 64px); right:12px}
+    #vargModeBig{font-size:76px; top:calc(env(safe-area-inset-top) + 64px); right:12px}
+    #vargModeDetail{font-size:16px; column-gap:8px}
     body.navving #vargInd{top:calc(env(safe-area-inset-top) + 70px)}
     #vargInd .beam{font-size:26px}
     #progress.countdown #progCanvas{height:52px}
     /* short viewports (landscape / split-screen): shrink the corner + base buttons
        so the map keeps some height */
     #orientCtl, #boxBtn, #baseRow .ctl{width:60px; height:52px; border-radius:15px; font-size:26px}
+    /* pill tracks the shrunken box button: same height, still butted up against it */
+    #vargPill{height:52px; right:80px; border-radius:15px; padding:0 12px; font-size:20px}
+    #vargPill .vm, #vargPill .u{font-size:13px}
     body:not(.portrait) #baseRow #dotBtn{width:64px; height:64px; border-radius:50%; font-size:30px}
     body.portrait #baseRow .ctl{height:52px}
     #startBtn, #revToggle{height:52px; font-size:18px; padding:0 22px; bottom:calc(var(--chromeB,0px) + 68px)}
@@ -549,11 +638,14 @@
     .gtile{height:min(24vh,110px); gap:3px}
     .gtile .gi{font-size:24px}
     .gtile .gl{font-size:11px}
-    /* startup card: neither blessed viewport hits this (both are 720 tall) — split-screen only */
-    #suCard{padding:16px}
+    /* startup card: neither blessed viewport hits this (both are 720 tall) — split-screen only.
+       The card scrolls, so this only trims the chrome; it never shrinks a tap target below 52px. */
+    #suCard{padding:16px; max-height:92vh}
     #suBar{margin:12px 0 6px}
-    #suName{height:52px; font-size:18px}
-    #suNameLbl{margin:12px 0 6px}
+    #suCard input{height:52px; font-size:18px}
+    .suLbl{margin:12px 0 6px}
+    .suGday{margin-top:12px; padding-top:10px}
+    #startup.firstrun #suIntroBtns{margin-top:12px}
     #startup .btn{min-height:52px; padding:12px 22px}
   }
 
@@ -602,9 +694,10 @@
      default (and media-query) sizing exactly as before */
   #hudSpeed[data-sz]{font-size:calc(138px*var(--sz,1))}
   #hudSpeed[data-sz] small{font-size:calc(50px*var(--sz,1))}
-  #vargPill[data-sz]{font-size:calc(17px*var(--sz,1))}
-  #vargPill[data-sz] .vm{font-size:calc(13px*var(--sz,1))}
+  #vargPill[data-sz]{font-size:calc(26px*var(--sz,1))}
+  #vargPill[data-sz] .vm, #vargPill[data-sz] .u{font-size:calc(15px*var(--sz,1))}
   #vargModeBig[data-sz]{font-size:calc(138px*var(--sz,1))}
+  #vargModeBig[data-sz] #vargModeDetail{font-size:calc(22px*var(--sz,1))}
   #vargInd .blink[data-sz]{font-size:calc(60px*var(--sz,1))}
   #vargInd .beam[data-sz]{font-size:calc(34px*var(--sz,1))}
   /* corner resize handle on readouts while editing */
@@ -679,7 +772,7 @@
   <span class="ind beam" id="indBeam" title="high beam">≣</span>
   <span class="ind blink" id="indR" title="right indicator">▶</span>
 </div>
-<div id="vargModeBig"><span id="vargModeNum">—</span></div>
+<div id="vargModeBig"><span id="vargModeNum">—</span><div id="vargModeDetail"></div></div>
 <div id="vargOver"><svg width="100%" height="100%" preserveAspectRatio="none"><defs><mask id="vgMask">
   <rect width="100%" height="100%" fill="#fff"/>
   <text id="vargOverTxt" x="50%" y="50%" text-anchor="middle" dominant-baseline="central" fill="#000">REVERSE</text>
@@ -689,6 +782,27 @@
 <div id="toast"></div>
 <div id="dlgShade"></div>
 <div id="dlg"><h4 id="dlgTitle"></h4><div id="dlgMsg"></div><button id="dlgOk">Got it</button></div>
+<!-- first visit only (who you are) now lives inside the startup card as #suIntro,
+     so the cold-boot download is spent on setup instead of a bare progress bar -->
+<!-- track picker: long-press a track / tap the bottom bar, or Follow mode noticing you
+     left the route while sitting on another track you've loaded -->
+<div id="trkPick">
+  <h4 id="tpTitle">Choose track</h4>
+  <div id="tpSub"></div>
+  <div id="tpList"></div>
+  <div id="tpRev"><span>Ride reversed</span><span id="tpRevSw"></span></div>
+  <div id="tpBtns"></div>
+</div>
+<!-- ride briefing: what you're about to set off on, confirmed before the screen goes to riding chrome -->
+<div id="briefDlg">
+  <div id="briefName"></div>
+  <div id="briefMode"></div>
+  <div id="briefRows"></div>
+  <div id="briefBtns">
+    <button id="briefCancel">Back</button>
+    <button id="briefGo" class="go">Ride</button>
+  </div>
+</div>
 <div id="demoPick"><h4>Demo ride</h4>
   <button class="dpBtn" id="dpTrain"><b>Training ride</b><span>learn DingoNav on a guided fake ride — no track needed</span></button>
   <button class="dpBtn" id="dpPlain"><b>Plain demo</b><span id="dpPlainSub">replay the selected track at 30 km/h</span></button>
@@ -711,9 +825,11 @@
   <div class="ctl" id="menuBtn" title="menu"><svg class="ic"><use href="#i-menu"/></svg></div>
   <div class="ctl" id="zoomOut" title="zoom out — hold to save as riding zoom"><svg class="ic"><use href="#i-minus"/></svg></div>
   <div class="ctl" id="zoomIn" title="zoom in — hold to save as turn zoom"><svg class="ic"><use href="#i-plus"/></svg></div>
+  <!-- landscape: START rides in the row between + and the dot. Portrait pulls it back
+       out of flow (the row is four equal quarters there) — see #startBtn CSS. -->
+  <button id="startBtn" title="start navigation">START</button>
   <div class="ctl" id="dotBtn" title="centre on me"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
 </div>
-<button id="startBtn" title="start navigation">START</button>
 <button id="revToggle" title="ride direction — tap to reverse"><svg class="ic"><use href="#i-arrow-left-right"/></svg><span id="revLbl">FORWARD</span></button>
 <button id="markTurn" title="add a mark on the track">ADD MARK</button>
 <div id="turnHint">ADD MARK then tap the track · tap a point to remove · long-press a point to change it</div>
@@ -726,10 +842,11 @@
 <div id="lockPill" title="centre lock — long-press map to unlock"><svg class="ic"><use href="#i-lock"/></svg> locked</div>
 
 <!-- Startup / readiness screen. `loading` is in the MARKUP so the card paints before
-     the app script runs; boot drops it via bootDone(). NOT onboarding — there is no
-     seen-flag, a warm launch just flashes it. Dropping `loading` hands the same
-     element to refreshEmpty(), which owns the no-tracks state from then on (this
-     absorbed the old #emptyState). -->
+     the app script runs. The card is up while boot is working OR while first-run
+     setup is unanswered — the readiness half carries no seen-flag (a warm launch
+     just flashes it); only the .firstrun block is gated, on S.set.seenIntro.
+     Dropping `loading` hands the same element to refreshEmpty(), which owns the
+     no-tracks state from then on (this absorbed the old #emptyState). -->
 <div id="startup" class="on loading">
   <div id="suShade"></div>
   <div id="suCard">
@@ -738,10 +855,27 @@
     <div id="suBar"><i id="suFill"></i></div>
     <div id="suStep"><span id="suStepTxt">Starting…</span><span id="suPct"></span></div>
     <div id="suNote"></div>
-    <label id="suNameLbl" for="suName">Ride name
+    <!-- first run only: the old #introDlg, folded in so the cold-boot download is
+         spent on setup instead of a bare progress bar -->
+    <div id="suIntro">
+      <div class="suGday">G'day — two things before you ride.</div>
+      <label class="suLbl" for="introName">Your name
+        <span>shown to other riders on the same ride</span></label>
+      <input id="introName" type="text" maxlength="12" placeholder="Grant"
+        autocomplete="off" enterkeyhint="next">
+      <label class="suLbl" for="introEmail">Email
+        <span>optional — for ride packs and updates</span></label>
+      <input id="introEmail" type="email" maxlength="60" placeholder="you@example.com"
+        autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next">
+    </div>
+    <label class="suLbl" id="suNameLbl" for="suName">Ride name
       <span>optional — everyone who types the same name sees each other on the map</span></label>
     <input id="suName" type="text" maxlength="24" placeholder="e.g. watagans-42"
       autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done">
+    <div class="btnRow" id="suIntroBtns">
+      <button class="btn primary" id="introSave">Start demo ride</button>
+      <button class="btn" id="introSkip">Skip</button>
+    </div>
     <div class="callout" id="suSlow">The offline map is a one-time ~41 MB download, stored on the
       device — later opens are instant.
       <div class="btnRow"><button class="btn" id="suSkip">Continue without it</button></div></div>
@@ -752,8 +886,8 @@
       <div style="color:var(--dim)">No tracks loaded yet</div>
     </div>
     <div id="emptyPacks" style="display:flex; flex-direction:column; gap:10px"></div>
-    <button class="btn primary" id="emptyLoad">Load GPX / heatmap files</button>
-    <button class="btn" id="emptyTrain">Try the training ride</button>
+    <!-- loading files lives in settings; the training ride is a first-visit offer only -->
+    <button class="btn primary" id="emptyTrain">Try the training ride</button>
   </div>
 </div>
 
@@ -765,7 +899,7 @@
   <div class="gtile" id="gDemo"><div class="gi"><svg class="ic"><use href="#i-circle-play"/></svg></div><div class="gl">Demo</div></div>
   <div class="gtile" id="gLayers"><div class="gi"><svg class="ic"><use href="#i-layers"/></svg></div><div class="gl">Day</div></div>
   <div class="gtile" id="gMute"><div class="gi"><svg class="ic"><use href="#i-volume-2"/></svg></div><div class="gl">Mute</div></div>
-  <div class="gtile" id="gTracks"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Tracks</div></div>
+  <div class="gtile" id="gNavMode"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Follow</div><div class="gs"></div></div>
   <div class="gtile" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
   <div class="gtile" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
   <div class="gtile" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
@@ -858,7 +992,7 @@
 
   <div class="tabSec" id="tabNav">
     <div data-reg="nav"></div>
-    <div class="btnRow"><button class="btn" id="demoBtn"><svg class="ic"><use href="#i-circle-play"/></svg> Demo ride (simulate GPS)</button><button class="btn" id="testBeep"><svg class="ic"><use href="#i-volume-2"/></svg> Test beep</button></div>
+    <div class="btnRow"><button class="btn" id="demoBtn"><svg class="ic"><use href="#i-circle-play"/></svg> Demo ride (simulate GPS)</button><button class="btn" id="testBeep"><svg class="ic"><use href="#i-volume-2"/></svg> Test beep</button><button class="btn" id="testLatch"><svg class="ic"><use href="#i-volume-2"/></svg> Snap on</button><button class="btn" id="testUnlatch"><svg class="ic"><use href="#i-volume-2"/></svg> Snap off</button></div>
     <div class="hint">Demo replays the selected track — use it to hear the alerts before a real ride.</div>
   </div>
 
@@ -1024,10 +1158,22 @@ const S = {
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure' },
+    varg: false, vargSrc: 'vp', vpUrl: '', rideProfile: 'adventure', bigLeft: '',
+    navMode: 'follow', startBrief: true },  // navMode: follow | explore | snap — survives restarts by design
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
+/* bigLeft migration: the big left readout used to be implied by rideProfile and flipped by the
+   UI-tab "Swap main number" toggle — two settings that interacted. Settle it once into one
+   explicit choice the rider can read straight off the Stark tab. Also runs on config import,
+   which can carry a swapMain from an older bench setup. */
+function migrateBigLeft() {
+  if (S.set.bigLeft) return;
+  const wasBattery = (S.set.rideProfile || 'adventure') === 'stark';
+  S.set.bigLeft = (S.set.swapMain ? !wasBattery : wasBattery) ? 'battery' : 'speed';
+  delete S.set.swapMain;
+}
+migrateBigLeft();
 function saveSet() { localStorage.setItem('dingonav-set', JSON.stringify(S.set)); }
 // v2 migration: ♥ favourite spans become the max zoom preset
 if (!S.set._v2) {
@@ -1082,7 +1228,7 @@ const ADV_D = {
   apprUnit: 's', apprS: 15, apprM: 250, departUnit: 'm', departM: 30, departS: 4,
   btnOp: 0.4, trailGap: 20,
   routeWOut: 6, routeWIn: 11, coreFrac: 0.67, caseMode: 'auto', // route width px at overview/nav zoom; core share; casing auto = dark day / white night
-  colDone: '#7F8791', colDoneCase: '#1A1E24', progDoneOp: 0.5, progMissOp: 0.5, // travelled grey + reduced case; missed = half-strength colour, no case
+  colDone: '#7F8791', colDoneCase: '#1A1E24', progDoneOp: 0.5, // travelled grey + reduced case
   progContM: 150, // max route-metres between on-track fixes that still count as riding the stretch
   recentM: 75, progRecentOp: 0.8, // just-ridden tail: route colour at strength, linking marker to the grey history
   rideSimpM: 10, // ride-archive simplification tolerance (Douglas-Peucker, m)
@@ -1090,6 +1236,9 @@ const ADV_D = {
   slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
   colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
   colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
+  // backtrack thread: the stretches ridden OFF the route are drawn red at route-core
+  // width, so where you strayed reads back off the map after the fact
+  colOffTrail: '#ff2d2d', offTrailOp: 0.75,
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
@@ -1691,6 +1840,18 @@ const BEEP = {
   done()     { if (!S.set.sound) return; tone(700, .09, 0); tone(1050, .12, .12); console.log('[beep] turn done'); },
   off()      { if (!S.set.sound) return; tone(240, .35, 0); tone(200, .45, .4); vib([300, 100, 300]); console.log('[beep] off-track'); },
   back()     { if (!S.set.sound) return; tone(600, .1, 0); tone(900, .12, .13); console.log('[beep] back-on-track'); },
+  /* Snap's pair of chimes share one motif, which is the point: the rider learns a single
+     shape and hears where it stops.
+       latch   C5→F5     — the gesture ARRIVING, closed on the tonic. Snap latches often in
+                           dense trail country, so the landing is clipped to a tick.
+       unlatch C5→F5→A5  — the same opening, but it climbs past the resolution and hangs
+                           open on the third: "on my way into the unknown".
+     unlatch is Snap's counterpart to off(), and deliberately its opposite: where off()
+     falls (240→200) and growls a warning, this one rises. Nothing has gone wrong. */
+  latch()    { if (!S.set.sound) return; tone(523, .11, 0); tone(698, .20, .13);
+    vib([90, 60, 140]); console.log('[beep] latched — following'); },
+  unlatch()  { if (!S.set.sound) return; tone(523, .13, 0); tone(698, .11, .15); tone(880, .40, .28);
+    vib([90, 60, 90, 60, 220]); console.log('[beep] unlatched — exploring'); },
   straight() { if (!S.set.sound) return; tone(990, .3, 0); vib([160]); console.log('[beep] straight'); },
   // danger ignores the mute toggle by design — a stop-level hazard always barks
   danger()   { tone(1320, .12, 0); tone(1320, .12, .18); tone(1320, .3, .36); vib([200, 80, 200, 80, 400]); console.log('[beep] danger'); },
@@ -1992,6 +2153,18 @@ function caseColor() {
 }
 function totalW() { return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut'), 17, ADV('routeWIn')]; }
 function coreW() { const f = ADV('coreFrac'); return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut') * f, 17, ADV('routeWIn') * f]; }
+/* backtrack thread, split by the 'off' flag baked into each run of trail points */
+const offSeg = ['==', ['get', 'off'], 1];
+function offTrailCol() { return ['case', offSeg, ADV('colOffTrail'), '#9fb4c6']; }
+function offTrailOp() { return ['case', offSeg, ADV('offTrailOp'), 0.85]; }
+/* zoom has to stay the top-level interpolate input — MapLibre rejects ['zoom'] nested
+   inside a ['case'] — so the per-feature choice lives in the stop outputs instead */
+function offTrailW() {
+  const f = ADV('coreFrac');
+  return ['interpolate', ['linear'], ['zoom'],
+    10, ['case', offSeg, ADV('routeWOut') * f, 3.5],
+    17, ['case', offSeg, ADV('routeWIn') * f, 3.5]];
+}
 /* typed-mark dot radius: zoomed out it shrinks to half the route core width
    (reads as a blip ON the line), snapping up to the full 8 px dot at the
    old alert minzoom. Tracks the routeW sliders via applyAdvPaint. */
@@ -2052,11 +2225,17 @@ function addOverlays() {
   map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': ADV('colRoute'), 'line-opacity': 1, 'line-width': coreW() } });
-  // backtrack trail: muted dotted thread of where you've actually been, under the route
+  // backtrack trail: the dotted thread of where you've actually been. The layer is
+  // added here but MOVED below (see moveLayer) — its stacking is deliberate, not
+  // wherever the add order happened to leave it.
   map.addSource('trail', { type: 'geojson', data: EMPTY });
+  // On-route stretches stay the muted thin thread; off-route stretches go red at the
+  // route's own core width (the line inside the casing), slightly transparent so the
+  // map still reads through where you strayed.
   map.addLayer({ id: 'trail-dots', type: 'line', source: 'trail',
     layout: { 'line-cap': 'round' },
-    paint: { 'line-color': '#9fb4c6', 'line-opacity': 0.85, 'line-width': 3.5, 'line-dasharray': [0.1, 2] } });
+    paint: { 'line-color': offTrailCol(), 'line-opacity': offTrailOp(), 'line-width': offTrailW(),
+      'line-dasharray': [0.1, 2] } });
   /* route rendering (2026-07-19 track-colour design): one solid cased line — the
      dirt/sealed dash patterns are gone. Interior colour is baked per feature ('c'):
      route blue by default, or slope/surface colouring picked from the ☰ Track colour
@@ -2065,15 +2244,13 @@ function addOverlays() {
   map.addSource('selSurf', { type: 'geojson', data: EMPTY });
   const rnd = { 'line-join': 'round', 'line-cap': 'round' };
   const sf = st => ['==', ['get', 'state'], st];
-  /* progress ladder, bottom→top: travelled (dimmed, reduced dark case) → missed
-     (half-strength colour, NO case — casing is the exclusive route-ahead signal)
-     → remaining (full colour, cased). */
+  /* progress ladder, bottom→top: travelled (dimmed, reduced dark case) → remaining
+     (full colour, cased). A skipped-then-rejoined stretch counts as travelled — the
+     red breadcrumb over it carries the "you didn't actually ride this" story. */
   map.addLayer({ id: 'surf-done-case', type: 'line', source: 'selSurf', filter: sf('done'), layout: rnd,
     paint: { 'line-color': ADV('colDoneCase'), 'line-opacity': ADV('progDoneOp'), 'line-width': totalW() } });
   map.addLayer({ id: 'surf-done', type: 'line', source: 'selSurf', filter: sf('done'), layout: rnd,
     paint: { 'line-color': ['get', 'cd'], 'line-opacity': ADV('progDoneOp'), 'line-width': coreW() } });
-  map.addLayer({ id: 'surf-miss', type: 'line', source: 'selSurf', filter: sf('miss'), layout: rnd,
-    paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('progMissOp'), 'line-width': coreW() } });
   map.addLayer({ id: 'surf-recent', type: 'line', source: 'selSurf', filter: sf('recent'), layout: rnd, // just-ridden tail — bright, uncased, hugs the marker
     paint: { 'line-color': ['get', 'c'], 'line-opacity': ADV('progRecentOp'), 'line-width': coreW() } });
   map.addLayer({ id: 'sel-case', type: 'line', source: 'selTrack', layout: rnd,
@@ -2084,6 +2261,10 @@ function addOverlays() {
     paint: { 'line-color': ['get', 'c'], 'line-width': coreW() } });
   map.addLayer({ id: 'sel-core', type: 'line', source: 'selTrack', layout: rnd,
     paint: { 'line-color': ADV('colRoute'), 'line-width': coreW() } });
+  /* Breadcrumb stacking: ABOVE every other loaded track and above the travelled/missed
+     progress shading of the selected one — your actual line is what you're checking
+     against them — but BELOW the route ahead (casing + core), which nothing may obscure. */
+  map.moveLayer('trail-dots', 'sel-case');
   /* direction Vs: case-coloured overlay glyphs along the line (the cutout look
      without the cutout — reads on solid, dashed and dotted alike). They follow the
      casing of their state, so travelled sections dim automatically. */
@@ -2332,9 +2513,14 @@ function refreshMapData() {
 }
 /* progress class of each track sample, from the merged travelled spans:
    'recent' inside a span within recentM of the rider (mid-ride only — the bright
-   tail linking the marker to the history) · 'done' inside a span · 'miss' in a
-   gap between spans (skipped, then rejoined past) · 'rem' ahead of the last span
-   and behind the first. Monotonic walk — one closure per pass. */
+   tail linking the marker to the history) · 'done' inside a span, AND in a gap
+   between spans · 'rem' ahead of the last span and behind the first. Monotonic
+   walk — one closure per pass.
+
+   A gap only exists once you've rejoined past it, and such a stretch reads as
+   travelled: the red off-route breadcrumb laid over it is what shows where you
+   actually went (typically an out-and-back). Highlighting the skipped route as
+   well would say the same thing twice, in the louder of the two voices. */
 function progClassAt(trk) {
   const p = S.prog, sp = (p && p.track === trk.id && p.spans) || [];
   if (!sp.length) return () => 'rem';
@@ -2346,7 +2532,7 @@ function progClassAt(trk) {
     while (k < sp.length && i > sp[k][1]) k++;
     if (k < sp.length && i >= sp[k][0])
       return posC != null && Math.abs(posC - trk.cum[i]) <= rM ? 'recent' : 'done';
-    return k > 0 && k < sp.length ? 'miss' : 'rem';
+    return k > 0 && k < sp.length ? 'done' : 'rem';
   };
 }
 /* ---------------- track colouring (☰ Track colour tile: none / slope / surface) ---------------- */
@@ -2446,7 +2632,7 @@ function applyRouteVis() {
   const surfOn = trk && trk._hasSurf;
   const vis = (l, on) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none');
   vis('sel-core', !surfOn); vis('sel-case', !surfOn);
-  for (const l of ['surf-core', 'surf-case', 'surf-done', 'surf-done-case', 'surf-miss', 'surf-recent']) vis(l, surfOn);
+  for (const l of ['surf-core', 'surf-case', 'surf-done', 'surf-done-case', 'surf-recent']) vis(l, surfOn);
 }
 function refreshPosLayers() {
   if (!mapReady || !S.pos) return;
@@ -2579,6 +2765,76 @@ function refreshPresets() {
     b.classList.toggle('set', !!p[k]);
   }
 }
+/* ---------------- first visit ----------------
+   Asked once, on the very first launch: who you are, because the friend-share puts your
+   name and position in front of everyone else on the same ride. Skippable — someone who
+   just wants to ride shouldn't be held at a form — and either way we never ask again;
+   both fields stay editable in Settings → Account.
+
+   This card IS the first-time training offer: its primary button saves and rolls straight
+   into the training ride, which is why the empty screen's own offer retires afterwards.
+   Skipping declines both; ☰ → Demo is the way back in.
+
+   It is no longer a dialog of its own: it lives inside the startup card, so a cold
+   first run spends its ~41 MB download on setup rather than a bare progress bar, and
+   the rider is never shown a progress screen followed immediately by a modal. */
+function introPending() { return !S.set.seenIntro; }
+function armIntro() {
+  if (!introPending()) return;
+  document.getElementById('startup').classList.add('firstrun');
+  document.getElementById('introName').value = S.set.name || '';
+  document.getElementById('introEmail').value = S.set.email || '';
+}
+function closeIntro(save) {
+  if (save) {
+    S.set.name = document.getElementById('introName').value.trim();
+    S.set.email = document.getElementById('introEmail').value.trim();
+  }
+  S.set.seenIntro = 1; // asked once, answered or not
+  saveSet(); renderSettings(); refreshEmpty(); startFriends(); // name change re-announces us
+  document.getElementById('startup').classList.remove('firstrun');
+  // The card may still be mid-download. suHandOff() is a no-op until boot drops
+  // `loading`, and bootDone() re-runs it — so answering early simply releases the
+  // hold, and the card goes on showing progress until the map is actually ready.
+  suHandOff();
+}
+/* the button says "Start demo ride", so it had better start one — but on a cold boot
+   the map is minutes away. Arm it instead of firing: the rider does their setup during
+   the download and the ride begins the moment the map is up. bootDone() fires it. */
+let demoArmed = false;
+document.getElementById('introSave').onclick = () => {
+  demoArmed = true; closeIntro(true);
+  if (SU.done) { demoArmed = false; startTraining(); } // already booted — go now
+  else toast('Demo ride starts as soon as the map is ready');
+};
+document.getElementById('introSkip').onclick = () => closeIntro(false);
+
+/* ---------------- usage counters ----------------
+   Local tally: launches, cumulative time in the app, last launch. Kept in its own
+   localStorage key rather than S.set — S.set is exportable and importable, and a bench
+   config shared between riders must not carry (or overwrite) someone else's usage.
+   Time accrues only while the page is actually visible, so a phone in a pocket with the
+   app backgrounded doesn't bank hours it never had. */
+const USE = (() => {
+  try { return { n: 0, ms: 0, last: 0, ...JSON.parse(localStorage.getItem('dingonav-use') || '{}') }; }
+  catch (e) { return { n: 0, ms: 0, last: 0 }; }
+})();
+function saveUse() { localStorage.setItem('dingonav-use', JSON.stringify(USE)); }
+USE.n++; USE.last = Date.now(); saveUse();
+let useSince = document.visibilityState === 'visible' ? Date.now() : 0;
+function bankUse() {
+  if (!useSince) return;
+  USE.ms += Date.now() - useSince;
+  useSince = document.visibilityState === 'visible' ? Date.now() : 0;
+  saveUse();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { if (!useSince) useSince = Date.now(); }
+  else bankUse();
+});
+addEventListener('pagehide', bankUse);
+setInterval(bankUse, 60000); // survive a kill that never fires pagehide
+
 /* one-off dialog helper + the first-use explainer for the favourite-zoom presets */
 function showDialog(title, html) {
   document.getElementById('dlgTitle').textContent = title;
@@ -2586,7 +2842,12 @@ function showDialog(title, html) {
   document.getElementById('dlgShade').classList.add('on');
   document.getElementById('dlg').classList.add('on');
 }
-function closeDialog() { document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
+function closeDialog() {
+  // the first-visit intro used to live here and needed a backdrop=Skip rule; it is part
+  // of the startup card now, which has its own shade and is deliberately not tap-to-dismiss
+  if (document.getElementById('trkPick').classList.contains('on')) { closeTrackPicker(false); return; } // backdrop = leave things alone
+  if (document.getElementById('briefDlg').classList.contains('on')) { closeBrief(false); return; } // backdrop never starts a ride
+  document.getElementById('dlgShade').classList.remove('on'); document.getElementById('dlg').classList.remove('on'); document.getElementById('demoPick').classList.remove('on'); document.getElementById('colourPick').classList.remove('on'); }
 document.getElementById('dlgOk').onclick = closeDialog;
 document.getElementById('dlgShade').onclick = closeDialog;
 // first tap/hold of min or max explains favourite zoom; the gesture that triggered it is consumed
@@ -2674,6 +2935,15 @@ function initLockGesture() {
         const mpp = spanForZoom(map.getZoom(), ll.lat) / (el.clientHeight || 700);
         const hit = findTurnPointNear(mx, my, Math.max(15, mpp * 30));
         if (hit) { openMarkPicker(hit.x, hit.y, { cue: hit.cue }); return; }
+        // long-press ON a track line: the picker — including the one already selected.
+        // Stopped only: while riding this gesture is the centre lock, and the route is
+        // exactly where a rider's thumb lands, so the two would fight constantly.
+        if (!S.nav && S.tracks.length) {
+          const tapR = Math.max(20, mpp * 24);
+          let bd = Infinity;
+          for (const t of S.tracks) bd = Math.min(bd, nearestOnTrack(t, mx, my).d);
+          if (bd <= tapR) { openTrackPicker('pick'); return; }
+        }
       }
       if (S.lock) { setLock(false); toast('Centre lock off — map can be moved'); }
       else {
@@ -2947,8 +3217,108 @@ function departDist(ns) {
   if (ADV('departUnit') !== 's') return ADV('departM');
   return Math.max(10, ((ns && ns.avgSpd) || vehVal('defSpd')) * ADV('departS'));
 }
+/* ---------------- navigation mode ----------------
+   follow  — one chosen track. Cues, progress, off-track alarm. What the app always did.
+   explore — no track at all. Breadcrumb, speed, compass. Never cues, never alarms.
+   snap    — explore that LATCHES onto whatever known track you ride onto, and lets go
+             again (with the fanfare) when you leave it.
+
+   They're one spectrum, not three systems: snap is explore plus opportunistic latching,
+   and follow is snap locked to a single track. The off-track picker is follow's manual
+   version of what snap does by itself, which is why it never opens in snap.
+
+   The mode persists across restarts, so snap can latch onto something days after you
+   set it — hence the fanfare on letting go: the app should always be audibly saying
+   which of these three it's doing. */
+const NAV_MODES = ['follow', 'explore', 'snap'];
+const NAV_MODE_LABEL = { follow: 'Follow', explore: 'Explore', snap: 'Snap' };
+function navMode() { return NAV_MODES.indexOf(S.set.navMode) >= 0 ? S.set.navMode : 'follow'; }
+// the track actually being navigated: none while exploring, whatever is latched in snap
+function navTrack() { return navMode() === 'explore' ? null : S.tracks[S.sel] || null; }
+function setNavMode(m) {
+  if (!NAV_MODES.includes(m) || m === navMode()) return;
+  S.set.navMode = m; saveSet();
+  if (m === 'explore' && S.nav && S.sel >= 0) snapUnlatch(true); // silent: the rider asked for this
+  applyRouteChrome(S.nav ? navTrack() : null);
+  refreshGlove(); updateBottomBar(); refreshMapData();
+  toast(NAV_MODE_LABEL[m] + ' — ' + { follow: 'one track, tells you when you leave it',
+    explore: 'no track, just your breadcrumb', snap: 'latches onto tracks as you ride onto them' }[m]);
+}
+/* route-dependent chrome in one place: the turn strip and progress bar only mean
+   something with a track under them, and latching/unlatching flips that mid-ride. */
+function applyRouteChrome(trk) {
+  document.body.classList.toggle('hasroute', !!trk);
+  document.getElementById('hud').classList.toggle('on', !!(trk && S.nav));
+  prog.classList.toggle('on', !!(trk && S.nav));
+  if (!trk) {
+    prog.classList.remove('offtrack', 'countdown');
+    document.getElementById('banner').classList.remove('on');
+    if (S.nav) setHud(null);
+  } else prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
+}
+function freshNavState(rev) {
+  return { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0,
+    alertStates: new Map(), movingS: 0, avgSpd: null, lastFixT: 0 };
+}
+/* bearing of the track itself at a point — used to tell "running along me" from
+   "crossing me", and to decide which way round to latch */
+function trackBearingAt(t, i) {
+  const j = Math.min(i + 1, t.n - 1), k = j === i ? Math.max(0, i - 1) : i;
+  return bearing(t.xy[k * 2], t.xy[k * 2 + 1], t.xy[j * 2], t.xy[j * 2 + 1]);
+}
+const SNAP_HOLD_MS = 4000; // settle time either side of a latch — junctions must not thrash
+function snapUpdate(x, y, hdg) {
+  const t = Date.now();
+  if (S.snapT && t - S.snapT < SNAP_HOLD_MS) return;
+  const cur = S.tracks[S.sel];
+  if (cur) { // latched: let go once we're properly clear, not at the first wobble
+    if (nearestOnTrack(cur, x, y, S.navState ? S.navState.idx : -1).d > ADV('offM')) snapUnlatch(false);
+    return;
+  }
+  // unlatched: score every track we're sitting on. A track crossing us is a worse
+  // candidate than one running along us, even if it's momentarily closer.
+  let best = null;
+  for (let i = 0; i < S.tracks.length; i++) {
+    const n = nearestOnTrack(S.tracks[i], x, y);
+    if (n.d >= ADV('onM')) continue;
+    let pen = 0;
+    if (hdg != null && !isNaN(hdg)) {
+      const off = Math.abs(angDiff(hdg, trackBearingAt(S.tracks[i], n.idx)));
+      pen = Math.min(off, 180 - off) / 90 * ADV('onM'); // 0 along us → a full on-radius across us
+    }
+    const score = n.d + pen;
+    if (!best || score < best.score) best = { i, idx: n.idx, score };
+  }
+  // ambiguity resolves itself: overlapping tracks diverge within seconds and we re-score
+  // then. Better a silent best guess than a dialog at the exact moment of a junction.
+  if (best) snapLatch(best.i, best.idx, hdg);
+}
+function snapLatch(i, idx, hdg) {
+  const t = S.tracks[i];
+  // ridden the opposite way to how it was recorded? Take it reversed — in snap the rider
+  // never chose this track, so its recorded direction carries no intent worth keeping.
+  const rev = hdg != null && !isNaN(hdg) && Math.abs(angDiff(hdg, trackBearingAt(t, idx))) > 90;
+  t.reverse = rev;
+  S.snapT = Date.now();
+  selectTrack(i);
+  S.navState = freshNavState(rev);
+  S.prog = { track: t.id, spans: [], prevIdx: null }; progDirty = true;
+  applyRouteChrome(t);
+  placeProgress(); drawProgress(true);
+  if (!t.alerts) analyzeRoute(t).then(() => { refreshMapData(); drawProgress(true); });
+  BEEP.latch(); // its own chime now — borrowing follow's back-on-track bell muddled the two
+  toast('Snapped to ' + t.name + (rev ? ' · reversed' : ''));
+}
+function snapUnlatch(silent) {
+  S.snapT = Date.now();
+  S.sel = -1; S.navState = freshNavState(false);
+  S.prog = null;
+  applyRouteChrome(null);
+  refreshTrackList(); updateBottomBar(); refreshMapData(); drawProgress(true);
+  if (!silent) { BEEP.unlatch(); toast('Off the track — exploring'); }
+}
 function startNav() {
-  const trk = S.tracks[S.sel]; // undefined → free-ride: live position, speed & compass, no cues/off-track/progress
+  const trk = navTrack(); // null → explore / free-ride: position, speed & compass, no cues or alarms
   if (S.cueEdit) setCueEdit(false);
   audio(); // unlock on gesture
   // gesture → prompt for the magnetometer if needed (also for auto-compass flips later)
@@ -2966,21 +3336,15 @@ function startNav() {
   if (trk && !trk.alerts) { toast('Analysing route…'); analyzeRoute(trk).then(() => { refreshMapData(); toast(trk.alerts.length + ' cues ready'); }); }
   // start in the direction the rider picked (reverse toggle); auto-voting can still correct it if
   // they actually ride the other way, but it holds this direction from the first fix
-  const rev = !!(trk && trk.reverse);
-  S.navState = { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0, alertStates: new Map(),
-    movingS: 0, avgSpd: null, lastFixT: 0 };
+  S.navState = freshNavState(!!(trk && trk.reverse));
+  S.snapT = 0; // snap may latch on the very first fix
   S.nav = true; setFollow(true); S.dotFit = false;
   camOffX = camOffY = 0; // look-ahead offset migrates in from centre
   closeGlove();
   document.body.classList.add('navving'); // short viewports hide the bottom bar while riding
-  document.body.classList.toggle('hasroute', !!trk); // route → turn strip owns the top; free-ride → speed sits at the very top
   document.getElementById('hudSpeed').classList.add('on');
   renderMain(); modePing();
-  if (trk) { // turn strip + progress strip only make sense with a route
-    document.getElementById('hud').classList.add('on');
-    prog.classList.add('on'); prog.classList.remove('offtrack', 'countdown');
-    prog.classList.toggle('expanded', !!(S.set.profile && trk.hasEle));
-  }
+  applyRouteChrome(trk); // turn strip + progress strip only make sense with a route
   document.getElementById('gloveBtn').classList.add('on');
   setHold(null);
   placeProgress(); drawProgress(true);
@@ -3014,8 +3378,78 @@ function stopNav() {
   flushProg(); // travelled/missed spans stay on the map for post-ride review
   archiveRide(); // the ridden path joins the own-rides heat + GPX archive
 }
-document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : startNav();
-document.getElementById('startBtn').onclick = () => { if (!S.nav) startNav(); }; // on-map START — stopping lives in ☰
+/* ---------------- ride briefing ----------------
+   The last screen before the chrome switches to riding: what you're about to set off on,
+   in the terms you'd want reminded — which route, how far, how long, which way round, and
+   which of the three modes is driving. Cheap to confirm, and catches the two mistakes that
+   only show up once you're moving: riding a track backwards, and being in the wrong mode. */
+function briefTime(m) {
+  const spd = vehVal('defSpd'); // per-vehicle cruising estimate; no ride history to average yet
+  if (!spd || !m) return null;
+  const min = Math.round(m / spd / 60);
+  return min < 60 ? min + ' min' : Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') + ' m';
+}
+function openBrief() {
+  if (S.nav) return;
+  if (!S.set.startBrief) { startNav(); return; } // rider turned the reminder off
+  const md = navMode(), trk = navTrack();
+  document.getElementById('briefName').textContent =
+    trk ? trk.name : md === 'explore' ? 'Explore' : md === 'snap' ? 'Snap' : 'Free ride';
+  document.getElementById('briefMode').textContent =
+    NAV_MODE_LABEL[md] + { follow: ' · one track', explore: ' · no track', snap: ' · any track' }[md];
+  const rows = [];
+  if (trk) {
+    rows.push(['Distance', (trk.lengthM / 1000).toFixed(1) + ' km']);
+    const t = briefTime(trk.lengthM); if (t) rows.push(['Time', '~' + t]);
+    rows.push(['Cues', trk.alerts ? trk.alerts.length : 'analysing…']);
+    // the one that bites: set days ago in the picker, invisible once you're moving
+    rows.push(['Direction', trk.reverse ? 'REVERSE' : 'Forward', trk.reverse]);
+  } else if (md === 'snap') {
+    rows.push(['Tracks loaded', S.tracks.length]);
+    rows.push(['Direction', 'auto — set on latch']);
+  } else {
+    rows.push(['Records', 'breadcrumb, speed, compass']);
+    rows.push(['Cues', 'none']);
+  }
+  rows.push(['Vehicle', { walk: 'Walk', mtb: 'MTB', enduro: 'Enduro', adventure: 'ADV' }[S.set.vehicle] || S.set.vehicle]);
+  document.getElementById('briefRows').innerHTML = rows.map(r =>
+    '<span class="bl">' + escHtml(r[0]) + '</span><span class="bv' + (r[2] ? ' warn' : '') + '">'
+    + escHtml(String(r[1])) + '</span>').join('');
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('briefDlg').classList.add('on');
+  briefCountdown(BRIEF_AUTO_S);
+}
+/* It proceeds on its own, so the countdown has to be ON the button — a dialog that starts
+   a ride with no warning is worse than no dialog. Touching the card holds it, for reading
+   time; Back cancels outright. */
+const BRIEF_AUTO_S = 5;
+let briefT = null;
+function briefCountdown(n) {
+  clearInterval(briefT);
+  const go = document.getElementById('briefGo');
+  if (n == null) { go.textContent = 'Ride'; briefT = null; return; } // held
+  go.textContent = 'Ride ' + n;
+  briefT = setInterval(() => {
+    n--;
+    if (n <= 0) { clearInterval(briefT); briefT = null; closeBrief(true); return; }
+    go.textContent = 'Ride ' + n;
+  }, 1000);
+}
+function closeBrief(go) {
+  clearInterval(briefT); briefT = null;
+  document.getElementById('dlgShade').classList.remove('on');
+  document.getElementById('briefDlg').classList.remove('on');
+  if (go) startNav();
+}
+document.getElementById('briefGo').onclick = () => closeBrief(true);
+document.getElementById('briefCancel').onclick = () => closeBrief(false);
+// a touch anywhere on the card means "wait, I'm reading this"
+document.getElementById('briefDlg').addEventListener('pointerdown', e => {
+  if (e.target.closest('#briefBtns')) return; // the buttons speak for themselves
+  briefCountdown(null);
+});
+document.getElementById('navBtn').onclick = () => S.nav ? stopNav() : openBrief();
+document.getElementById('startBtn').onclick = () => { if (!S.nav) openBrief(); }; // on-map START — stopping lives in ☰
 // START/STOP is one plain-tap tile in the ☰ grid — the two-tap path (☰ → tile) is the
 // mis-tap protection, so the old hold-to-stop ring is gone.
 
@@ -3037,8 +3471,12 @@ function onFix(lat, lon, acc, speed, heading) {
   // turn mode decays on its own once the junction is cleared — no tap-out needed mid-corner
   if (S.turn && dist(x, y, S.turn.ax, S.turn.ay) > 60) exitTurnMode();
   refreshPosLayers(); followCamera();
-  if (!S.nav || S.sel < 0 || !ns) return;
-  if (S.set.trail !== false) trailPush(x, y); // breadcrumb keeps dropping off-track too — the thread back
+  if (!S.nav || !ns) return;
+  // breadcrumb drops for EVERY ride — off-track, free-ride, exploring. It used to sit below
+  // the no-track return, so a trackless ride recorded nothing; Explore is exactly that ride.
+  if (S.set.trail !== false) trailPush(x, y);
+  if (navMode() === 'snap') snapUpdate(x, y, hdg); // may latch or let go before the follow logic
+  if (S.sel < 0 || !navTrack()) return; // exploring / unlatched: no cues, no alarm, nothing to follow
 
   const trk = S.tracks[S.sel];
   const near = nearestOnTrack(trk, x, y, ns.idx);
@@ -3053,14 +3491,23 @@ function onFix(lat, lon, acc, speed, heading) {
   }
   ns.idx = near.idx;
 
-  if (near.d > ADV('offM') && !ns.off) { ns.off = true; trainEvent('offtrack'); }
+  if (near.d > ADV('offM') && !ns.off) {
+    ns.off = true; trainEvent('offtrack');
+    // Leaving the route while sitting on another track you've loaded is a different event
+    // from being lost — offer the swap instead of only sounding the alarm.
+    // follow only: snap does this switch by itself, so the dialog would be asking a
+    // question the mode has already answered
+    if (navMode() === 'follow' && !TRAIN.active
+        && S.tracks.some((t, i) => i !== S.sel && nearestOnTrack(t, x, y).d < ADV('onM')))
+      openTrackPicker('off', S.sel);
+  }
   if (near.d < ADV('onM') && ns.off) { ns.off = false; BEEP.back(); document.getElementById('banner').classList.remove('on'); prog.classList.remove('offtrack'); trainEvent('backontrack'); }
   if (ns.off) {
     const bn = document.getElementById('banner');
     bn.textContent = 'Off track · ' + Math.round(near.d) + ' m'; bn.classList.add('on');
     if (t - ns.lastOffBeep > 30e3) { BEEP.off(); ns.lastOffBeep = t; }
     prog.classList.add('offtrack'); // strip dims, labels freeze — no fake ETA off-route
-    if (S.prog) S.prog.prevIdx = null; // the sequence index freezes — the skipped span will read as missed
+    if (S.prog) S.prog.prevIdx = null; // the sequence index freezes — the gap closes as travelled on rejoin
     ns.confirmAt = null;            // wandered off after the turn — nothing to congratulate
     ns.cdOn = false; setHud(null); return;
   }
@@ -3329,13 +3776,13 @@ function drawCountdown(ctx, w, h, ns) {
   ctx.fillStyle = '#fff'; ctx.fillText(txt, w / 2, h / 2 + 1);
 }
 
-/* ---------------- ride view: main number slot, giant arrows, gesture gating ----------------
-   One edge readout — speed (adventure profile) or battery (Stark). On a turn approach the
-   countdown borrows the slot in amber, then the number returns. Nothing is ever centred. */
-function primaryIsBattery() {
-  const base = (S.set.rideProfile || 'adventure') === 'stark';
-  return S.set.swapMain ? !base : base; // UI-tab "Swap main number" flips speed ↔ battery
-}
+/* ---------------- ride view: the two number slots, giant arrows, gesture gating ----------------
+   Two edge readouts — the big left one and the small top-right pill — carrying speed and
+   battery between them, in whichever order the rider picked. On a turn approach the countdown
+   borrows the BIG slot in amber, then the number returns. Nothing is ever centred. */
+/* The two number slots are a pair: whichever the big left readout takes, the small
+   top-right pill takes the other. One setting decides both (Stark tab → Big left readout). */
+function primaryIsBattery() { return S.set.bigLeft === 'battery'; }
 function cdMain(ns) { // distance or seconds, per the countdown-units setting; seconds freeze when stopped
   const d = Math.max(0, ns.cdD || 0);
   if (S.set.countUnit === 's') {
@@ -3350,6 +3797,7 @@ function renderMain() {
   const ns = S.navState;
   const cd = !!(S.nav && ns && ns.cdOn && !ns.off);
   el.classList.toggle('cd', cd);
+  renderPill(); // the pill carries the other number — keep the pair in step
   if (cd) { el.classList.remove('low'); el.innerHTML = cdMain(ns); return; }
   if (primaryIsBattery()) {
     el.classList.toggle('low', varg.soc != null && varg.soc <= 15);
@@ -3358,6 +3806,16 @@ function renderMain() {
     el.classList.remove('low');
     el.innerHTML = Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' <small>km/h</small>';
   }
+}
+/* the pill is the second slot: it shows whichever number the big one didn't take.
+   'bike free' still wins over both — a released bike has no telemetry to report. */
+function renderPill() {
+  const el = document.getElementById('vargSoc'); if (!el) return;
+  const bat = !primaryIsBattery(); // big slot took speed, so the pill takes battery
+  vargPill.classList.toggle('low', bat && varg.soc != null && varg.soc <= 15);
+  el.innerHTML = varg.state === 'released' ? 'bike free'
+    : bat ? icSvg('battery-medium') + ' ' + (varg.soc == null ? '—' : varg.soc) + '<span class="u">%</span>'
+    : Math.round(((S.pos && S.pos.speed) || 0) * 3.6) + ' <span class="u">km/h</span>';
 }
 /* the ONLY turn arrows: solid amber, inside the progress bar, on the side of the turn —
    left arrow left for a left turn, right arrow right for a right. They double as the Varg
@@ -3372,14 +3830,28 @@ function applyCdArrows() {
   L.classList.toggle('blink', indL);
   R.classList.toggle('blink', indR);
 }
-/* squarish screens drop the mode digit 4s after a change; wide keeps it resident */
-function modePing() {
-  const mb = document.getElementById('vargModeBig');
-  mb.classList.remove('fade');
-  clearTimeout(modePing.t);
-  const squarish = Math.max(innerWidth, innerHeight) / Math.min(innerWidth, innerHeight) < 1.35;
-  if (squarish) modePing.t = setTimeout(() => mb.classList.add('fade'), 4000);
+/* The digit itself is resident on every screen — at a glance, always, which mode you're in.
+   What fades is the block underneath: what that mode actually MEANS (hp / regen / TC), shown
+   for 4 s after the bike changes mode, or whenever the rider taps the digit to ask again. */
+function renderModeDetail() {
+  const mb = document.getElementById('vargModeBig'), d = document.getElementById('vargModeDetail');
+  mb.classList.toggle('neutral', !!varg.neutral);
+  document.getElementById('vargModeNum').textContent =
+    varg.neutral ? 'N' : varg.mode == null ? '—' : varg.mode;
+  if (varg.neutral) { d.innerHTML = '<div class="n">neutral</div>'; return; } // no map is live — no numbers to show
+  const row = (v, l) => '<span class="v">' + v + '</span><span class="l">' + l + '</span>';
+  d.innerHTML = (varg.hp != null ? row(varg.hp, 'HP') : '')
+    + (varg.regen != null ? row(varg.regen + '%', 'Regen') : '')
+    + (varg.tc != null ? row(varg.tc + '%', 'TC') : '');
 }
+function modePing() {
+  renderModeDetail();
+  const d = document.getElementById('vargModeDetail');
+  d.classList.remove('fade');
+  clearTimeout(modePing.t);
+  modePing.t = setTimeout(() => d.classList.add('fade'), 4000);
+}
+document.getElementById('vargModeNum').onclick = () => modePing(); // tap the digit = show me the numbers again
 /* finger-zoom is stop-and-manipulate: disabled above walking speed (with hysteresis
    so GPS jitter can't flap it). Dragging to look around stays live at any speed
    (2026-07-17 grammar) — a drag just flips the dot/square to dot. */
@@ -3718,14 +4190,33 @@ function trailPush(x, y) {
   if (trailLast && dist(x, y, trailLast[0], trailLast[1]) < ADV('trailGap')) return;
   trailLast = [x, y];
   const [la, lo] = toLL(x, y);
-  S.trail.push([lo, la]); trailDirty = true;
+  // third slot records whether we were off the route here — older persisted trails
+  // simply don't have it, and read back as on-route
+  S.trail.push([lo, la, S.navState && S.navState.off ? 1 : 0]); trailDirty = true;
   if (S.trail.length > 20000) S.trail.splice(0, 5000); // cap memory on epic rides
   refreshTrail();
 }
+/* One feature per unbroken on/off run, so each carries its own 'off' flag for the paint
+   expressions. Runs overlap by one point — the boundary belongs to both — or the thread
+   would show a gap exactly where it changes colour. */
 function refreshTrail() {
   if (!mapReady) return;
-  map.getSource('trail').setData(S.trail.length > 1 ? { type: 'Feature', properties: {},
-    geometry: { type: 'LineString', coordinates: S.trail } } : EMPTY);
+  if (S.trail.length < 2) { map.getSource('trail').setData(EMPTY); return; }
+  const feats = [];
+  let run = [S.trail[0]], off = S.trail[0][2] ? 1 : 0;
+  const flush = () => {
+    if (run.length > 1) feats.push({ type: 'Feature', properties: { off },
+      geometry: { type: 'LineString', coordinates: run.map(p => [p[0], p[1]]) } });
+  };
+  for (let i = 1; i < S.trail.length; i++) {
+    const o = S.trail[i][2] ? 1 : 0;
+    // on a change the old run ends at i-1 and the new one starts there, so the crossing
+    // segment is drawn exactly once (in the new colour) and the point is shared
+    if (o !== off) { flush(); run = [S.trail[i - 1], S.trail[i]]; off = o; }
+    else run.push(S.trail[i]);
+  }
+  flush();
+  map.getSource('trail').setData({ type: 'FeatureCollection', features: feats });
 }
 // persist once a minute so an app restart mid-ride keeps the thread
 setInterval(() => {
@@ -3738,7 +4229,8 @@ setInterval(() => {
    Travelled = merged sample-index ranges actually ridden on-track. A stretch only
    counts when consecutive on-track fixes are sequence-continuous (≤ progContM of
    route between them); off-track periods and index leaps at crossings leave a gap,
-   which renders as 'miss' once riding continues past it. Survives STOP for
+   which renders as travelled once riding continues past it (the red breadcrumb
+   over the gap is what shows you didn't ride it). Survives STOP for
    post-ride review; a different track starts fresh (breadcrumb lifecycle). */
 let progDirty = false, progRefT = null;
 function progMark(trk, idx) {
@@ -3834,7 +4326,12 @@ function refreshGlove() {
   setIc(g('gMute').querySelector('.gi'), S.set.sound ? 'volume-2' : 'volume-x');
   g('gMute').querySelector('.gl').textContent = S.set.sound ? 'Mute' : 'Muted';
   g('gMute').classList.toggle('active', !S.set.sound);
-  g('gTracks').querySelector('.gl').textContent = trk ? trk.name.slice(0, 16) : 'Tracks';
+  const gm = g('gNavMode'), m = navMode();
+  setIc(gm.querySelector('.gi'), { follow: 'route', explore: 'compass', snap: 'zap' }[m]);
+  gm.querySelector('.gl').textContent = NAV_MODE_LABEL[m];
+  gm.querySelector('.gs').textContent = m === 'follow' ? (trk ? trk.name.slice(0, 18) : 'no track yet')
+    : m === 'explore' ? 'breadcrumb only' : (trk ? 'on ' + trk.name.slice(0, 15) : 'any track');
+  gm.classList.toggle('active', m !== 'follow');
   setIc(g('gRideProf').querySelector('.gi'), S.set.rideProfile === 'stark' ? 'zap' : 'bike');
   g('gRideProf').querySelector('.gl').textContent = S.set.rideProfile === 'stark' ? 'Stark' : 'Adventure';
   // the Demo tile is also the STOP: mid-ride (real or demo) it flips red and ends the ride
@@ -3858,8 +4355,8 @@ document.getElementById('gLayers').onclick = gloveTap(() => {
 });
 document.getElementById('gMute').onclick = gloveTap(() => setSound(!S.set.sound));
 document.getElementById('gMark').onclick = () => { closeGlove(); markSpot(); };
-document.getElementById('gTracks').onclick = () => { closeGlove(); openPanel();
-  document.querySelector('#setTabs button[data-t="Tracks"]').click(); };
+document.getElementById('gNavMode').onclick = gloveTap(() => // tap cycles follow → explore → snap
+  setNavMode(NAV_MODES[(NAV_MODES.indexOf(navMode()) + 1) % NAV_MODES.length]));
 document.getElementById('gSettings').onclick = () => { closeGlove(); openPanel();
   document.querySelector('#setTabs button[data-t="General"]').click(); };
 document.getElementById('gRideProf').onclick = gloveTap(() => {
@@ -3964,6 +4461,7 @@ function startDemo() {
     d += demoStep();
     // simulate Stark mode changes so the digit and mode ping work off the bike
     if (++tick % 25 === 1 && !TRAIN.active) { const m = 1 + (((tick / 25) | 0) % 5);
+      varg.soc = Math.max(5, 92 - Math.round(d / trk.lengthM * 55)); // drains across the ride
       vargApplyState({ mode: m, hp: 20 + m * 12, regen: Math.max(0, 100 - m * 18), tc: Math.max(0, 100 - m * 15) }); }
     if (TRAIN.active) trainCheck(d); // may pause this very tick (holdD = d)
     if (d >= trk.lengthM) { toast('Demo finished'); stopNav(); return; }
@@ -3979,6 +4477,9 @@ function stopDemo() {
 }
 document.getElementById('demoBtn').onclick = () => { closePanel(); S.nav ? stopNav() : demoChoice(); };
 document.getElementById('testBeep').onclick = () => { audio(); BEEP.turn(); };
+// audition Snap's pair — they share a motif, so they're worth hearing back to back
+document.getElementById('testLatch').onclick = () => { audio(); BEEP.latch(); };
+document.getElementById('testUnlatch').onclick = () => { audio(); BEEP.unlatch(); };
 
 /* ---------------- training ride (2026-07-19 design) ----------------
    An interactive tutorial layered on demo mode: the sim pauses at teaching moments
@@ -4608,7 +5109,6 @@ async function handleFiles(files) {
 }
 document.getElementById('fileInput').addEventListener('change', e => { handleFiles([...e.target.files]); e.target.value = ''; });
 document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
-document.getElementById('emptyLoad').onclick = () => document.getElementById('fileInput').click();
 document.getElementById('baseBtn').onclick = () => document.getElementById('baseInput').click();
 document.getElementById('baseInput').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
@@ -4762,6 +5262,115 @@ function trackTap(lngLat) {
   if (best === S.sel) deselectTrack();
   else { selectTrack(best); toast(S.tracks[best].name); }
 }
+/* ---------------- track picker ----------------
+   One card, two modes:
+   'pick' — the rider asked (long-press any track, or tap the bottom bar). Tap a track to
+            take it; the dialog closes. Nothing happens until they tap.
+   'off'  — Follow mode noticed they left the route while sitting on another track they've
+            loaded. Red header, proximity dots, explicit Switch / Stay, and it dismisses
+            itself so an unanswered dialog can't sit over the map mid-corner.
+   The 'off' variant is the manual version of what Snap mode does by itself. */
+const TP = { mode: 'pick', sel: -1, rev: false, left: -1, timer: null };
+const TP_DISMISS_MS = 8000;
+function tpCandidates() { // every track, with how far it is from the rider right now
+  const rows = S.tracks.map((t, i) => {
+    let d = null;
+    if (S.pos) { const n = nearestOnTrack(t, S.pos.x, S.pos.y); d = n.d; }
+    return { i, t, d, on: d != null && d < ADV('onM') };
+  });
+  // nearest first when we know where we are — the ones you could actually be riding
+  if (S.pos) rows.sort((a, b) => (a.d ?? 1e12) - (b.d ?? 1e12));
+  return rows;
+}
+function tpDist(d) { return d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(1) + ' km'; }
+/* cancel the auto-dismiss AND forget the id — a stale handle reads as "still pending" */
+function tpHold() { clearTimeout(TP.timer); TP.timer = null; }
+function openTrackPicker(mode, leftIdx) {
+  if (!S.tracks.length) { toast('No tracks loaded'); return; }
+  TP.mode = mode; TP.left = leftIdx == null ? -1 : leftIdx;
+  if (mode === 'off') {
+    // Never preselect the track we just left — "Switch" has to mean something. Prefer one
+    // we're actually on; otherwise the nearest other track (candidates are distance-sorted).
+    const c = tpCandidates().filter(r => r.i !== TP.left);
+    TP.sel = (c.find(r => r.on) || c[0] || {}).i ?? S.sel;
+  } else TP.sel = S.sel;
+  TP.rev = !!(S.tracks[TP.sel] && S.tracks[TP.sel].reverse);
+  renderTrackPicker();
+  document.getElementById('dlgShade').classList.add('on');
+  document.getElementById('trkPick').classList.add('on');
+  clearTimeout(TP.timer);
+  // only the self-opening variant times out — a dialog the rider asked for waits for them
+  if (mode === 'off') TP.timer = setTimeout(() => closeTrackPicker(false), TP_DISMISS_MS);
+}
+function renderTrackPicker() {
+  const off = TP.mode === 'off', dlg = document.getElementById('trkPick');
+  dlg.classList.toggle('off', off);
+  const leftName = TP.left >= 0 && S.tracks[TP.left] ? S.tracks[TP.left].name : '';
+  document.getElementById('tpTitle').textContent = off ? 'Off ' + leftName : 'Choose track';
+  const leftD = off && S.pos && S.tracks[TP.left]
+    ? nearestOnTrack(S.tracks[TP.left], S.pos.x, S.pos.y).d : null;
+  document.getElementById('tpSub').textContent = off
+    ? (leftD != null ? tpDist(leftD) + ' off, riding a track you have loaded' : 'riding a track you have loaded')
+    : S.tracks.length + ' track' + (S.tracks.length === 1 ? '' : 's') + ' loaded';
+  const list = document.getElementById('tpList');
+  list.innerHTML = '';
+  for (const r of tpCandidates()) {
+    const row = document.createElement('div');
+    const left = r.i === TP.left;
+    row.className = 'tpRow' + (r.i === TP.sel ? ' sel' : '') + (left ? ' left' : r.on ? ' on' : '');
+    const meta = left ? 'the track you left' + (r.d != null ? ' · ' + tpDist(r.d) + ' away' : '')
+      : r.d == null ? (r.t.lengthM / 1000).toFixed(1) + ' km'
+      : (r.on ? 'on it · ' : '') + tpDist(r.d) + ' away · ' + (r.t.lengthM / 1000).toFixed(1) + ' km';
+    row.innerHTML = '<span class="dot"></span><span><span class="tpName">' + escHtml(r.t.name)
+      + '</span><br><span class="tpMeta">' + escHtml(meta) + '</span></span>';
+    row.onclick = () => {
+      // TP.rev is the rider's intent for this whole interaction, seeded from the track that
+      // was selected when the card opened. Tapping a row must NOT reset it: in 'pick' mode
+      // the tap also commits, so a toggle set beforehand would be silently discarded.
+      TP.sel = r.i;
+      tpHold(); // they're engaging — stop the auto-dismiss out from under them
+      if (off) renderTrackPicker(); else closeTrackPicker(true); // rider-asked: tap IS the choice
+    };
+    list.appendChild(row);
+  }
+  document.getElementById('tpRevSw').classList.toggle('rev', TP.rev);
+  const btns = document.getElementById('tpBtns');
+  btns.innerHTML = '';
+  const add = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.textContent = label; if (cls) b.className = cls; b.onclick = fn; btns.appendChild(b);
+  };
+  if (off) { add('Stay on ' + leftName.split(' ')[0], '', () => closeTrackPicker(false)); add('Switch', 'go', () => closeTrackPicker(true)); }
+  else add('Cancel', '', () => closeTrackPicker(false));
+}
+function closeTrackPicker(commit) {
+  clearTimeout(TP.timer); TP.timer = null;
+  document.getElementById('dlgShade').classList.remove('on');
+  document.getElementById('trkPick').classList.remove('on');
+  if (!commit || TP.sel < 0 || !S.tracks[TP.sel]) return;
+  const t = S.tracks[TP.sel];
+  t.reverse = TP.rev;
+  if (TP.sel !== S.sel) selectTrack(TP.sel);
+  else { updateBottomBar(); refreshMapData(); drawProgress(true); }
+  if (S.nav) {
+    // Swapping mid-ride: the new track starts clean, but the breadcrumb does NOT — it
+    // belongs to the ride, not the route, and it's the record of how you got here.
+    const rev = !!t.reverse;
+    S.navState = { idx: -1, dir: rev ? -1 : 1, dirVotes: rev ? -4 : 0, off: false, lastOffBeep: 0,
+      alertStates: new Map(), movingS: 0, avgSpd: null, lastFixT: 0 };
+    S.prog = { track: t.id, spans: [], prevIdx: null }; progDirty = true;
+    document.getElementById('banner').classList.remove('on');
+    prog.classList.remove('offtrack', 'countdown');
+    if (!t.alerts) analyzeRoute(t).then(() => { refreshMapData(); drawProgress(true); });
+  }
+  toast(t.name + (t.reverse ? ' · reversed' : ''));
+}
+document.getElementById('tpRevSw').onclick = () => {
+  TP.rev = !TP.rev; tpHold();
+  document.getElementById('tpRevSw').classList.toggle('rev', TP.rev);
+};
+document.getElementById('trackInfo').onclick = () => { if (!S.cueEdit) openTrackPicker('pick'); };
+
 function deselectTrack() {
   if (S.cueEdit) setCueEdit(false);
   S.sel = -1;
@@ -4783,7 +5392,15 @@ function updateBottomBar() {
   const nm = document.getElementById('trackName'), sub = document.getElementById('trackSub'), nb = document.getElementById('navBtn');
   const eb = document.getElementById('cueEditBtn'), rb = document.getElementById('revToggle');
   document.getElementById('startBtn').classList.toggle('on', !S.nav); // on-map START (free-ride works trackless)
-  if (S.sel < 0) { nm.textContent = S.nav ? 'Free ride' : 'No track selected'; sub.textContent = S.nav ? 'no track — position & speed only' : (S.tracks.length ? 'tap a track on the map, or START to free-ride' : 'load a GPX, or START to free-ride'); nb.disabled = false; eb.style.display = 'none'; rb.classList.remove('on'); return; }
+  const md = navMode();
+  if (S.sel < 0 || md === 'explore') {
+    nm.textContent = md === 'explore' ? 'Explore' : md === 'snap' ? 'Snap' : S.nav ? 'Free ride' : 'No track selected';
+    sub.textContent = md === 'explore' ? 'no track — breadcrumb, speed & compass'
+      : md === 'snap' ? (S.nav ? 'looking for a track to snap onto' : 'START, then ride onto any track')
+      : S.nav ? 'no track — position & speed only'
+      : (S.tracks.length ? 'tap a track on the map, or START to free-ride' : 'load a GPX, or START to free-ride');
+    nb.disabled = false; eb.style.display = 'none'; rb.classList.remove('on'); return;
+  }
   const t = S.tracks[S.sel];
   nm.textContent = t.name;
   const nA = t.alerts ? t.alerts.length : '…';
@@ -4928,20 +5545,66 @@ function bootDone() {
   clearTimeout(SU.silentT); clearTimeout(SU.nudgeT); clearTimeout(SU.slowT); clearTimeout(SU.deadT);
   suSetPct(100);
   suEl('suStepTxt').textContent = 'Ready';
+  // A demo armed during the download starts the moment the map can actually show it.
+  // startTraining FIRST: it adds the training track, and its own refreshEmpty() is a
+  // no-op while `loading` is still set. Handing off first would run refreshEmpty()
+  // against a still-empty track list and leave "No tracks loaded yet" over the ride.
+  // try/catch, NOT try/finally-free: startTraining() calls audio(), which can throw
+  // when it runs from here instead of from the tap that armed it (no gesture context).
+  // The card coming down must never depend on the demo succeeding — this is the
+  // surface a rider is stuck behind on the roadside.
+  if (demoArmed) {
+    demoArmed = false;
+    // reStyle() is not awaited by boot(), so the basemap swap can still be in flight
+    // here — and startTraining's fitBounds throws on a half-loaded style. Wait for
+    // idle, but never longer than 1.5 s: a card that outlives its own reason to exist
+    // is the one failure this screen must not have.
+    let fired = false;
+    const go = () => {
+      if (fired) return; fired = true;
+      try { startTraining(); }
+      catch (e) { console.error('[dingonav] armed demo failed to start', e); toast('Could not start the demo — tap ☰ → Demo'); }
+      suHandOff();   // unconditional: the card comes down whether or not the demo did
+    };
+    // isStyleLoaded() is NOT enough: reStyle() replaces the style and re-adds the
+    // overlay sources afterwards, so there is a window where the style reports loaded
+    // but map.getSource('heat') is undefined and refreshMapData throws. Poll for the
+    // sources themselves, capped — the demo is worth a short wait, never a hang.
+    const overlaysUp = () => { try { return mapReady && map && map.isStyleLoaded() && !!map.getSource('heat'); } catch (e) { return false; } };
+    if (overlaysUp()) go();
+    else {
+      const t = setInterval(() => { if (overlaysUp()) { clearInterval(t); go(); } }, 120);
+      setTimeout(() => { clearInterval(t); go(); }, 3000); // give up waiting, go anyway
+    }
+    return;
+  }
+  // First run, still unanswered: the card HOLDS. This is the one case where being
+  // ready is not reason enough to go — closeIntro() releases it. A warm launch
+  // reaches here in ~200 ms, so without the hold a first-timer would never see it.
+  if (introPending()) { suEl('suStepTxt').textContent = 'Ready when you are'; return; }
   // mid-typing: do not yank the keyboard out from under a gloved hand — hand over on blur
   const inp = suEl('suName');
-  if (document.activeElement === inp) { inp.onblur = suHandOff; return; }
+  // arrow-wrapped: a bare handler would pass the blur event in as `force`
+  if (document.activeElement === inp) { inp.onblur = () => suHandOff(); return; }
   suHandOff();
 }
-/* the one-way transition: loading -> (ready-empty | dismissed) */
-function suHandOff() {
+/* the one-way transition: loading -> (ready-empty | dismissed). Refuses while boot is
+   still working or first-run setup is unanswered, so every caller can be naive.
+   `force` is the rider overriding that deliberately — only #suSkip passes it. */
+function suHandOff(force) {
   const su = suEl('startup');
   if (!su.classList.contains('loading')) return;     // idempotent
-  suCommitName();                    // a name typed but never blurred still counts
+  if (!force && (!SU.done || introPending())) return; // not ready, or still asking
+  // Everything below the class change is best-effort. bootDone can land while
+  // reStyle() is mid-swap, when map-touching helpers throw on missing sources — and
+  // a throw in any of them must NOT leave the rider stuck behind this card. Drop
+  // `loading` FIRST so the screen is already committed to going before anything
+  // that can fail runs.
   su.classList.remove('loading');    // refreshEmpty() owns the element from here on
   su.classList.add('bye');           // ...card + shade stay up for the cross-fade
-  refreshEmpty();                    // decides: stay as the no-tracks state, or dismiss
   setTimeout(() => su.classList.remove('bye', 'indet', 'slow'), 240); // = the .22s transition
+  try { suCommitName(); } catch (e) { console.warn('[dingonav] ride name commit failed', e); }
+  try { refreshEmpty(); } catch (e) { console.warn('[dingonav] refreshEmpty failed', e); su.classList.remove('on'); }
 }
 /* ---- ride name: ONE writer, shared with Settings -> Account ---- */
 function setRideCode(v) {
@@ -4956,11 +5619,18 @@ function setRideCode(v) {
 }
 function suCommitName() { const i = suEl('suName'); if (i) setRideCode(i.value); }
 {
+  armIntro();   // before first paint: a first-timer's card comes up already asking
   const inp = suEl('suName');
   inp.value = S.set.code || '';
   inp.onchange = suCommitName;                        // blur/Enter, matching regRow()'s text rows
   inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); };
-  suEl('suSkip').onclick = () => { toast('Carrying on — the map finishes in the background'); suHandOff(); };
+  // "Continue without it" = stop waiting, let me ride. If the intro is still open it
+  // counts as skipping that too — one button, one intent, and no second nag next launch.
+  suEl('suSkip').onclick = () => {
+    if (introPending()) closeIntro(false);
+    toast('Carrying on — the map finishes in the background');
+    suHandOff(true);
+  };
   // watchdogs — this screen must never trap a rider on the roadside
   SU.silentT = setTimeout(() => suEl('startup').classList.add('indet'), 1500); // boot never called bootPhase
   SU.slowT = setTimeout(() => suEl('startup').classList.add('slow'), 8000);    // offer the escape hatch
@@ -4972,6 +5642,9 @@ function refreshEmpty() {
   // while boot still owns the surface it stays up regardless of track count;
   // suHandOff() re-runs this the moment `loading` comes off.
   if (!su.classList.contains('loading')) su.classList.toggle('on', on);
+  // the training ride is a first-visit offer — once you've seen it, an empty screen
+  // shouldn't keep pitching it. Still reachable any time from ☰ → Demo.
+  document.getElementById('emptyTrain').style.display = S.set.seenIntro ? 'none' : '';
   // known packs (provenance survives "Clear all data") get a one-tap re-download
   const ep = document.getElementById('emptyPacks');
   ep.innerHTML = '';
@@ -5039,6 +5712,8 @@ const varg = {
   dev: null, batt: null, state: 'off', // off | connecting | on | released | retry
   soc: null, soh: null, vbus: null,
   mode: null, special: null, // mode 1–5; special: null | 'rev' | 'crawl'
+  // neutral is NOT a special: it gets the green N digit, never the full-screen takeover
+  neutral: false,
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, pickAll: false, sndT: null,
@@ -5098,6 +5773,8 @@ function vargSpecial(sp) { // sp: null | 'rev' | 'crawl'
 function vargApplyState(st) { // single entry point for the future mode/config decoder
   for (const k of ['hp', 'regen', 'tc']) if (st[k] != null) varg[k] = st[k];
   if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; modePing(); }
+  // in/out of neutral is a mode change as far as the rider is concerned — ping the detail block
+  if ('neutral' in st && !!st.neutral !== varg.neutral) { varg.neutral = !!st.neutral; modePing(); }
   if ('special' in st) vargSpecial(st.special);
   vargUI();
 }
@@ -5118,6 +5795,7 @@ async function vargConnect(dev) {
 
 function vargDropped() {
   varg.soc = null; // stale % is worse than none
+  varg.neutral = false; // ditto a stale green N
   vargSpecial(null); // no connection = no idea if we're still in reverse — never show a guess
   if (varg.state === 'released' || !S.set.varg || S.set.vargSrc !== 'ble') { vargUI(); return; }
   varg.state = 'retry'; vargUI(); vargRetry();
@@ -5303,7 +5981,8 @@ function vpProp(path, v) {
   if (path === VP_P.drive) { // confirmed on the bike: "CRAWL REV" = reverse, "CRAWL FWD" = crawl
     vp.sawDrive = true;
     const s = String(v).toUpperCase();
-    vargApplyState({ special: s.includes('REV') ? 'rev' : s.includes('CRAWL') ? 'crawl' : null });
+    vargApplyState({ special: s.includes('REV') ? 'rev' : s.includes('CRAWL') ? 'crawl' : null,
+      neutral: s.includes('NEUTRAL') });
     return;
   }
   if (path === VP_P.walk) { // fallback only if drive_state never arrives: 8 = reverse, 12 = crawl
@@ -5372,16 +6051,13 @@ function vargUI() {
   document.getElementById('vargRow').style.display = on && !vpSrc ? '' : 'none';
   document.getElementById('vargRow2').style.display = on ? '' : 'none';
   const mb = document.getElementById('vargModeBig');
-  mb.classList.toggle('on', on && varg.state === 'on' && varg.mode != null);
-  document.getElementById('vargModeNum').textContent = varg.mode == null ? '—' : varg.mode;
+  mb.classList.toggle('on', on && varg.state === 'on' && (varg.mode != null || varg.neutral));
+  renderModeDetail(); // keeps the digit and the hp/regen/TC rows current; the fade timer is modePing's
   vargPill.classList.toggle('on', on && varg.state !== 'off');
   vargPill.classList.toggle('rel', varg.state === 'released');
   vargPill.classList.toggle('wait', varg.state === 'connecting' || varg.state === 'retry');
-  vargPill.classList.toggle('low', varg.soc != null && varg.soc <= 15);
-  document.getElementById('vargSoc').innerHTML =
-    varg.state === 'released' ? 'bike free' : icSvg('battery-medium') + ' ' + (varg.soc == null ? '—%' : varg.soc + '%');
   document.getElementById('vargMode').textContent = varg.state === 'on' ? vargModeTxt() : '';
-  renderMain(); // battery may own the main number slot (Stark profile)
+  renderMain(); // fills both number slots (renderPill rides along)
   vargStatus.textContent = !on ? 'Off — telemetry pill hidden.'
     : vpSrc ? {
         off: 'Set the VargPilot server URL below, then Connect.',
@@ -5406,6 +6082,9 @@ function vargDetailToast() { // the engineering detail without cluttering the pi
     + (varg.seen ? ' · ' + Math.round((Date.now() - varg.seen) / 1000) + 's ago' : ''));
 }
 vargPill.onclick = () => {
+  // a hold already did its job; the click browsers fire on release must not also
+  // land on the handoff switch and drop the bike's one connection mid-ride
+  if (vargHeld) { vargHeld = false; return; }
   if (S.set.vargSrc === 'vp') { // VP owns the bike — nothing to hand off; tap = details / reconnect
     if (varg.state === 'on') vargDetailToast();
     else { vpConnect(); toast('Reconnecting to VargPilot…'); }
@@ -5415,14 +6094,27 @@ vargPill.onclick = () => {
   else if (varg.state === 'released') vargResume();
   else if (varg.state === 'retry') { varg.retryN = 0; vargRetry(); toast('Retrying now…'); }
 };
-let vargHold = null;
+/* Hold the pill to pin the mode block open — it stays put for as long as you hold,
+   instead of racing the 4 s fade, then resumes the normal countdown on release. */
+function modeDetailPin(on) {
+  const d = document.getElementById('vargModeDetail');
+  if (!on) { modePing(); return; } // release: the usual 4 s countdown takes over
+  renderModeDetail();
+  d.classList.remove('fade');
+  clearTimeout(modePing.t);
+}
+let vargHold = null, vargHeld = false;
 vargPill.onpointerdown = () => {
+  vargHeld = false;
   vargHold = setTimeout(() => {
-    vargHold = null; // consumed — suppress the click that follows pointerup
-    vargDetailToast();
+    vargHold = null; vargHeld = true; // flags the click that follows pointerup for suppression
+    modeDetailPin(true);
   }, 600);
 };
-vargPill.onpointerup = vargPill.onpointerleave = () => { if (vargHold) clearTimeout(vargHold); };
+vargPill.onpointerup = vargPill.onpointerleave = vargPill.onpointercancel = () => {
+  if (vargHold) { clearTimeout(vargHold); vargHold = null; }
+  if (vargHeld) modeDetailPin(false);
+};
 
 document.getElementById('vargBtn').onclick = vargPick;
 // previews run the REAL engage path (overlay + beeper + pill), then disengage —
@@ -5442,7 +6134,7 @@ document.getElementById('vargForgetBtn').onclick = async () => {
     if (varg.dev.forget) await varg.dev.forget().catch(() => {}); // Chrome 110+: drops the site permission
   }
   Object.assign(varg, { dev: null, batt: null, state: 'off', soc: null, soh: null, vbus: null,
-    mode: null, hp: null, regen: null, tc: null });
+    mode: null, neutral: false, hp: null, regen: null, tc: null });
   vargUI(); toast('Bike forgotten');
 };
 
@@ -5487,6 +6179,10 @@ const SETTINGS = [
     opts: [['daylight', 'Day'], ['contrast', 'Trail'], ['dark', 'Dark'], ['satellite', 'Sat']],
     put: v => setMapStyle(v) }, // setMapStyle persists + repaints the seg itself
   // Account
+  // the big left number and the small top-right pill are a pair — this picks which is which
+  { sec: 'stark', k: 'bigLeft', t: 'seg', l: 'Big left readout', segId: 'bigLeftSeg',
+    opts: [['speed', 'Speed'], ['battery', 'Battery']],
+    apply: () => { renderMain(); vargUI(); } }, // the pill takes whichever one is left over
   { sec: 'account', k: 'name', t: 'text', l: 'Your name', id: 'myName', max: 12, ph: 'Grant' },
   { sec: 'account', k: 'email', t: 'text', l: 'Email', id: 'myEmail', max: 60, ph: 'you@example.com' },
   // put:, not apply: — regSet assigns S.set[k] BEFORE calling apply, which would make
@@ -5499,11 +6195,11 @@ const SETTINGS = [
   { sec: 'map', k: 'stravaHike', t: 'toggle', l: 'Strava hikes (purple)', id: 'setStravaHike', apply: applyStrava },
   { sec: 'ui', k: 'wake', t: 'toggle', l: 'Keep screen on while navigating', id: 'setWake',
     apply: () => { if (S.nav) S.set.wake ? requestWake() : releaseWake(); } },
-  { sec: 'ui', k: 'swapMain', t: 'toggle', l: 'Swap main number (speed ↔ battery)', id: 'setSwapMain', apply: () => renderMain() },
   { sec: 'misc', k: 'showAdv', t: 'toggle', l: 'Show advanced tabs (UI, Stark, Keys)', id: 'setShowAdv', apply: applyShowAdv },
   // Nav
   { sec: 'nav', k: 'sound', t: 'toggle', l: 'Turn beeps', id: 'setSound', put: v => setSound(v) }, // setSound persists + syncs every mute face
   { sec: 'nav', k: 'confirm', t: 'toggle', l: 'Departure chime (turn done)', id: 'setConfirm' },
+  { sec: 'nav', k: 'startBrief', t: 'toggle', l: 'Ride briefing before START', id: 'setStartBrief' },
   { sec: 'nav', k: 'vehicle', t: 'seg', l: 'Vehicle (alerts + zoom)', segId: 'vehSeg',
     opts: [['walk', 'Walk'], ['mtb', 'MTB'], ['enduro', 'Enduro'], ['adventure', 'ADV']],
     apply: () => { refreshPresets(); renderSettings('adv'); } }, // presets + adv overrides are per-vehicle
@@ -5558,7 +6254,6 @@ const SETTINGS = [
   { k: 'colDone', t: 'color', adv: 1, l: 'Travelled route core' },
   { k: 'colDoneCase', t: 'color', adv: 1, l: 'Travelled route casing' },
   { k: 'progDoneOp', t: 'range', adv: 1, l: 'Travelled route opacity', min: 0.1, max: 1, step: 0.05 },
-  { k: 'progMissOp', t: 'range', adv: 1, l: 'Missed section opacity', min: 0.1, max: 1, step: 0.05 },
   { k: 'progContM', t: 'range', adv: 1, l: 'Progress continuity gap (m)', min: 50, max: 400, step: 10 },
   { k: 'recentM', t: 'range', adv: 1, l: 'Recent band length (m)', min: 0, max: 300, step: 5 },
   { k: 'progRecentOp', t: 'range', adv: 1, l: 'Recent band opacity', min: 0.1, max: 1, step: 0.05 },
@@ -5573,6 +6268,8 @@ const SETTINGS = [
   { k: 'colOwn', t: 'color', adv: 1, l: 'Heatmap: own rides' },
   { k: 'colOther', t: 'color', adv: 1, l: 'Heatmap: other riders' },
   { k: 'colPlan', t: 'color', adv: 1, l: 'Heatmap: planned' },
+  { k: 'colOffTrail', t: 'color', adv: 1, l: 'Backtrack trail: off-route' },
+  { k: 'offTrailOp', t: 'range', adv: 1, l: 'Backtrack trail: off-route opacity', min: 0.2, max: 1, step: 0.05 },
   { k: 'colTrail', t: 'color', adv: 1, l: 'Basemap minor trails (Trail style)' },
   { k: 'trailProm', t: 'range', adv: 1, l: 'Basemap trail width ×', min: 0.3, max: 3, step: 0.1 },
   { k: 'gpsAcc', t: 'range', adv: 1, l: 'GPS accuracy floor (m, 0 = off)', min: 0, max: 100, step: 5 },
@@ -5605,6 +6302,9 @@ function applyAdvPaint() {
   map.setPaintProperty('sel-case', 'line-width', totalW());
   map.setPaintProperty('tracks-other', 'line-color', ADV('colRoute'));
   map.setPaintProperty('tracks-other', 'line-width', coreW());
+  map.setPaintProperty('trail-dots', 'line-color', offTrailCol()); // off-route red follows the sliders too
+  map.setPaintProperty('trail-dots', 'line-opacity', offTrailOp());
+  map.setPaintProperty('trail-dots', 'line-width', offTrailW());
   map.setPaintProperty('surf-core', 'line-width', coreW());
   map.setPaintProperty('surf-case', 'line-color', caseColor());
   map.setPaintProperty('surf-case', 'line-width', totalW());
@@ -5613,8 +6313,6 @@ function applyAdvPaint() {
   map.setPaintProperty('surf-done-case', 'line-color', ADV('colDoneCase'));
   map.setPaintProperty('surf-done-case', 'line-opacity', ADV('progDoneOp'));
   map.setPaintProperty('surf-done-case', 'line-width', totalW());
-  map.setPaintProperty('surf-miss', 'line-opacity', ADV('progMissOp'));
-  map.setPaintProperty('surf-miss', 'line-width', coreW());
   map.setPaintProperty('surf-recent', 'line-opacity', ADV('progRecentOp'));
   map.setPaintProperty('surf-recent', 'line-width', coreW());
   // keep the tiny mark-dot tier matched to the route width sliders
@@ -5741,6 +6439,7 @@ function configBlob() { return JSON.stringify({ dingonavConfig: 1, set: S.set },
 function applyAllSettings() {
   S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
   S.set.layout = S.set.layout || {}; S.set.keys = S.set.keys || {};
+  migrateBigLeft();
   saveSet();
   renderSettings();
   setSound(S.set.sound);
@@ -6303,6 +7002,9 @@ async function boot() {
   try { await initMap(); } catch (e) { console.error('[dingonav] map init failed', e); baseSettle(); }
   fitSelected();   // llBounds are lat/lon — independent of the basemap
   startFriends();  // ride-name socket up from boot: turn-point edits sync while planning too
+  // maybeIntro() used to fire here, raising a second modal the moment the map
+  // appeared. The intro now lives inside the startup card and is already on screen
+  // by this point — bootDone() decides whether to hold for it.
   // Hold the startup screen until the basemap is in: without it a first-run rider
   // would be dismissed onto an empty dark void. analyzeRouteInner awaits baseReady
   // too, so this is about WHEN the screen goes, not about cue correctness.

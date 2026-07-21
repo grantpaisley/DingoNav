@@ -90,3 +90,33 @@ picker of actions that aren't currently on screen or docked (e.g. fit-track, zoo
 presets, future Varg toggles) and adds the chosen one as a tile. Complements the
 editable-layout feature (`2026-07-15-editable-layout-design.md`): today you can only
 dock what already exists on screen — the + is how *new* controls would be born.
+
+## Rider identity + usage telemetry synced to Dingo's database
+
+**Requested 2026-07-20, deferred the same day.** The first-visit card already captures
+name and email into `S.set`, and launches / cumulative visible time / last launch already
+accumulate locally under the `dingonav-use` localStorage key (deliberately *not* in
+`S.set`, which is exported and imported for bench tuning — a shared config must not carry
+or overwrite another rider's counters). Nothing is sent anywhere. Picking this up means
+wiring that local tally to Dingo and nothing else; the capture side is done.
+
+Findings from the Dingo side, so the groundwork isn't repeated:
+
+- **The database exists and already models people.** Dingo runs PostGIS behind an axum
+  daemon (`crates/daemon`), mounted at `/api`. The `owners` table (migration
+  `20260712000001_owners.sql`) holds `kind` (me/friend/source/synthetic), a UNIQUE
+  `email`, and `name` — the same identity DingoNav captures. The two apps already share
+  vocabulary via `shares.slug` ("pack key shared with DingoNav").
+- **Don't widen `owners`.** It is about *provenance of track data* — who a ride belongs
+  to. App telemetry is a different concern that happens to key on the same email, and a
+  `owners_single_me` unique index already constrains that table's semantics. Prefer a new
+  `app_users` table keyed on email, with `launches`, `total_ms`, `last_used_at`.
+  Either way it needs a migration in the **Dingo** repo, not this one.
+- **Local-first vs. a phone in the bush.** The daemon binds locally and its CORS
+  allowlist is the Vite dev origins plus an optional `DINGO_WEB_ORIGIN`; every non-safe
+  request needs the `x-dingo-web` CSRF header. A phone out of range cannot post at all,
+  so the client side has to queue locally and flush when back on the LAN — the same
+  shape as the VargPilot arrangement, not a fire-and-forget POST on launch.
+
+Open question if picked up: whether usage telemetry belongs in a trail-knowledge database
+at all, or in something separate that merely shares the email as a key.
