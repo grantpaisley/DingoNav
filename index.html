@@ -1236,9 +1236,9 @@ const ADV_D = {
   slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
   colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
   colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
-  // backtrack thread: the stretches ridden OFF the route are drawn red at route-core
-  // width, so where you strayed reads back off the map after the fact
-  colOffTrail: '#ff2d2d', offTrailOp: 0.75,
+  // backtrack breadcrumb: one solid red line, drawn at a share of the route core so the
+  // covered segments still read either side of it (1 = full core width)
+  colCrumb: '#ff2d2d', crumbOp: 0.75, crumbFrac: 0.5,
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
@@ -2153,18 +2153,9 @@ function caseColor() {
 }
 function totalW() { return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut'), 17, ADV('routeWIn')]; }
 function coreW() { const f = ADV('coreFrac'); return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut') * f, 17, ADV('routeWIn') * f]; }
-/* backtrack thread, split by the 'off' flag baked into each run of trail points */
-const offSeg = ['==', ['get', 'off'], 1];
-function offTrailCol() { return ['case', offSeg, ADV('colOffTrail'), '#9fb4c6']; }
-function offTrailOp() { return ['case', offSeg, ADV('offTrailOp'), 0.85]; }
-/* zoom has to stay the top-level interpolate input — MapLibre rejects ['zoom'] nested
-   inside a ['case'] — so the per-feature choice lives in the stop outputs instead */
-function offTrailW() {
-  const f = ADV('coreFrac');
-  return ['interpolate', ['linear'], ['zoom'],
-    10, ['case', offSeg, ADV('routeWOut') * f, 3.5],
-    17, ['case', offSeg, ADV('routeWIn') * f, 3.5]];
-}
+/* breadcrumb rides at a share of the core width so the travelled route still reads
+   either side of it — the ridden line sits ON the segments it covers, not over them */
+function crumbW() { const f = ADV('coreFrac') * ADV('crumbFrac'); return ['interpolate', ['linear'], ['zoom'], 10, ADV('routeWOut') * f, 17, ADV('routeWIn') * f]; }
 /* typed-mark dot radius: zoomed out it shrinks to half the route core width
    (reads as a blip ON the line), snapping up to the full 8 px dot at the
    old alert minzoom. Tracks the routeW sliders via applyAdvPaint. */
@@ -2229,13 +2220,12 @@ function addOverlays() {
   // added here but MOVED below (see moveLayer) — its stacking is deliberate, not
   // wherever the add order happened to leave it.
   map.addSource('trail', { type: 'geojson', data: EMPTY });
-  // On-route stretches stay the muted thin thread; off-route stretches go red at the
-  // route's own core width (the line inside the casing), slightly transparent so the
-  // map still reads through where you strayed.
+  // One solid red line, narrower than the route core so the covered segments still show
+  // either side of it. Slightly transparent so the map reads through as well.
+  // Rounded joins as well as caps — mitred corners notch.
   map.addLayer({ id: 'trail-dots', type: 'line', source: 'trail',
-    layout: { 'line-cap': 'round' },
-    paint: { 'line-color': offTrailCol(), 'line-opacity': offTrailOp(), 'line-width': offTrailW(),
-      'line-dasharray': [0.1, 2] } });
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': ADV('colCrumb'), 'line-opacity': ADV('crumbOp'), 'line-width': crumbW() } });
   /* route rendering (2026-07-19 track-colour design): one solid cased line — the
      dirt/sealed dash patterns are gone. Interior colour is baked per feature ('c'):
      route blue by default, or slope/surface colouring picked from the ☰ Track colour
@@ -4190,33 +4180,17 @@ function trailPush(x, y) {
   if (trailLast && dist(x, y, trailLast[0], trailLast[1]) < ADV('trailGap')) return;
   trailLast = [x, y];
   const [la, lo] = toLL(x, y);
-  // third slot records whether we were off the route here — older persisted trails
-  // simply don't have it, and read back as on-route
-  S.trail.push([lo, la, S.navState && S.navState.off ? 1 : 0]); trailDirty = true;
+  S.trail.push([lo, la]); trailDirty = true;
   if (S.trail.length > 20000) S.trail.splice(0, 5000); // cap memory on epic rides
   refreshTrail();
 }
-/* One feature per unbroken on/off run, so each carries its own 'off' flag for the paint
-   expressions. Runs overlap by one point — the boundary belongs to both — or the thread
-   would show a gap exactly where it changes colour. */
+/* One colour throughout, so one unbroken feature. Older persisted trails carry a third
+   slot (the retired off-route flag) — sliced off here rather than migrated. */
 function refreshTrail() {
   if (!mapReady) return;
   if (S.trail.length < 2) { map.getSource('trail').setData(EMPTY); return; }
-  const feats = [];
-  let run = [S.trail[0]], off = S.trail[0][2] ? 1 : 0;
-  const flush = () => {
-    if (run.length > 1) feats.push({ type: 'Feature', properties: { off },
-      geometry: { type: 'LineString', coordinates: run.map(p => [p[0], p[1]]) } });
-  };
-  for (let i = 1; i < S.trail.length; i++) {
-    const o = S.trail[i][2] ? 1 : 0;
-    // on a change the old run ends at i-1 and the new one starts there, so the crossing
-    // segment is drawn exactly once (in the new colour) and the point is shared
-    if (o !== off) { flush(); run = [S.trail[i - 1], S.trail[i]]; off = o; }
-    else run.push(S.trail[i]);
-  }
-  flush();
-  map.getSource('trail').setData({ type: 'FeatureCollection', features: feats });
+  map.getSource('trail').setData({ type: 'Feature', properties: {},
+    geometry: { type: 'LineString', coordinates: S.trail.map(p => [p[0], p[1]]) } });
 }
 // persist once a minute so an app restart mid-ride keeps the thread
 setInterval(() => {
@@ -6268,8 +6242,9 @@ const SETTINGS = [
   { k: 'colOwn', t: 'color', adv: 1, l: 'Heatmap: own rides' },
   { k: 'colOther', t: 'color', adv: 1, l: 'Heatmap: other riders' },
   { k: 'colPlan', t: 'color', adv: 1, l: 'Heatmap: planned' },
-  { k: 'colOffTrail', t: 'color', adv: 1, l: 'Backtrack trail: off-route' },
-  { k: 'offTrailOp', t: 'range', adv: 1, l: 'Backtrack trail: off-route opacity', min: 0.2, max: 1, step: 0.05 },
+  { k: 'colCrumb', t: 'color', adv: 1, l: 'Breadcrumb colour' },
+  { k: 'crumbOp', t: 'range', adv: 1, l: 'Breadcrumb opacity', min: 0.2, max: 1, step: 0.05 },
+  { k: 'crumbFrac', t: 'range', adv: 1, l: 'Breadcrumb share of core width', min: 0.2, max: 1, step: 0.05 },
   { k: 'colTrail', t: 'color', adv: 1, l: 'Basemap minor trails (Trail style)' },
   { k: 'trailProm', t: 'range', adv: 1, l: 'Basemap trail width ×', min: 0.3, max: 3, step: 0.1 },
   { k: 'gpsAcc', t: 'range', adv: 1, l: 'GPS accuracy floor (m, 0 = off)', min: 0, max: 100, step: 5 },
@@ -6302,9 +6277,9 @@ function applyAdvPaint() {
   map.setPaintProperty('sel-case', 'line-width', totalW());
   map.setPaintProperty('tracks-other', 'line-color', ADV('colRoute'));
   map.setPaintProperty('tracks-other', 'line-width', coreW());
-  map.setPaintProperty('trail-dots', 'line-color', offTrailCol()); // off-route red follows the sliders too
-  map.setPaintProperty('trail-dots', 'line-opacity', offTrailOp());
-  map.setPaintProperty('trail-dots', 'line-width', offTrailW());
+  map.setPaintProperty('trail-dots', 'line-color', ADV('colCrumb')); // breadcrumb follows its sliders
+  map.setPaintProperty('trail-dots', 'line-opacity', ADV('crumbOp'));
+  map.setPaintProperty('trail-dots', 'line-width', crumbW()); // and the route-width sliders, at half the core
   map.setPaintProperty('surf-core', 'line-width', coreW());
   map.setPaintProperty('surf-case', 'line-color', caseColor());
   map.setPaintProperty('surf-case', 'line-width', totalW());
