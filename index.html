@@ -1238,7 +1238,7 @@ const ADV_D = {
   colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
   // backtrack breadcrumb: one solid red line, drawn at a share of the route core so the
   // covered segments still read either side of it (1 = full core width)
-  colCrumb: '#ff2d2d', crumbOp: 0.75, crumbFrac: 0.5,
+  colCrumb: '#ff2d2d', crumbOp: 0.75, crumbFrac: 0.75,
 };
 function ADV(k) { const v = S.set.adv[k]; return v == null ? ADV_D[k] : v; }
 let map = null, mapReady = false;
