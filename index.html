@@ -5732,14 +5732,19 @@ const VARG_CHARS = {
   // the GATT dump (real EX, 2026-07-28) found the STANDARD Battery Level char
   // living inside the custom status service: one byte, 0–100. Free fallback.
   soc2a19: '00002a19-0000-1000-8000-00805f9b34fb',
-  /* Probe-derived, behind the "extra channels" setting until confirmed on the
-     dash. 2006 = four LE u32 counters; on Grant's EX they read 138860 /
-     146587 / 0 / 1307841, i.e. two trips (138.9, 146.6 km) and a 1307.8 km
-     odometer if the unit is metres — the total exceeding both trips is the
-     tell. 2002 = three LE i16, [0] steady ~52, [1] swinging 35–59 with
-     throttle, [2] steady ~-3: unidentified, shown raw to be matched against
-     the bike's own display. */
-  counters: '00002006-5374-6172-4b20-467574757265',
+  /* Probe-derived (2026-07-28), behind the "extra channels" setting.
+     NOTE the TLV tags inside the 2100 aggregate are NOT the characteristic's
+     low byte — direct subscription proved tag 6 carries char 2005's payload
+     and vice versa. These UUIDs come from subscribing directly, which wins.
+     2005 = four LE u32: 138862 / 146661 / 0 / 1308449 ⇒ two trips and a
+     1308.4 km odometer in metres (only [1] and [3] advance between runs).
+     6007 = 200 B = 100 × LE u16 cell voltages at 0.1 mV (0x902c = 3.6908 V;
+     100 cells × 3.69 V = 369 V, matching the 368.9 V DC bus exactly).
+     6005 = LE u16 battery temperatures at 0.1 °C (187 ⇒ 18.7 °C).
+     2006 = three LE i16, meaning still unknown — shown raw. */
+  counters: '00002005-5374-6172-4b20-467574757265',
+  cells:    '00006007-5374-6172-4b20-467574757265',
+  temps:    '00006005-5374-6172-4b20-467574757265',
   ch2002:   '00002002-5374-6172-4b20-467574757265',
 };
 const varg = {
@@ -5757,7 +5762,7 @@ const varg = {
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null, noPersist: false,
   yield: false, waitStream: false, // yield = release a silent link so VP can grab the bike
   log: [], n: { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }, // on-phone connection log + per-char frame counters
-  odo: null, trips: null, raw2002: null, // "extra channels" — unconfirmed, telemetry page only
+  odo: null, trips: null, raw2002: null, cells: null, temps: null, // "extra channels"
 };
 
 /* On-phone BLE log: field debugging happens on a handlebar phone with no
@@ -5833,6 +5838,32 @@ function vargCounters(dv) { // 2006: four LE u32. Probe read 138860/146587/0/130
   varg.odo = max;
   varg.trips = c.filter(v => v !== max);
 }
+/* 6007: 100 × LE u16 cell voltages at 0.1 mV. The spread between the best and
+   worst cell is the number that matters — a healthy pack sits within a few
+   tens of mV; a large delta means one group is dragging the pack down. */
+function vargCells(dv) {
+  varg.seen = Date.now();
+  const n = Math.floor(dv.byteLength / 2);
+  if (n < 8) return;
+  const v = [];
+  for (let i = 0; i < n; i++) { const x = dv.getUint16(i * 2, true); if (x > 10000 && x < 60000) v.push(x / 10000); }
+  if (v.length < 8) return;
+  varg.cells = { n: v.length, min: Math.min(...v), max: Math.max(...v),
+    sum: v.reduce((a, b) => a + b, 0) };
+  if (!varg.n.cells) { varg.n.cells = 1;
+    vlog('first cells frame: ' + v.length + ' cells, ' + varg.cells.min.toFixed(4) + '–' + varg.cells.max.toFixed(4) + ' V, pack ' + varg.cells.sum.toFixed(1) + ' V'); }
+}
+
+// 6005: LE u16 battery temperatures at 0.1 °C
+function vargTemps(dv) {
+  varg.seen = Date.now();
+  const t = [];
+  for (let i = 0; i + 1 < dv.byteLength; i += 2) { const x = dv.getUint16(i, true); if (x > 0 && x < 2000) t.push(x / 10); }
+  if (!t.length) return;
+  varg.temps = { min: Math.min(...t), max: Math.max(...t), n: t.length };
+  if (!varg.n.temps) { varg.n.temps = 1; vlog('first temps frame: ' + t.join(', ') + ' °C'); }
+}
+
 function varg2002(dv) { // 2002: three LE i16, meaning unknown
   varg.seen = Date.now();
   if (dv.byteLength < 6) return;
@@ -6007,13 +6038,15 @@ async function vargConnect(dev) {
         return ch;
       })
       .catch(e => { vlog('2a19 subscribe FAILED: ' + e.name); return null; });
-    if (S.set.vargExtra) { // opt-in: unconfirmed channels, extra traffic
-      await vargSub(server, VARG_SVC.live, VARG_CHARS.counters, vargCounters)
-        .then(() => vlog('subscribed: counters (2006)'))
-        .catch(e => vlog('counters subscribe FAILED: ' + e.name));
-      await vargSub(server, VARG_SVC.live, VARG_CHARS.ch2002, varg2002)
-        .then(() => vlog('subscribed: ch 2002'))
-        .catch(e => vlog('2002 subscribe FAILED: ' + e.name));
+    if (S.set.vargExtra) { // opt-in: probe-derived channels, extra traffic
+      for (const [label, svc, chr, fn] of [
+        ['counters (2005)', VARG_SVC.live, VARG_CHARS.counters, vargCounters],
+        ['cell voltages (6007)', VARG_SVC.battery, VARG_CHARS.cells, vargCells],
+        ['battery temps (6005)', VARG_SVC.battery, VARG_CHARS.temps, vargTemps],
+        ['ch 2002', VARG_SVC.live, VARG_CHARS.ch2002, varg2002],
+      ]) await vargSub(server, svc, chr, fn)
+        .then(() => vlog('subscribed: ' + label))
+        .catch(e => vlog(label + ' subscribe FAILED: ' + e.name));
     }
   } finally { vargGuardsClear(); }
   varg.state = 'on'; varg.retryN = 0; varg.hogged = false; vargUI();
@@ -6355,7 +6388,10 @@ async function vargPiggy() {
        Chrome, and gated behind a flag on some builds. Without it a held
        bike is unreachable: it doesn't advertise, so the chooser can't
        offer it either. Name the flag rather than failing mutely. */
-    vlog('getDevices() unavailable — no remembered-device API in this browser');
+    vlog('getDevices() unavailable — no remembered-device API in this browser. '
+      + 'Piggyback CANNOT work without it: a bike held by VargPilot stops advertising, so the chooser can never offer it. '
+      + 'Enable chrome://flags/#enable-web-bluetooth-new-permissions-backend and restart Chrome.');
+    if (!varg.noPersist) toast('This Chrome can’t remember devices — enable chrome://flags/#enable-web-bluetooth-new-permissions-backend and restart, or reconnecting needs the bike free every time.');
     varg.noPersist = true;
     return false;
   }
@@ -6486,6 +6522,8 @@ function vargUI() {
   vargStatus.textContent = !on ? 'Off — telemetry pill hidden.'
     : !navigator.bluetooth
     ? 'This browser has no Web Bluetooth — use Chrome on Android (the Arkenstone works).'
+    : varg.noPersist && varg.state !== 'on'
+    ? 'This Chrome can’t remember devices, so it can only connect while the bike is free. Enable chrome://flags/#enable-web-bluetooth-new-permissions-backend and restart Chrome to attach while VargPilot holds it.'
     : { off: vinNorm(S.set.vargVin)
           ? 'Not connected — power the bike on, then Connect. The pairing list will show only your bike.'
           : 'Not connected — power the bike on, then Connect. First time asks for the bike’s VIN.',
@@ -6525,14 +6563,20 @@ function vargPageGridRender() {
     + cell(varg.hp ?? '<small>not on BLE</small>', 'hp')
     + cell(varg.regen != null ? varg.regen + '<small>%</small>' : '<small>not on BLE</small>', 'regen')
     + cell(varg.tc != null ? varg.tc + '<small>%</small>' : '<small>not on BLE</small>', 'traction control')
-    + cell(varg.soh != null ? varg.soh + '<small>%</small>' : '—', 'battery health')
-    + cell(varg.vbus ?? '—', 'DC bus (raw)')
+    // SOH reads 0 on this VCU (2026-07-28) — show nothing rather than "0 %"
+    + cell(varg.soh ? varg.soh + '<small>%</small>' : '—', 'battery health')
+    // confirmed deci-volts: 3689 ⇒ 368.9 V, matching 100 cells × 3.69 V
+    + cell(varg.vbus != null ? (varg.vbus / 10).toFixed(1) + '<small> V</small>' : '—', 'pack voltage')
     + cell('Direct BLE<small> · ' + varg.state + '</small>', 'source')
     + cell(age, 'last frame')
     + (alerts ? cell('⚠', alerts, 'alert') : '')
     // unconfirmed channels — shown only when the setting is on AND data arrived
     + (varg.odo != null ? cell((varg.odo / 1000).toFixed(1) + '<small> km</small>', 'odometer?') : '')
-    + (varg.trips ? varg.trips.map((t, i) => cell((t / 1000).toFixed(1) + '<small> km</small>', 'trip ' + (i + 1) + '?')).join('') : '')
+    + (varg.trips ? varg.trips.filter(t => t > 0).map((t, i) => cell((t / 1000).toFixed(1) + '<small> km</small>', 'trip ' + (i + 1) + '?')).join('') : '')
+    + (varg.temps ? cell(varg.temps.min.toFixed(1) + '–' + varg.temps.max.toFixed(1) + '<small> °C</small>', 'battery temp') : '')
+    + (varg.cells ? cell(varg.cells.min.toFixed(3) + '–' + varg.cells.max.toFixed(3) + '<small> V</small>', varg.cells.n + ' cells') : '')
+    + (varg.cells ? cell(Math.round((varg.cells.max - varg.cells.min) * 1000) + '<small> mV</small>',
+        'cell spread' , (varg.cells.max - varg.cells.min) > 0.15 ? 'alert' : '') : '')
     + (varg.raw2002 ? cell('<small>' + varg.raw2002.join(' · ') + '</small>', 'ch 2002 (unknown)') : '');
 }
 function vargPageBtnsRender() {
@@ -6632,7 +6676,8 @@ document.getElementById('vargForgetBtn').onclick = async () => {
   Object.assign(varg, { dev: null, batt: null, map: null, spd: null, stat: null, soc19: null, alerts: {},
     state: 'off', soc: null, soh: null, vbus: null, speed: null,
     mode: null, neutral: false, hp: null, regen: null, tc: null,
-    odo: null, trips: null, raw2002: null, yield: false, waitStream: false });
+    odo: null, trips: null, raw2002: null, cells: null, temps: null,
+    yield: false, waitStream: false });
   vargUI(); toast('Bike forgotten');
 };
 
