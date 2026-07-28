@@ -1033,7 +1033,7 @@
 
     <h3>Direct BLE (no VargPilot)</h3>
     <div data-reg="ble" id="bleReg" style="display:none"></div>
-    <div class="btnRow" id="vargRow" style="display:none"><button class="btn" id="vargBtn">Connect bike…</button><button class="btn" id="vargForgetBtn">Forget bike</button></div>
+    <div class="btnRow" id="vargRow" style="display:none"><button class="btn" id="vargBtn">Connect bike…</button><button class="btn" id="vargForgetBtn">Forget bike</button><button class="btn" id="vargLogBtn">Connection log</button></div>
     <div class="callout" id="vargHelp" style="display:none"></div>
     <div class="hint">The app talks to the VCU itself — battery, ride mode, blinkers, reverse/crawl and alerts, no VargPilot needed.
       The VIN is the bike's Bluetooth name — with it set, the pairing list shows only your bike.
@@ -5747,7 +5747,21 @@ const varg = {
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null,
+  log: [], n: { batt: 0, map: 0, spd: 0, stat: 0 }, // on-phone connection log + per-char frame counters
 };
+
+/* On-phone BLE log: field debugging happens on a handlebar phone with no
+   devtools — every step, error name and first frame lands here, viewable
+   (and copyable) from the Connection log button in settings. */
+function vlog(msg) {
+  varg.log.push(new Date().toTimeString().slice(0, 8) + ' ' + msg);
+  if (varg.log.length > 100) varg.log.shift();
+  console.log('[varg]', msg);
+  const el = document.getElementById('vargLogTxt');
+  if (el) el.textContent = varg.log.join('\n'); // live while the card is open
+}
+const vhex = dv => [...new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)]
+  .map(b => b.toString(16).padStart(2, '0')).join(' ');
 const vargPill = document.getElementById('vargPill');
 const vargStatus = document.getElementById('vargStatus');
 
@@ -5756,9 +5770,8 @@ function vargBattery(dv) {
   varg.seen = Date.now();
   if (varg.logN < 5) { // first few frames raw — sanity check against the svag-mini layout
     varg.logN++;
-    console.log('[varg] battery raw:', [...new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)]
-      .map(b => b.toString(16).padStart(2, '0')).join(' '));
-  }
+    vlog('battery frame ' + ++varg.n.batt + ': ' + vhex(dv));
+  } else varg.n.batt++;
   // svag-mini confirms: plain LE u16, already a whole percent — no scaling
   let soc = dv.getUint16(0, true);
   if (soc > 100 && soc <= 1000) soc /= 10; // firmware drift to tenths would land here — absorb, don't lie
@@ -5771,6 +5784,7 @@ function vargBattery(dv) {
 function vargMapMsg(dv) { // Live svc, char 2004: first byte is the riding map (1–5)
   if (!dv.byteLength) return;
   varg.seen = Date.now();
+  if (!varg.n.map++) vlog('first map frame: ' + vhex(dv));
   const m = dv.getUint8(0);
   if (m >= 1 && m <= 5) vargApplyState({ mode: m }); // hp/regen/tc stay VP-only — the VCU doesn't notify them here
 }
@@ -5778,6 +5792,7 @@ function vargMapMsg(dv) { // Live svc, char 2004: first byte is the riding map (
 function vargSpeedMsg(dv) { // Live svc, char 2001: i16 LE, km/h × 10 (negative in reverse)
   if (dv.byteLength < 2) return;
   varg.seen = Date.now();
+  if (!varg.n.spd++) vlog('first speed frame: ' + vhex(dv));
   varg.speed = Math.abs(dv.getInt16(0, true)) / 10;
   renderMain(); // pill + big slot carry it — cheap, no full vargUI
 }
@@ -5791,8 +5806,9 @@ function vargSpeedMsg(dv) { // Live svc, char 2001: i16 LE, km/h × 10 (negative
       vargAlerts), @6 fault_bits, @8 info_bits (b0 charging, b3 in-gear,
       b4 awake — hibernating when 0). */
 function vargStatusMsg(dv) {
-  if (dv.byteLength < 10) return; // shorter frame = not the layout we decoded — leave the UI alone
+  if (dv.byteLength < 10) { if (!varg.n.stat++) vlog('status frame too short (' + dv.byteLength + ' B): ' + vhex(dv)); return; }
   varg.seen = Date.now();
+  if (!varg.n.stat++) vlog('first status frame: ' + vhex(dv));
   const misc = dv.getUint16(0, true), ind = dv.getUint16(2, true),
         alert = dv.getUint16(4, true), info = dv.getUint16(8, true);
   // blinker bits toggle with the bulb (~3 Hz) — vargBlink already debounces pulses
@@ -5870,9 +5886,12 @@ function vargGuardsClear() { varg.guardT.forEach(clearTimeout); varg.guardT = []
 async function vargConnect(dev) {
   varg.dev = dev; varg.state = 'connecting'; varg.stage = 'link'; vargUI();
   vargGuardsClear();
+  varg.n = { batt: 0, map: 0, spd: 0, stat: 0 }; varg.logN = 0;
+  vlog('connecting to "' + (dev.name || '?') + '"');
   dev.removeEventListener('gattserverdisconnected', vargDropped); // no dupes across retries
   dev.addEventListener('gattserverdisconnected', vargDropped);
   const server = await dev.gatt.connect(); // resolves whenever the bike powers on in range — never timed out
+  vlog('link up — pairing & subscribing');
   varg.stage = 'pair'; vargUI();
   /* From link-up onward a stall is real: it's almost always the MITM bonding
      PIN dialog sitting unanswered (Android can bury it in the notification
@@ -5893,32 +5912,49 @@ async function vargConnect(dev) {
       const svc = await server.getPrimaryService(VARG_SVC.status);
       const vinCh = await svc.getCharacteristic(VARG_CHARS.vin);
       const vin = vinNorm(new TextDecoder().decode(await vinCh.readValue()));
+      vlog('VIN read OK: "' + vin + '" — bond established');
       if (vinLooks(vin) && !vinNorm(S.set.vargVin)) { S.set.vargVin = vin; saveSet(); renderSettings('ble'); }
-    } catch (e) { console.warn('[varg] VIN read failed (' + e.name + ') — the bond will have to happen on subscribe'); }
+    } catch (e) { vlog('VIN read FAILED: ' + e.name + ' — bond may not exist (pair in Android Settings → Bluetooth)'); }
     varg.batt = await vargSub(server, VARG_SVC.battery, VARG_CHARS.battery, vargBattery);
+    vlog('subscribed: battery');
     /* Parity subs are best-effort: a bike granted before this build only
        permitted the battery service (Chrome scopes access to the services in
        optionalServices at pick time) — SecurityError here means Forget bike +
        re-pair to unlock mode/speed/indicators/alerts. SOC alone still rides. */
     varg.map = await vargSub(server, VARG_SVC.live, VARG_CHARS.map, vargMapMsg)
-      .catch(e => { console.warn('[varg] no map char (' + e.name + ') — Forget bike + re-pair for full telemetry'); return null; });
+      .then(ch => { vlog('subscribed: map'); return ch; })
+      .catch(e => { vlog('map subscribe FAILED: ' + e.name + ' — Forget bike + re-pair for full telemetry'); return null; });
     varg.spd = await vargSub(server, VARG_SVC.live, VARG_CHARS.speed, vargSpeedMsg)
-      .catch(e => { console.warn('[varg] no speed char (' + e.name + ') — Forget bike + re-pair for full telemetry'); return null; });
+      .then(ch => { vlog('subscribed: speed'); return ch; })
+      .catch(e => { vlog('speed subscribe FAILED: ' + e.name); return null; });
     varg.stat = await vargSub(server, VARG_SVC.status, VARG_CHARS.status, vargStatusMsg)
-      .catch(e => { console.warn('[varg] no status char (' + e.name + ') — Forget bike + re-pair for full telemetry'); return null; });
+      .then(ch => { vlog('subscribed: status'); return ch; })
+      .catch(e => { vlog('status subscribe FAILED: ' + e.name); return null; });
   } finally { vargGuardsClear(); }
   varg.state = 'on'; varg.retryN = 0; varg.hogged = false; vargUI();
   /* Silent-connection watchdog: subscribed but nothing arrives ⇒ almost
      certainly a bond that never completed (the exact 2026-07-28 field
-     failure). Surface the fix instead of showing a healthy-looking —%. */
+     failure). Probe reads to pin the failure mode, then name the fix. */
   const t0 = Date.now();
-  setTimeout(() => {
-    if (varg.state === 'on' && varg.seen < t0)
-      toast('Connected but no data — the pairing likely didn’t finish. Unpair the bike in Android’s Bluetooth settings, tap Forget bike here, then reconnect.');
-  }, 12000);
+  setTimeout(() => { if (varg.state === 'on' && varg.seen < t0) vargSilent(); }, 12000);
+}
+
+async function vargSilent() { // subscribed 12 s ago, zero frames — find out why, on the phone screen
+  vlog('12 s connected, zero frames — probing reads');
+  for (const [label, ch] of [['battery', varg.batt], ['status', varg.stat]]) {
+    if (!ch) { vlog('probe ' + label + ': never subscribed'); continue; }
+    try {
+      const dv = await ch.readValue();
+      vlog('probe read ' + label + ': ' + dv.byteLength + ' B ' + (dv.byteLength ? vhex(dv) + ' — data readable but notifications silent' : '(empty — VCU only speaks via notify)'));
+    } catch (e) {
+      vlog('probe read ' + label + ' FAILED: ' + e.name + (/security|auth|allowed/i.test(e.name + e.message) ? ' — BOND MISSING' : ''));
+    }
+  }
+  toast('Connected but no data — pair the bike in Android Settings → Bluetooth first (PIN ' + (S.set.vargPin || 'shown in VargPilot') + '), then reconnect. Details: Connection log in settings.');
 }
 
 function vargDropped() {
+  vlog('disconnected (frames so far: batt ' + varg.n.batt + ', map ' + varg.n.map + ', spd ' + varg.n.spd + ', stat ' + varg.n.stat + ')');
   vargGuardsClear(); // a mid-pair drop must not fire stale PIN nags later
   varg.soc = null; // stale % is worse than none
   varg.speed = null; // ditto a frozen speedo
@@ -6378,6 +6414,21 @@ vargPill.onpointerup = vargPill.onpointerleave = vargPill.onpointercancel = () =
 };
 
 document.getElementById('vargBtn').onclick = () => vargPick(); // wrap: the click Event must not land in opts
+document.getElementById('vargLogBtn').onclick = () => { // the console, but on the handlebar phone
+  const el = vargHelpEl();
+  el.innerHTML = `<b>BLE connection log</b>
+    <div class="hint">If a line says <b>BOND MISSING</b> — or the PIN prompt never appeared — pair the bike in
+    <b>Android Settings → Bluetooth → Pair new device</b> (PIN <b>${S.set.vargPin || 'shown in VargPilot as “pair PIN”'}</b>), then reconnect here.</div>
+    <pre id="vargLogTxt" style="font:11px/1.5 ui-monospace,Menlo,monospace; background:rgba(0,0,0,.25); border-radius:8px;
+      padding:8px 10px; max-height:40vh; overflow:auto; white-space:pre-wrap; margin:8px 0">${varg.log.join('\n') || '(nothing yet — tap Connect first)'}</pre>
+    <div class="btnRow"><button class="btn" id="vargLogCopy">Copy</button><button class="btn" id="vargHelpClose">Close</button></div>`;
+  el.style.display = '';
+  document.getElementById('vargLogCopy').onclick = async () => {
+    try { await navigator.clipboard.writeText(varg.log.join('\n')); toast('Log copied'); }
+    catch (e) { toast('Clipboard blocked — log is also in the console'); }
+  };
+  document.getElementById('vargHelpClose').onclick = vargHelpHide;
+};
 // previews run the REAL engage path (overlay + beeper + pill), then disengage —
 // so what you rehearse in the carpark is exactly what the bike will trigger
 function vargPreview(sp) {
