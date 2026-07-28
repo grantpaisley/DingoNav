@@ -103,6 +103,26 @@ are flagged <span class="tag tbd">TBD</span>.</div>
       <td><span class="tag tbd">PARTIAL</span></td></tr>
 </table>
 
+<h2>Unmapped channels — first probe results (28 July 2026)</h2>
+<div class="sub">From DingoNav's “Probe extra channels” run on the '25 EX. Decoded but not yet wired up.</div>
+<table>
+  <tr><th>Characteristic</th><th>Frame</th><th>Reading</th></tr>
+  <tr><td><code>00002003</code></td><td>12 B</td>
+      <td><span class="tag known">IMU</span> six LE int16: accel x/y/z then gyro x/y/z. Sample <code>1a 03 45 fa 03 05 f4 ff fd ff 19 00</code> = 794, −1467, 1283, −12, −3, 25; |accel| ≈ 2104 at rest ⇒ ≈2048 per g, gyros ≈ 0 stationary. <b>Lean angle is available from this.</b></td></tr>
+  <tr><td><code>00002100</code></td><td>varies</td>
+      <td><span class="tag known">AGGREGATE</span> TLV stream for the whole live service: <code>&lt;tag&gt;&lt;len&gt;&lt;payload&gt;…</code> where tag = the characteristic's low byte. E.g. <code>03 0c …12 B IMU… 02 06 …6 B… 01 04 …speed… 04 01 05</code> (map = 5). One subscription can replace several.</td></tr>
+  <tr><td><code>00001100</code> / <code>00006100</code></td><td>varies</td><td>Same aggregate pattern, per service (not fully parsed).</td></tr>
+  <tr><td><code>00002006</code></td><td>16 B</td>
+      <td>Four LE u32 counters; observed 138 860 and 146 587 — as metres that's 138.9 / 146.6 km, i.e. <b>odometer + trip</b>.</td></tr>
+  <tr><td><code>00002002</code></td><td>6 B</td>
+      <td>Three LE int16: [0] ≈ 52 steady (temperature?), [1] swings 35–62 <b>with throttle</b>, [2] ≈ −3 steady.</td></tr>
+  <tr><td><code>00002008</code></td><td>120 B</td><td>All zeros in this run (cell voltages would need 200 B). Unknown.</td></tr>
+  <tr><td><code>00001005</code></td><td>~120 B</td><td>Table of 4-byte records (<code>00 0c 01 00</code>, <code>00 08 01 00</code>…). Only remaining candidate for per-map config.</td></tr>
+  <tr><td><code>00002a19</code></td><td>—</td><td>Standard Battery Level, but <code>NotSupportedError</code> on read and never notified — decorative on this firmware.</td></tr>
+</table>
+<div class="note"><b>hp / regen / TC did not appear on any channel</b>, consistent with them being per-map <i>configuration</i> rather than telemetry — <code>svag-telemetry-format</code>'s proto has no field for them either. Live power is the better target: <code>(battery_dc_bus / 10) × battery_current</code>, once those two are located among <code>00006001</code>–<code>00006009</code>.</div>
+<div class="note"><b>Frame rates matter.</b> One minute of a real connection delivered 8738 speed frames, 1892 status, 1076 map, 125 battery. DingoNav coalesces UI repaints into one animation frame as a result.</div>
+
 <h2>Status characteristic 1002 — bit decode</h2>
 <div class="sub">Per svag-mini's <code>state.c</code>; the same words VargPilot re-serves as <code>Bike.STATUS_BITS.*</code>.</div>
 <table>
