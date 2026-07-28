@@ -1011,7 +1011,8 @@
     <div class="btnRow" id="vargRow" style="display:none"><button class="btn" id="vargBtn">Connect bike…</button><button class="btn" id="vargForgetBtn">Forget bike</button></div>
     <div class="callout" id="vargHelp" style="display:none"></div>
     <div class="hint">The app talks to the VCU itself — battery, ride mode, blinkers, reverse/crawl and alerts, no VargPilot needed.
-      The VIN is the bike's Bluetooth name — with it set, the pairing list shows only your bike (and we can predict the pairing PIN).
+      The VIN is the bike's Bluetooth name — with it set, the pairing list shows only your bike.
+      Connect to VargPilot once and the VIN (and pair PIN) are captured automatically.
       Once connected the app owns the bike's single BLE slot; tap the 🔋 pill to hand it to the Stark app and back.
       Paired before? Tap <b>Forget bike</b> once and re-pair — older pairings only unlocked the battery feed.</div>
 
@@ -1162,7 +1163,7 @@ const S = {
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargSrc: 'vp', vpUrl: '', vargVin: '', rideProfile: 'adventure', bigLeft: '',
+    varg: false, vargSrc: 'vp', vpUrl: '', vargVin: '', vargPin: '', rideProfile: 'adventure', bigLeft: '',
     navMode: 'follow', startBrief: true },  // navMode: follow | explore | snap — survives restarts by design
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
@@ -5918,12 +5919,12 @@ function vargHelpShow(kind) {
   el.innerHTML = kind === 'pre'
     ? `<b>Connect your Varg</b><ol>
          <li>Power the bike on and stand next to it (not held by the Stark app or VargPilot).</li>
-         <li>Enter the <b>VIN</b> — frame sticker at the steering head, or the Stark app — and the pairing list shows <b>only your bike</b>. Leave it blank to browse every nearby device (the bike is the bare 17-character code, never "Stark").</li>
+         <li>Enter the <b>VIN</b> — frame sticker at the steering head, the Stark app, or beside the bike in VargPilot — and the pairing list shows <b>only your bike</b>. Leave it blank to browse every nearby device (the bike is the bare 17-character code like <span class="kbd">UDUEX1…</span>, never "Stark").</li>
          <li>Chrome may say it <b>needs permission</b> — that's Android, not the bike.</li>
-         <li>First pairing asks for a <b>4-digit PIN</b> — we'll show you the likely one.</li>
+         <li>First pairing asks for a <b>6-digit PIN</b> — VargPilot shows it as “pair PIN”; the bike's display may too.</li>
        </ol>
        <div class="row"><label>Bike VIN</label><input type="text" id="vargPreVin" maxlength="17"
-         placeholder="VS9… (17 characters)" autocapitalize="characters" autocomplete="off" value="${vin}"></div>
+         placeholder="UDUEX1… (17 characters)" autocapitalize="characters" autocomplete="off" value="${vin}"></div>
        <div class="btnRow"><button class="btn" id="vargHelpGo">Connect</button>
          <button class="btn" id="vargHelpClose">Cancel</button></div>`
     : kind === 'perm'
@@ -5934,7 +5935,7 @@ function vargHelpShow(kind) {
        <div class="hint" style="margin-top:6px">Three things it usually is:</div>
        <ol>
          ${vin ? `<li><b>The VIN doesn't match</b> — the list only showed devices named exactly <span class="kbd">${vin}</span>. Double-check it, or browse everything instead:</li>`
-              : `<li><b>It's in the list but unrecognisable</b> — the bike shows up as its bare <b>17-character VIN</b> (like <span class="kbd">VS9…</span>), never as "Stark" or "Varg".</li>`}
+              : `<li><b>It's in the list but unrecognisable</b> — the bike shows up as its bare <b>17-character VIN</b> (like <span class="kbd">UDUEX1…</span>), never as "Stark" or "Varg".</li>`}
          <li><b>It really wasn't listed</b> — check it's powered on, in range, and not already held by the Stark app or VargPilot (a held bike stops advertising).</li>
          <li><b>Chrome couldn't scan</b> — if the prompt mentioned permissions:</li>
        </ol>
@@ -5958,24 +5959,21 @@ function vargHelpShow(kind) {
   el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
-/* First bonding demands a 4-digit PIN (the VCU requires MITM pairing). The
-   bike is supposed to show it on its own display, but the garmin-bridge
-   project reverse-engineered the derivation — SHA-256 over VIN + "-19700101"
-   — and the bike's advertised name IS its VIN. So we can tell the rider the
-   expected PIN before Android even asks for it. */
-async function vargPin(vin) {
-  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(vin + '-19700101')));
-  const d = (i, x, a) => ((h[i] ^ x) + a) % 10;
-  return String(d(15, 179, 239) * 1000 + d(9, 158, 100) * 100 + d(14, 236, 209) * 10 + d(3, 197, 228)).padStart(4, '0');
-}
+/* First bonding demands a 6-digit passkey (the VCU requires MITM pairing).
+   garmin-bridge published a VIN-based derivation, but it FAILED against the
+   real bike (2026-07-28: VIN UDUEX1AE95A002880 → actual passkey 000082,
+   derivation said 007774) — so we never show a computed guess. The reliable
+   sources are the VargPilot app (listed as "pair PIN" beside the bike) and
+   the bike's own display; vpSniff below captures it from VP automatically. */
 async function vargPinCard(name) { // non-blocking: sits on screen while the connect proceeds underneath
-  if (!vinLooks(name || '')) return; // anything that isn't VIN-shaped has no derivable PIN
-  const pin = await vargPin(name).catch(() => null);
-  if (!pin) return;
+  if (!vinLooks(name || '')) return; // not our bike — nothing useful to say
+  const pin = (S.set.vargPin || '').trim();
   const el = vargHelpEl();
   el.innerHTML = `<b>Pairing with ${name}</b>
-    <div class="hint" style="margin-top:6px">First-time pairing asks for a 4-digit PIN. The bike's display should show it —
-    if it doesn't, try <b style="font-size:1.3em">${pin}</b> (derived from this VIN).</div>
+    <div class="hint" style="margin-top:6px">First-time pairing asks Android for a <b>6-digit PIN</b>.
+    ${pin ? `This bike's PIN is <b style="font-size:1.3em">${pin}</b>.`
+          : `Find it in the <b>VargPilot app</b> (shown as “pair PIN” beside the bike) or on the bike's display.`}
+    Android remembers it after the first pairing.</div>
     <div class="btnRow"><button class="btn" id="vargHelpClose">Close</button></div>`;
   el.style.display = '';
   document.getElementById('vargHelpClose').onclick = vargHelpHide;
@@ -6082,6 +6080,7 @@ function vpConnect() {
       const missing = want.filter(p => !have.has(p));
       if (missing.length) console.warn('[vp] catalog is missing:', missing, '— VP version drift? full catalog:', m.paths);
       ws.send(JSON.stringify({ op: 'sub', paths: want.filter(p => have.has(p)) }));
+      vpSniff(m.paths); // opportunistic: VP knows the VIN + pair PIN — capture them so Direct BLE is pre-configured
       varg.state = 'on'; varg.seen = Date.now(); vargUI();
     } else if (m.op === 'prop') vpProp(m.path, m.value);
   };
@@ -6091,8 +6090,35 @@ function vpConnect() {
     vp.retryT = setTimeout(vpConnect, 3000);
   };
 }
+/* VargPilot already holds the bike, so its catalog is the cheapest source of
+   the two facts Direct BLE needs from the rider: the VIN (exact-name chooser
+   filter) and the 6-digit pair PIN (confirmed visible in VP's UI, 2026-07).
+   Exact path names are version-drift-prone, so sniff by pattern and only
+   fill blanks — never clobber what the rider typed. */
+function vpSniff(paths) {
+  const names = (paths || []).map(p => p.path);
+  const want = [];
+  vp.vinPath = vp.pinPath = null;
+  const vinP = names.find(p => /(^|[._])vin([._]|$)/i.test(p));
+  const pinP = names.find(p => /pair[._]?pin|pin[._]?code|passkey/i.test(p));
+  if (vinP && !vinNorm(S.set.vargVin)) { vp.vinPath = vinP; want.push(vinP); }
+  if (pinP && !S.set.vargPin) { vp.pinPath = pinP; want.push(pinP); }
+  if (want.length && vp.ws) vp.ws.send(JSON.stringify({ op: 'sub', paths: want }));
+}
+
 function vpProp(path, v) {
   varg.seen = Date.now();
+  if (path === vp.vinPath) {
+    const vin = vinNorm(String(v));
+    if (vinLooks(vin)) { S.set.vargVin = vin; saveSet(); renderSettings('ble');
+      toast('Bike VIN captured from VargPilot — Direct BLE is set up.'); }
+    vp.vinPath = null; return;
+  }
+  if (path === vp.pinPath) {
+    const pin = String(v).replace(/\D/g, '');
+    if (pin) { S.set.vargPin = pin.padStart(6, '0'); saveSet(); }
+    vp.pinPath = null; return;
+  }
   if (path === VP_P.soc) { varg.soc = Math.round(+v); vargUI(); return; }
   if (path === VP_P.soh) { varg.soh = +v; return; }
   if (path === VP_P.vbus) { varg.vbus = +v; return; }
@@ -6340,7 +6366,7 @@ const SETTINGS = [
     opts: [['vp', 'VargPilot'], ['ble', 'Direct BLE']], apply: () => applyVarg() },
   { sec: 'vp', k: 'vpUrl', t: 'text', l: 'Server URL', id: 'vpUrl', max: 80, ph: 'http://127.0.0.1:8080', apply: () => applyVarg() },
   // VIN doubles as the bike's BLE name — with it set, the pairing chooser shows ONLY the bike
-  { sec: 'ble', k: 'vargVin', t: 'text', l: 'Bike VIN', id: 'vargVin', max: 17, ph: 'VS9… (frame sticker)',
+  { sec: 'ble', k: 'vargVin', t: 'text', l: 'Bike VIN', id: 'vargVin', max: 17, ph: 'UDUEX1… (frame sticker)',
     apply: () => { const el = document.getElementById('vargVin'); if (el) el.value = S.set.vargVin = vinNorm(S.set.vargVin); } },
   // Advanced: live tuning console — sliders over the ADV_D defaults
   { h: 'Compass & camera' },
