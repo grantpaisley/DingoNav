@@ -1038,6 +1038,8 @@
     <div class="hint">The app talks to the VCU itself — battery, ride mode, blinkers, reverse/crawl and alerts, no VargPilot needed.
       The VIN is the bike's Bluetooth name — with it set, the pairing list shows only your bike.
       Connect to VargPilot once and the VIN (and pair PIN) are captured automatically.
+      After the first pairing, <b>leave the Stark app or VargPilot connected</b>: the bike only streams once one of them starts
+      the telemetry, and DingoNav rides along on the same link.
       Once connected the app owns the bike's single BLE slot; tap the 🔋 pill for the full telemetry page —
       releasing to the Stark app (and taking back) lives there.
       Paired before? Tap <b>Forget bike</b> once and re-pair — older pairings only unlocked the battery feed.</div>
@@ -5733,6 +5735,9 @@ const VARG_CHARS = {
   speed:   '00002001-5374-6172-4b20-467574757265', // i16 LE, km/h × 10 — the bike's own speedo
   status:  '00001002-5374-6172-4b20-467574757265', // 18 B of LE u16 bit-words (decode below)
   vin:     '00001003-5374-6172-4b20-467574757265', // 17 ASCII bytes; READ — encrypted, so it forces the bond
+  // the GATT dump (real EX, 2026-07-28) found the STANDARD Battery Level char
+  // living inside the custom status service: one byte, 0–100. Free fallback.
+  soc2a19: '00002a19-0000-1000-8000-00805f9b34fb',
 };
 const varg = {
   dev: null, batt: null, map: null, spd: null, stat: null, speed: null,
@@ -5747,7 +5752,7 @@ const varg = {
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null,
-  log: [], n: { batt: 0, map: 0, spd: 0, stat: 0 }, // on-phone connection log + per-char frame counters
+  log: [], n: { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }, // on-phone connection log + per-char frame counters
 };
 
 /* On-phone BLE log: field debugging happens on a handlebar phone with no
@@ -5790,6 +5795,14 @@ function vargMapMsg(dv) { // Live svc, char 2004: first byte is the riding map (
   if (!dv.byteLength) return;
   const m = dv.getUint8(0);
   if (m >= 1 && m <= 5) vargApplyState({ mode: m }); // hp/regen/tc stay VP-only — the VCU doesn't notify them here
+}
+
+function vargSoc19(dv) { // standard Battery Level: single byte, 0–100 %
+  varg.seen = Date.now();
+  if (!varg.n.soc19++) vlog('first 2a19 frame (' + dv.byteLength + ' B): ' + vhex(dv));
+  if (!dv.byteLength) return;
+  const v = dv.getUint8(0);
+  if (v <= 100) { varg.soc = v; vargUI(); }
 }
 
 function vargSpeedMsg(dv) { // Live svc, char 2001: i16 LE, km/h × 10 (negative in reverse)
@@ -5896,7 +5909,7 @@ function vargGuardsClear() { varg.guardT.forEach(clearTimeout); varg.guardT = []
 async function vargConnect(dev) {
   varg.dev = dev; varg.state = 'connecting'; varg.stage = 'link'; vargUI();
   vargGuardsClear();
-  varg.n = { batt: 0, map: 0, spd: 0, stat: 0 }; varg.logN = 0;
+  varg.n = { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }; varg.logN = 0;
   vlog('connecting to "' + (dev.name || '?') + '"');
   dev.removeEventListener('gattserverdisconnected', vargDropped); // no dupes across retries
   dev.addEventListener('gattserverdisconnected', vargDropped);
@@ -5949,6 +5962,16 @@ async function vargConnect(dev) {
     varg.stat = await vargSub(server, VARG_SVC.status, VARG_CHARS.status, vargStatusMsg)
       .then(ch => { vlog('subscribed: status'); return ch; })
       .catch(e => { vlog('status subscribe FAILED: ' + e.name); return null; });
+    // standard Battery Level (0x2A19) — plain u8 %, and READable, so it can
+    // answer even when the custom notify chars stay silent
+    varg.soc19 = await vargSub(server, VARG_SVC.status, VARG_CHARS.soc2a19, vargSoc19)
+      .then(async ch => {
+        vlog('subscribed: battery level (2a19)');
+        try { const dv = await ch.readValue(); if (dv.byteLength) { vlog('2a19 read: ' + vhex(dv)); vargSoc19(dv); } }
+        catch (e) { vlog('2a19 read failed: ' + e.name); }
+        return ch;
+      })
+      .catch(e => { vlog('2a19 subscribe FAILED: ' + e.name); return null; });
   } finally { vargGuardsClear(); }
   varg.state = 'on'; varg.retryN = 0; varg.hogged = false; vargUI();
   /* Silent-connection watchdog: subscribed but nothing arrives ⇒ almost
@@ -6005,8 +6028,8 @@ async function vargSilent() { // subscribed 12 s ago, zero frames — find out w
           : e.name === 'NotSupportedError' ? ' — notify-only char (expected on this VCU)' : ''));
     }
   }
-  vlog('diagnosis: subscriptions accepted but the VCU never streams — gate unidentified (an Android-side bond alone did NOT open it, field-tested 2026-07-28)');
-  toast('Connected but the bike never streams — see the Connection log in settings.');
+  vlog('diagnosis: subscriptions accepted, VCU never streams — likely nothing has STARTED the telemetry. Open the Stark app / VargPilot, let it connect, leave it running, then reconnect here (piggyback).');
+  toast('Connected but the bike isn’t streaming — open the Stark app or VargPilot, let it connect, leave it running, then tap Connect here.');
 }
 
 function vargDropped() {
@@ -6075,7 +6098,7 @@ function vargHelpShow(kind) {
   const el = vargHelpEl(), vin = vinNorm(S.set.vargVin);
   el.innerHTML = kind === 'pre'
     ? `<b>Connect your Varg</b><ol>
-         <li><b>Free the bike first</b>: force-stop the Stark app AND VargPilot (Settings → Apps → Force stop) on <i>every</i> device — a connected bike stops advertising and can't be found. Then power the bike off and on.</li>
+         <li><b>Leave the Stark app or VargPilot connected.</b> The bike appears not to start streaming on its own — the stock app does, and DingoNav rides along on the same link. (Only for the very first pairing does the bike need to be free, so the chooser can see it advertising.)</li>
          <li>Enter the <b>VIN</b> — frame sticker at the steering head, the Stark app, or beside the bike in VargPilot — and the pairing list shows <b>only your bike</b>. Leave it blank to browse every nearby device (the bike is the bare 17-character code like <span class="kbd">UDUEX1…</span>, never "Stark").</li>
          <li>Chrome may say it <b>needs permission</b> — that's Android, not the bike.</li>
          <li><b>First time only:</b> pair the bike in <b>Android Settings → Bluetooth → Pair new device</b> (6-digit PIN — VargPilot shows it as “pair PIN”). The bike streams only over an encrypted link and Chrome can't create that bond itself.</li>
@@ -6093,7 +6116,7 @@ function vargHelpShow(kind) {
        <ol>
          ${vin ? `<li><b>The VIN doesn't match</b> — the list only showed devices named exactly <span class="kbd">${vin}</span>. Double-check it, or browse everything instead:</li>`
               : `<li><b>It's in the list but unrecognisable</b> — the bike shows up as its bare <b>17-character VIN</b> (like <span class="kbd">UDUEX1…</span>), never as "Stark" or "Varg".</li>`}
-         <li><b>It really wasn't listed</b> — a held bike stops advertising and is invisible to the scan. <b>Force-stop</b> (not just close) the Stark app and VargPilot on every device, then power-cycle the bike and retry.</li>
+         <li><b>It really wasn't listed</b> — a bike currently held by the Stark app or VargPilot stops advertising and is invisible to the scan. For this <i>first</i> pairing only, force-stop those apps and power-cycle the bike. (Afterwards do the opposite: leave them running and DingoNav reconnects without the chooser.)</li>
          <li><b>Chrome couldn't scan</b> — if the prompt mentioned permissions:</li>
        </ol>
        <div class="sub">${VARG_PERM_STEPS}</div>
@@ -6136,8 +6159,33 @@ async function vargPinCard(name) { // non-blocking: sits on screen while the con
   document.getElementById('vargHelpClose').onclick = vargHelpHide;
 }
 
+/* ---- piggyback connect ----
+   The VCU appears not to stream on its own: the stock Stark app (or
+   VargPilot) starts the telemetry, and further GATT clients ride along on
+   those notifications — that's how tonysilvasa/stark-varg-garmin-bridge
+   works ("attaches a second GATT client to the already-connected bike").
+   A connected bike stops advertising, so the chooser can NEVER find it —
+   this path skips the scan entirely and connects to the remembered device.
+   Requires the site permission to already exist (getDevices). */
+async function vargPiggy() {
+  if (!navigator.bluetooth || !navigator.bluetooth.getDevices) {
+    toast('This browser can’t reconnect without the chooser — use Chrome on Android.'); return false;
+  }
+  const vin = vinNorm(S.set.vargVin);
+  let devs = [];
+  try { devs = await navigator.bluetooth.getDevices(); } catch (e) { vlog('getDevices failed: ' + e.name); }
+  const dev = devs.find(d => vinNorm(d.name || '') === vin) || devs[0];
+  if (!dev) return false; // never granted on this phone — caller falls back to the chooser
+  vlog('piggyback: connecting to remembered device (no scan)');
+  try { await vargConnect(dev); } catch (e) { vlog('piggyback connect failed: ' + e.name); vargDropped(); }
+  return true;
+}
+
 async function vargPick(opts = {}) { // first-time pairing: needs the chooser (user gesture)
   if (!navigator.bluetooth) { toast('No Web Bluetooth in this browser — use Chrome on Android.'); return; }
+  // A remembered bike never needs the chooser — and MUST not use it while the
+  // Stark app/VargPilot holds the bike (no adverts to find). Try that first.
+  if (!opts.all && !opts.chooser && await vargPiggy()) return;
   const vin = opts.all ? '' : vinNorm(S.set.vargVin);
   // no VIN yet → the setup card collects it (its Connect tap is itself a user
   // gesture, so requestDevice below is still allowed). VIN known → straight in.
@@ -6473,9 +6521,9 @@ document.getElementById('vargBtn').onclick = () => vargPick(); // wrap: the clic
 document.getElementById('vargLogBtn').onclick = () => { // the console, but on the handlebar phone
   const el = vargHelpEl();
   el.innerHTML = `<b>BLE connection log</b>
-    <div class="hint">Subscribed but zero frames? This VCU accepts subscriptions on a plain link but only <b>streams over an
-    encrypted one</b>, and Chrome can't create that bond itself. Pair the bike ONCE in
-    <b>Android Settings → Bluetooth → Pair new device</b> (PIN <b>${S.set.vargPin || 'shown in VargPilot as “pair PIN”'}</b>), then reconnect here.</div>
+    <div class="hint">Subscribed but zero frames? The VCU appears not to stream unless something has <b>started</b> the telemetry.
+    Open the <b>Stark app or VargPilot</b>, let it connect to the bike, and <i>leave it running</i> — then tap Connect here:
+    DingoNav attaches to the same link and rides along on its notifications.</div>
     <pre id="vargLogTxt" style="font:11px/1.5 ui-monospace,Menlo,monospace; background:rgba(0,0,0,.25); border-radius:8px;
       padding:8px 10px; max-height:40vh; overflow:auto; white-space:pre-wrap; margin:8px 0">${varg.log.join('\n') || '(nothing yet — tap Connect first)'}</pre>
     <div class="btnRow"><button class="btn" id="vargLogCopy">Copy</button><button class="btn" id="vargHelpClose">Close</button></div>`;
@@ -6502,7 +6550,7 @@ document.getElementById('vargForgetBtn').onclick = async () => {
     if (varg.dev.gatt.connected) varg.dev.gatt.disconnect();
     if (varg.dev.forget) await varg.dev.forget().catch(() => {}); // Chrome 110+: drops the site permission
   }
-  Object.assign(varg, { dev: null, batt: null, map: null, spd: null, stat: null, alerts: {},
+  Object.assign(varg, { dev: null, batt: null, map: null, spd: null, stat: null, soc19: null, alerts: {},
     state: 'off', soc: null, soh: null, vbus: null, speed: null,
     mode: null, neutral: false, hp: null, regen: null, tc: null });
   vargUI(); toast('Bike forgotten');
