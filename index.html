@@ -6014,6 +6014,58 @@ async function vargDump() {
   vlog('--- end dump ---');
 }
 
+/* HP / regen / TC have no known BLE characteristic — DingoNav only ever got
+   them from VargPilot's config paths, because they're per-map CONFIG, not
+   telemetry. svag-telemetry-format's v1.proto (the recording schema, which
+   "mostly replicates the data available via the Bluetooth interface") has no
+   field for them either — confirming config lives elsewhere.
+   What that proto DOES list is the VCU's telemetry catalogue, and it's the
+   key for reading probe output below — candidates for the unmapped chars:
+     throttle_position · motor_rpm · odometer · battery_current ·
+     battery_dc_bus · inverter_dc_bus · vcu_temperature · motor_sensor and
+     igbt_sensor temps · battery_temperatures · faults · status
+   Note battery_dc_bus + battery_current give LIVE power — the proto README
+   computes motor power as (battery_dc_bus / 10) * battery_current — which is
+   a better HUD number than the static map setting anyway.
+   So: listen to every unmapped notify char at once and print what arrives;
+   known values (VP's mode card, the bike's own display) identify each one.
+   Manual, time-boxed, unsubscribes itself — no ride-time overhead. */
+const VARG_PROBE_MS = 20000;
+async function vargProbeExtras() {
+  const server = varg.dev && varg.dev.gatt;
+  if (!server || !server.connected) { toast('Connect to the bike first'); return; }
+  const known = new Set(Object.values(VARG_CHARS));
+  const subs = [];
+  vlog('--- extra-channel probe (' + VARG_PROBE_MS / 1000 + ' s) ---');
+  for (const [name, id] of Object.entries(VARG_SVC)) {
+    let chs = [];
+    try { chs = await (await server.getPrimaryService(id)).getCharacteristics(); } catch (e) { continue; }
+    for (const c of chs) {
+      const p = c.properties || {};
+      if (known.has(c.uuid) || !(p.notify || p.indicate)) continue;
+      const tag = name + '/' + c.uuid.slice(0, 8);
+      const fn = e => vlog('  ' + tag + ': ' + vhex(e.target.value));
+      try {
+        c.addEventListener('characteristicvaluechanged', fn);
+        await c.startNotifications();
+        subs.push([c, fn]);
+        if (p.read) { // a read gives an immediate sample even if it rarely notifies
+          try { const dv = await c.readValue(); if (dv.byteLength) vlog('  ' + tag + ' read: ' + vhex(dv)); } catch (e) {}
+        }
+      } catch (e) { vlog('  ' + tag + ' sub failed: ' + e.name); }
+    }
+  }
+  toast('Listening on ' + subs.length + ' extra channels for ' + VARG_PROBE_MS / 1000 + ' s — change mode/throttle now, then read the log.');
+  setTimeout(async () => {
+    for (const [c, fn] of subs) {
+      try { await c.stopNotifications(); } catch (e) {}
+      c.removeEventListener('characteristicvaluechanged', fn);
+    }
+    vlog('--- probe ended (' + subs.length + ' channels) ---');
+    toast('Probe finished — Connection log has the results.');
+  }, VARG_PROBE_MS);
+}
+
 async function vargSilent() { // subscribed 12 s ago, zero frames — find out why, on the phone screen
   vlog('12 s connected, zero frames — probing reads');
   await vargDump();
@@ -6043,20 +6095,62 @@ function vargDropped() {
   varg.state = 'retry'; vargUI(); vargRetry();
 }
 
-function vargRetry() { // BLE flaps on a dirt bike — recover quietly, back off to 15 s
+/* Device handles go stale — after a drop, a power-cycle, or Chrome recycling
+   the object, the cached BluetoothDevice can refuse to reconnect forever
+   while a freshly-fetched handle for the same bike works. Re-resolve from
+   the permission store rather than retrying a dead reference. */
+async function vargResolve() {
+  if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return varg.dev;
+  try {
+    const devs = await navigator.bluetooth.getDevices();
+    const vin = vinNorm(S.set.vargVin);
+    return devs.find(d => vinNorm(d.name || '') === vin) || devs[0] || varg.dev;
+  } catch (e) { return varg.dev; }
+}
+
+function vargRetry() { // BLE flaps on a dirt bike — recover quietly, back off to 20 s, never give up
   clearTimeout(varg.retryT);
-  if (!varg.dev) { varg.state = 'off'; vargUI(); return; } // nothing to retry against
-  const wait = Math.min(15000, 1000 * 2 ** varg.retryN++);
-  varg.retryT = setTimeout(() => {
-    vargConnect(varg.dev).catch(() => {
-      if (varg.retryN >= 4 && !varg.hogged) { // repeated failure smells like the stock app stole the connection
+  if (!S.set.varg || S.set.vargSrc !== 'ble' || varg.state === 'released') return; // not ours to retry
+  const n = varg.retryN++;
+  const wait = Math.min(20000, 1000 * 2 ** Math.min(n, 5));
+  varg.state = 'retry'; vargUI();
+  varg.retryT = setTimeout(async () => {
+    // from the third attempt on, refresh the handle every time — the stale-object
+    // case is invisible otherwise and retries a corpse indefinitely
+    const dev = n >= 2 ? await vargResolve() : varg.dev;
+    if (!dev) { vlog('retry: no remembered device — tap Connect'); varg.state = 'off'; vargUI(); return; }
+    if (dev !== varg.dev) vlog('retry: using a fresh device handle');
+    vlog('retry #' + (n + 1));
+    try { await vargConnect(dev); }
+    catch (e) {
+      vlog('retry #' + (n + 1) + ' failed: ' + e.name);
+      if (n + 1 >= 4 && !varg.hogged) { // sustained failure — surface the usual suspects once
         varg.hogged = true;
-        toast('Can’t reach the bike — the Stark app may be holding it. Force-close it, then tap the 🔋 pill.');
+        toast('Can’t reach the bike — make sure VargPilot (or the Stark app) is connected to it, then tap the 🔋 pill → Reconnect.');
       }
       vargRetry();
-    });
+    }
   }, wait);
 }
+
+/* One entry point for "get the bike back if it isn't streaming": used by the
+   resume hook, the stale-data watchdog and the manual Reconnect button, so
+   every recovery path behaves identically. */
+async function vargEnsure(why) {
+  if (!S.set.varg || S.set.vargSrc !== 'ble' || varg.state === 'released') return;
+  if (varg.state === 'on' && varg.seen && Date.now() - varg.seen < 20000) return; // healthy
+  if (varg.state === 'connecting') return; // already trying
+  vlog('reconnect (' + why + ')');
+  clearTimeout(varg.retryT);
+  varg.retryN = 0; varg.hogged = false;
+  if (varg.dev && varg.dev.gatt.connected) { try { varg.dev.gatt.disconnect(); } catch (e) {} } // half-open links never recover
+  const dev = await vargResolve();
+  if (!dev) { vlog('reconnect: nothing remembered — tap Connect'); return; }
+  try { await vargConnect(dev); } catch (e) { vlog('reconnect failed: ' + e.name); vargRetry(); }
+}
+
+// coming back to the app is the commonest moment to discover the bike dropped
+document.addEventListener('visibilitychange', () => { if (!document.hidden) vargEnsure('app resumed'); });
 
 function vargRelease() { // hand the bike to the Stark app for tuning
   clearTimeout(varg.retryT); vargGuardsClear();
@@ -6463,9 +6557,11 @@ function vargPageGridRender() {
     cell((varg.soc ?? '—') + '<small>%</small>', 'battery', 'soc' + (varg.soc != null && varg.soc <= 15 ? ' low' : ''))
     + cell(vargKmh() + '<small> km/h</small>', varg.speed != null ? 'speed (bike)' : 'speed (GPS)')
     + cell(varg.neutral ? 'N' : varg.special ? varg.special.toUpperCase() : varg.mode != null ? 'M' + varg.mode : '—', 'mode')
-    + cell(varg.hp ?? '—', 'hp')
-    + cell(varg.regen != null ? varg.regen + '<small>%</small>' : '—', 'regen')
-    + cell(varg.tc != null ? varg.tc + '<small>%</small>' : '—', 'traction control')
+    // hp/regen/TC are VargPilot-only (per-mode config, no known BLE char) —
+    // say so rather than showing a bare dash that reads as a fault
+    + cell(varg.hp ?? '<small>VP only</small>', 'hp')
+    + cell(varg.regen != null ? varg.regen + '<small>%</small>' : '<small>VP only</small>', 'regen')
+    + cell(varg.tc != null ? varg.tc + '<small>%</small>' : '<small>VP only</small>', 'traction control')
     + cell(varg.soh != null ? varg.soh + '<small>%</small>' : '—', 'battery health')
     + cell(varg.vbus ?? '—', 'DC bus (raw)')
     + cell((S.set.vargSrc === 'vp' ? 'VargPilot' : 'Direct BLE') + '<small> · ' + varg.state + '</small>', 'source')
@@ -6476,14 +6572,15 @@ function vargPageBtnsRender() {
   const b = document.getElementById('vargPageBtns'), ble = S.set.vargSrc !== 'vp';
   b.innerHTML = (ble && varg.state === 'on' ? '<button class="btn" id="vpgRelease">Release bike to Stark app</button>' : '')
     + (ble && varg.state === 'released' ? '<button class="btn" id="vpgResume">Take the bike back</button>' : '')
-    + (varg.state === 'retry' || varg.state === 'off' ? '<button class="btn" id="vpgRetry">Reconnect</button>' : '')
+    // Reconnect is always offered on BLE: "connected" is not proof of streaming
+    + (ble || varg.state === 'retry' || varg.state === 'off' ? '<button class="btn" id="vpgRetry">Reconnect</button>' : '')
     + '<button class="btn" id="vpgClose">Close</button>';
   const q = id => document.getElementById(id), rerender = () => { vargPageGridRender(); vargPageBtnsRender(); vargPageBump(); };
   if (q('vpgRelease')) q('vpgRelease').onclick = () => { vargRelease(); rerender(); };
   if (q('vpgResume')) q('vpgResume').onclick = () => { vargResume(); rerender(); };
   if (q('vpgRetry')) q('vpgRetry').onclick = () => {
     if (S.set.vargSrc === 'vp') { vpConnect(); toast('Reconnecting to VargPilot…'); }
-    else { varg.retryN = 0; varg.dev ? vargRetry() : vargPick(); }
+    else { varg.seen = 0; vargEnsure('manual'); toast('Reconnecting to the bike…'); } // seen=0 so a stale "on" can't short-circuit it
     vargPageClose();
   };
   if (q('vpgClose')) q('vpgClose').onclick = vargPageClose;
@@ -6538,12 +6635,15 @@ document.getElementById('vargLogBtn').onclick = () => { // the console, but on t
     DingoNav attaches to the same link and rides along on its notifications.</div>
     <pre id="vargLogTxt" style="font:11px/1.5 ui-monospace,Menlo,monospace; background:rgba(0,0,0,.25); border-radius:8px;
       padding:8px 10px; max-height:40vh; overflow:auto; white-space:pre-wrap; margin:8px 0">${varg.log.join('\n') || '(nothing yet — tap Connect first)'}</pre>
-    <div class="btnRow"><button class="btn" id="vargLogCopy">Copy</button><button class="btn" id="vargHelpClose">Close</button></div>`;
+    <div class="btnRow"><button class="btn" id="vargLogCopy">Copy</button>
+      <button class="btn" id="vargLogProbe">Probe extra channels</button>
+      <button class="btn" id="vargHelpClose">Close</button></div>`;
   el.style.display = '';
   document.getElementById('vargLogCopy').onclick = async () => {
     try { await navigator.clipboard.writeText(varg.log.join('\n')); toast('Log copied'); }
     catch (e) { toast('Clipboard blocked — log is also in the console'); }
   };
+  document.getElementById('vargLogProbe').onclick = () => { vargHelpHide(); vargProbeExtras(); };
   document.getElementById('vargHelpClose').onclick = vargHelpHide;
 };
 // previews run the REAL engage path (overlay + beeper + pill), then disengage —
@@ -6578,8 +6678,19 @@ function applyVarg() { // off, or a source flip: quiesce BOTH sources, then star
 }
 document.getElementById('vpBtn').onclick = () => { audio(); vpConnect(); }; // tap doubles as WebAudio unlock
 document.getElementById('vpProbeBtn').onclick = vpProbe;
-setInterval(() => { // a % that quietly stopped updating lies — dim it after 20 s of silence
-  if (varg.state === 'on' && varg.seen && Date.now() - varg.seen > 20000) vargPill.classList.add('wait');
+/* A % that quietly stopped updating lies — dim it after 20 s of silence, and
+   after 35 s stop trusting the link at all: a GATT connection can stay
+   "connected" long after the bike stopped talking (or after VargPilot took
+   the stream away), and only a fresh connect recovers it. */
+setInterval(() => {
+  if (varg.state !== 'on' || !varg.seen) return;
+  const quiet = Date.now() - varg.seen;
+  if (quiet > 20000) vargPill.classList.add('wait');
+  if (quiet > 35000 && S.set.vargSrc === 'ble') {
+    vlog('no frames for ' + Math.round(quiet / 1000) + ' s — treating the link as dead');
+    varg.seen = 0; // don't re-fire on the same silence while the reconnect runs
+    vargEnsure('stream went quiet');
+  }
 }, 5000);
 applyVarg();
 
