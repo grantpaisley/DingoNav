@@ -5912,9 +5912,18 @@ async function vargConnect(dev) {
       const svc = await server.getPrimaryService(VARG_SVC.status);
       const vinCh = await svc.getCharacteristic(VARG_CHARS.vin);
       const vin = vinNorm(new TextDecoder().decode(await vinCh.readValue()));
-      vlog('VIN read OK: "' + vin + '" — bond established');
+      vlog('VIN read OK: "' + vin + '" — link is encrypted');
       if (vinLooks(vin) && !vinNorm(S.set.vargVin)) { S.set.vargVin = vin; saveSet(); renderSettings('ble'); }
-    } catch (e) { vlog('VIN read FAILED: ' + e.name + ' — bond may not exist (pair in Android Settings → Bluetooth)'); }
+    } catch (e) {
+      /* Confirmed on the real EX (2026-07-28): NotSupportedError — the VIN char
+         is notify-only like everything else on this VCU, so the read can never
+         force the bond. It stays only for VCU variants where it might work;
+         a security-flavoured error IS diagnostic (link unencrypted). */
+      vlog(e.name === 'NotSupportedError'
+        ? 'VIN char not readable on this VCU (expected — notify-only stack)'
+        : 'VIN read FAILED: ' + e.name + (/security|auth|allowed/i.test(e.name + e.message)
+          ? ' — LINK NOT ENCRYPTED: pair in Android Settings → Bluetooth first' : ''));
+    }
     varg.batt = await vargSub(server, VARG_SVC.battery, VARG_CHARS.battery, vargBattery);
     vlog('subscribed: battery');
     /* Parity subs are best-effort: a bike granted before this build only
@@ -5947,9 +5956,12 @@ async function vargSilent() { // subscribed 12 s ago, zero frames — find out w
       const dv = await ch.readValue();
       vlog('probe read ' + label + ': ' + dv.byteLength + ' B ' + (dv.byteLength ? vhex(dv) + ' — data readable but notifications silent' : '(empty — VCU only speaks via notify)'));
     } catch (e) {
-      vlog('probe read ' + label + ' FAILED: ' + e.name + (/security|auth|allowed/i.test(e.name + e.message) ? ' — BOND MISSING' : ''));
+      vlog('probe read ' + label + ' FAILED: ' + e.name
+        + (/security|auth|allowed/i.test(e.name + e.message) ? ' — LINK NOT ENCRYPTED (pair in Android Settings)'
+          : e.name === 'NotSupportedError' ? ' — notify-only char (expected on this VCU)' : ''));
     }
   }
+  vlog('diagnosis: VCU subscribes fine on a plain link but only STREAMS over an encrypted one — an Android-side bond fixes it');
   toast('Connected but no data — pair the bike in Android Settings → Bluetooth first (PIN ' + (S.set.vargPin || 'shown in VargPilot') + '), then reconnect. Details: Connection log in settings.');
 }
 
@@ -6022,7 +6034,7 @@ function vargHelpShow(kind) {
          <li><b>Free the bike first</b>: force-stop the Stark app AND VargPilot (Settings → Apps → Force stop) on <i>every</i> device — a connected bike stops advertising and can't be found. Then power the bike off and on.</li>
          <li>Enter the <b>VIN</b> — frame sticker at the steering head, the Stark app, or beside the bike in VargPilot — and the pairing list shows <b>only your bike</b>. Leave it blank to browse every nearby device (the bike is the bare 17-character code like <span class="kbd">UDUEX1…</span>, never "Stark").</li>
          <li>Chrome may say it <b>needs permission</b> — that's Android, not the bike.</li>
-         <li>First pairing asks for a <b>6-digit PIN</b> — VargPilot shows it as “pair PIN”; the bike's display may too.</li>
+         <li><b>First time only:</b> pair the bike in <b>Android Settings → Bluetooth → Pair new device</b> (6-digit PIN — VargPilot shows it as “pair PIN”). The bike streams only over an encrypted link and Chrome can't create that bond itself.</li>
        </ol>
        <div class="row"><label>Bike VIN</label><input type="text" id="vargPreVin" maxlength="17"
          placeholder="UDUEX1… (17 characters)" autocapitalize="characters" autocomplete="off" value="${vin}"></div>
@@ -6417,7 +6429,8 @@ document.getElementById('vargBtn').onclick = () => vargPick(); // wrap: the clic
 document.getElementById('vargLogBtn').onclick = () => { // the console, but on the handlebar phone
   const el = vargHelpEl();
   el.innerHTML = `<b>BLE connection log</b>
-    <div class="hint">If a line says <b>BOND MISSING</b> — or the PIN prompt never appeared — pair the bike in
+    <div class="hint">Subscribed but zero frames? This VCU accepts subscriptions on a plain link but only <b>streams over an
+    encrypted one</b>, and Chrome can't create that bond itself. Pair the bike ONCE in
     <b>Android Settings → Bluetooth → Pair new device</b> (PIN <b>${S.set.vargPin || 'shown in VargPilot as “pair PIN”'}</b>), then reconnect here.</div>
     <pre id="vargLogTxt" style="font:11px/1.5 ui-monospace,Menlo,monospace; background:rgba(0,0,0,.25); border-radius:8px;
       padding:8px 10px; max-height:40vh; overflow:auto; white-space:pre-wrap; margin:8px 0">${varg.log.join('\n') || '(nothing yet — tap Connect first)'}</pre>
