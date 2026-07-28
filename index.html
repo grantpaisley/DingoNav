@@ -153,6 +153,13 @@
   #toast{position:fixed; bottom:calc(var(--chromeB,0px) + 116px); left:50%; transform:translateX(-50%); z-index:30;
     background:var(--panel2); border:1px solid #2a3540; color:var(--fg); font-size:15px; padding:10px 18px;
     border-radius:12px; display:none; max-width:88vw; text-align:center}
+  /* new-version banner: above the pills/toast, below modal dialogs — never shown mid-ride */
+  #updBar{position:fixed; top:calc(env(safe-area-inset-top) + 10px); left:50%; transform:translateX(-50%);
+    z-index:39; display:none; align-items:center; gap:12px; background:var(--panel2);
+    border:1px solid var(--accent); border-radius:14px; padding:10px 12px 10px 16px; max-width:94vw}
+  #updBar.on{display:flex}
+  #updBar span{font-size:15px; font-weight:600; white-space:nowrap}
+  #updBar .btn{min-height:48px; padding:0 18px}
   /* one-off explainer dialog (e.g. favourite-zoom tip) */
   #dlgShade{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:40; display:none}
   #dlgShade.on{display:block}
@@ -797,6 +804,7 @@
 <div id="orientLabel">north up</div>
 <div id="banner">OFF TRACK</div>
 <div id="toast"></div>
+<div id="updBar"><span>New version ready</span><button class="btn" id="updGo">Update</button><button class="btn" id="updLater">Later</button></div>
 <div id="dlgShade"></div>
 <div id="dlg"><h4 id="dlgTitle"></h4><div id="dlgMsg"></div><button id="dlgOk">Got it</button></div>
 <!-- first visit only (who you are) now lives inside the startup card as #suIntro,
@@ -3390,6 +3398,7 @@ function stopNav() {
   releaseWake(); stopDemo();
   flushProg(); // travelled/missed spans stay on the map for post-ride review
   archiveRide(); // the ridden path joins the own-rides heat + GPX archive
+  if (updPending) updOffer(); // an update arrived mid-ride — safe to offer it now
 }
 /* ---------------- ride briefing ----------------
    The last screen before the chrome switches to riding: what you're about to set off on,
@@ -7114,6 +7123,33 @@ addEventListener('resize', () => {
 });
 applyLayout(); // boot: saved layout applies before the first paint settles
 
+/* ---- new-version prompt ----
+   The SW is network-first for the shell, so a reload always picks up a new
+   build — but a resumed PWA never reloads on its own, and riders sit on
+   stale versions for days. Watch for a replacement SW (one only installs
+   when a new build was deployed) and offer the reload. Re-check whenever
+   the app comes back to the foreground, so "on open" covers resume too.
+   Never interrupts an active ride — a mid-ride update waits for STOP
+   (stopNav checks updPending). */
+let updPending = false;
+function updOffer() {
+  if (S.nav) { updPending = true; return; }
+  updPending = false;
+  document.getElementById('updBar').classList.add('on');
+}
+document.getElementById('updGo').onclick = () => location.reload();
+document.getElementById('updLater').onclick = () => document.getElementById('updBar').classList.remove('on');
+function swUpdateWatch(reg) {
+  if (!reg) return;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  reg.addEventListener('updatefound', () => {
+    const w = reg.installing;
+    // no controller = the very first install, not an update — never prompt for that
+    if (!w || !navigator.serviceWorker.controller) return;
+    w.addEventListener('statechange', () => { if (w.state === 'activated') updOffer(); });
+  });
+}
+
 /* ---------------- boot ---------------- */
 async function boot() {
   // First, not last: the shell must be durable before the 41 MB basemap starts — a
@@ -7121,7 +7157,7 @@ async function boot() {
   // and no working offline app on the next open. ~2.7 MB against 41.5 MB, and most
   // of it is already in the HTTP cache from the page load.
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(swUpdateWatch).catch(() => {});
   }
   bootPhase('idb');
   await idb.open();
