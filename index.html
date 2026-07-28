@@ -5746,6 +5746,7 @@ const varg = {
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null, noPersist: false,
+  yield: false, waitStream: false, // yield = release a silent link so VP can grab the bike
   log: [], n: { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }, // on-phone connection log + per-char frame counters
 };
 
@@ -5982,6 +5983,8 @@ async function vargConnect(dev) {
      certainly a bond that never completed (the exact 2026-07-28 field
      failure). Probe reads to pin the failure mode, then name the fix. */
   const t0 = Date.now();
+  // frames flowing ⇒ we're past the waiting-for-the-stream phase
+  setTimeout(() => { if (varg.seen >= t0) varg.waitStream = false; }, 12500);
   /* If the VCU raises link encryption AFTER our subscribe writes, some stacks
      reset the CCCD table at that moment — voiding the early subscriptions.
      Rewriting them a few seconds in lands on the (possibly now-encrypted)
@@ -6109,8 +6112,18 @@ async function vargSilent() { // subscribed 12 s ago, zero frames — find out w
           : e.name === 'NotSupportedError' ? ' — notify-only char (expected on this VCU)' : ''));
     }
   }
-  vlog('diagnosis: subscriptions accepted, VCU never streams — likely nothing has STARTED the telemetry. Open the Stark app / VargPilot, let it connect, leave it running, then reconnect here (piggyback).');
-  toast('Connected but the bike isn’t streaming — open the Stark app or VargPilot, let it connect, leave it running, then tap Connect here.');
+  /* THE important behaviour, learned the hard way: a connected-but-silent
+     DingoNav link BLOCKS VargPilot (or the Stark app) from connecting — and
+     one of those has to connect for the VCU to start streaming at all. So a
+     silent link is worse than no link: let it go, wait a beat, and try again.
+     Repeat until something starts the telemetry, then we attach and ride
+     along. This is what removes the manual "forget the bike so VP can
+     connect" step riders were doing by hand. */
+  vlog('no stream — releasing the link so VargPilot/Stark can start the telemetry, then re-attaching');
+  varg.yield = true; // vargRetry waits a full window instead of milliseconds
+  if (!varg.waitStream) { varg.waitStream = true;
+    toast('Waiting for VargPilot (or the Stark app) to start the bike’s telemetry — DingoNav will attach by itself.'); }
+  if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect(); // → vargDropped → vargRetry
 }
 
 function vargDropped() {
@@ -6141,7 +6154,11 @@ function vargRetry() { // BLE flaps on a dirt bike — recover quietly, back off
   clearTimeout(varg.retryT);
   if (!S.set.varg || varg.state === 'released') return; // not ours to retry
   const n = varg.retryN++;
-  const wait = Math.min(20000, 1000 * 2 ** Math.min(n, 5));
+  /* After yielding a silent link, wait a clear window (8 s) rather than the
+     usual fast backoff — VargPilot needs an unoccupied bike to connect to,
+     and a 1 s retry would slam the door on it. */
+  const wait = varg.yield ? 8000 : Math.min(20000, 1000 * 2 ** Math.min(n, 5));
+  varg.yield = false;
   varg.state = 'retry'; vargUI();
   varg.retryT = setTimeout(async () => {
     // from the third attempt on, refresh the handle every time — the stale-object
@@ -6235,13 +6252,14 @@ function vargHelpShow(kind) {
        <div class="btnRow"><button class="btn" id="vargHelpGo">Try again</button>
          <button class="btn" id="vargHelpClose">Close</button></div>`
     : `<b>Nothing to connect to?</b>
-       <div class="hint" style="margin-top:6px">The bike can only be <i>found</i> when it's free, but it only <i>streams</i> once
-       the Stark app or VargPilot has started the telemetry. So it's two steps, in this order:</div>
+       <div class="hint" style="margin-top:6px">The bike can only be <i>found</i> while it's free, but it only <i>streams</i> once
+       the Stark app or VargPilot has started the telemetry. Two steps, then it's automatic:</div>
        <ol>
-         <li><b>Grant it once, bike free.</b> Force-stop the Stark app and VargPilot, power-cycle the bike, then tap Connect here
-             and pick the bike (it's the bare 17-character VIN${vin ? ` — <span class="kbd">${vin}</span>` : ', like <span class="kbd">UDUEX1…</span>'}). DingoNav remembers it permanently.</li>
-         <li><b>Then run VargPilot and leave it connected</b>, and tap Connect here again — DingoNav attaches to the same link,
-             no chooser needed, and rides along on its telemetry.</li>
+         <li><b>Once per phone, bike free.</b> Force-stop the Stark app and VargPilot, power-cycle the bike, tap Connect here
+             and pick the bike (the bare 17-character VIN${vin ? ` — <span class="kbd">${vin}</span>` : ', like <span class="kbd">UDUEX1…</span>'}). DingoNav remembers it permanently.</li>
+         <li><b>Start VargPilot and leave it running.</b> Nothing else to do here — while DingoNav isn't getting
+             telemetry it keeps letting go of the bike so VargPilot can take it, and re-attaches by itself once
+             the stream is running.</li>
        </ol>
        ${varg.noPersist ? `<div class="hint"><b>Heads-up:</b> this Chrome build has no remembered-device support, so step 2 can't work.
          Enable <span class="kbd">chrome://flags/#enable-web-bluetooth-new-permissions-backend</span> and restart Chrome.</div>` : ''}
@@ -6438,7 +6456,10 @@ function vargUI() {
           : 'Looking for the bike… (connects when it powers on in range)',
         on: 'Connected — battery, speed, mode & status streaming. Tap the 🔋 pill for the full telemetry page.',
         released: 'Released — the Stark app can connect. Take the bike back from the 🔋 pill’s telemetry page.',
-        retry: 'Connection dropped — retrying…' }[varg.state];
+        // the yield-and-re-attach loop is the normal startup path, not a fault
+        retry: varg.waitStream
+          ? 'Waiting for VargPilot (or the Stark app) to start the bike’s telemetry — leave it running and DingoNav attaches by itself.'
+          : 'Connection dropped — retrying…' }[varg.state];
 }
 
 /* ---- full-page telemetry (tap the pill) ----
@@ -6534,9 +6555,9 @@ document.getElementById('vargBtn').onclick = () => vargPick(); // wrap: the clic
 document.getElementById('vargLogBtn').onclick = () => { // the console, but on the handlebar phone
   const el = vargHelpEl();
   el.innerHTML = `<b>BLE connection log</b>
-    <div class="hint">Subscribed but zero frames? The VCU appears not to stream unless something has <b>started</b> the telemetry.
-    Open the <b>Stark app or VargPilot</b>, let it connect to the bike, and <i>leave it running</i> — then tap Connect here:
-    DingoNav attaches to the same link and rides along on its notifications.</div>
+    <div class="hint">Subscribed but zero frames? The VCU doesn't stream until something <b>starts</b> the telemetry.
+    Open the <b>Stark app or VargPilot</b> and leave it running — DingoNav releases the bike whenever it isn't
+    getting data (so VargPilot can connect) and re-attaches on its own once the stream is live.</div>
     <pre id="vargLogTxt" style="font:11px/1.5 ui-monospace,Menlo,monospace; background:rgba(0,0,0,.25); border-radius:8px;
       padding:8px 10px; max-height:40vh; overflow:auto; white-space:pre-wrap; margin:8px 0">${varg.log.join('\n') || '(nothing yet — tap Connect first)'}</pre>
     <div class="btnRow"><button class="btn" id="vargLogCopy">Copy</button>
@@ -6568,7 +6589,8 @@ document.getElementById('vargForgetBtn').onclick = async () => {
   }
   Object.assign(varg, { dev: null, batt: null, map: null, spd: null, stat: null, soc19: null, alerts: {},
     state: 'off', soc: null, soh: null, vbus: null, speed: null,
-    mode: null, neutral: false, hp: null, regen: null, tc: null });
+    mode: null, neutral: false, hp: null, regen: null, tc: null,
+    yield: false, waitStream: false });
   vargUI(); toast('Bike forgotten');
 };
 
