@@ -1009,7 +1009,9 @@
     <h3>Direct BLE (no VargPilot)</h3>
     <div class="btnRow" id="vargRow" style="display:none"><button class="btn" id="vargBtn">Connect bike…</button><button class="btn" id="vargForgetBtn">Forget bike</button></div>
     <div class="callout" id="vargHelp" style="display:none"></div>
-    <div class="hint">The app talks to the VCU itself — it then owns the bike's single BLE slot; tap the 🔋 pill to hand it to the Stark app and back.</div>
+    <div class="hint">The app talks to the VCU itself — battery, ride mode, blinkers, reverse/crawl and alerts, no VargPilot needed.
+      It then owns the bike's single BLE slot; tap the 🔋 pill to hand it to the Stark app and back.
+      Paired before? Tap <b>Forget bike</b> once and re-pair — older pairings only unlocked the battery feed.</div>
 
     <h3>Alerts</h3>
     <div class="btnRow" id="vargRow2" style="display:none"><button class="btn" id="vargPrevRev">Preview reverse alert</button><button class="btn" id="vargPrevCrawl">Preview crawl alert</button></div>
@@ -5667,30 +5669,44 @@ function applyShowAdv() {
 applyShowAdv();
 
 /* ---------------- Stark Varg telemetry (Web Bluetooth) ----------------
-   The bike's VCU speaks BLE directly: bond once with the per-VIN PIN (Android
-   owns that dialog), then SUBSCRIBE to notifications — plain reads return
-   nothing on this VCU. Only ONE central can hold the bike at a time and the
-   stock Stark app fights aggressively for it, so the HUD pill doubles as a
-   handoff switch: tap to release the bike (go tune in the Stark app), tap
-   again to take it back. Battery layout (via the EDR forum): three u16s —
-   state of charge, state of health, DC bus voltage. Endianness and scale are
-   unconfirmed until the first real connection, so the decoder guesses
-   defensively and logs raw bytes to the console to pin the true layout. */
-const VARG_SERVICE = '00006000-5374-6172-4b20-467574757265'; // '…' = ascii "Star K Future"
+   The bike's VCU speaks BLE directly: bond once (MITM + Secure Connections, so
+   a PIN is mandatory — Android owns that dialog), then SUBSCRIBE to
+   notifications — plain reads return nothing on this VCU. Only ONE central can
+   hold the bike at a time and the stock Stark app fights aggressively for it,
+   so the HUD pill doubles as a handoff switch: tap to release the bike (go
+   tune in the Stark app), tap again to take it back.
+   Protocol pinned against two working open-source clients (2026-07):
+   svag-mini (ESP32 firmware, github.com/b1naryth1ef/svag-mini — verified on
+   real MX/EX/SM) and tonysilvasa/stark-varg-garmin-bridge. Key facts:
+   - The bike advertises NO custom service and no 'Stark' name — its BLE name
+     is the bare 17-char VIN. So no requestDevice filter can find it by brand.
+   - All fields are little-endian u16s; SOC is a whole percent, no scaling.
+   - The status characteristic carries the same STATUS_BITS words VargPilot
+     re-serves — walking_mode 8=reverse / 12=crawl matches what we confirmed
+     live on the '25 EX via VP (see vpProp below). */
+const VARG_SVC = { // xxxxxxxx- prefix on ascii "StarK Future"
+  battery: '00006000-5374-6172-4b20-467574757265',
+  live:    '00002000-5374-6172-4b20-467574757265',
+  status:  '00001000-5374-6172-4b20-467574757265',
+};
 const VARG_CHARS = {
-  battery: '00006004-5374-6172-4b20-467574757265', // u16 soc, u16 soh, u16 vbus
-  mode: null, // TODO(varg): ride mode 1–5 + crawl/reverse — characteristic unknown, asked on EDR forum
-  temps: null, // TODO(varg): motor + inverter temps — wire into the alert system (thermal cutoff warning)
+  battery: '00006004-5374-6172-4b20-467574757265', // u16 LE: soc %, soh %, dc bus
+  map:     '00002004-5374-6172-4b20-467574757265', // byte0 = riding map 1–5
+  status:  '00001002-5374-6172-4b20-467574757265', // 18 B of LE u16 bit-words (decode below)
 };
 const varg = {
-  dev: null, batt: null, state: 'off', // off | connecting | on | released | retry
+  dev: null, batt: null, map: null, stat: null,
+  state: 'off', // off | connecting | on | released | retry
+  stage: 'link', // within 'connecting': link (waiting for the bike) | pair (bond + subscribe)
+  guardT: [], // pairing-stall watchdogs — armed in vargConnect, cleared everywhere the attempt ends
+  alerts: {}, // last seen alert levels, so each escalation toasts once
   soc: null, soh: null, vbus: null,
   mode: null, special: null, // mode 1–5; special: null | 'rev' | 'crawl'
   // neutral is NOT a special: it gets the green N digit, never the full-screen takeover
   neutral: false,
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
-  seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, pickAll: false, sndT: null,
+  seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null,
 };
 const vargPill = document.getElementById('vargPill');
 const vargStatus = document.getElementById('vargStatus');
@@ -5698,23 +5714,60 @@ const vargStatus = document.getElementById('vargStatus');
 function vargBattery(dv) {
   if (dv.byteLength < 6) return; // not the layout we expect — raw log below will show what it is
   varg.seen = Date.now();
-  if (varg.logN < 5) { // first few frames raw, for pinning endianness/scale on the real bike
+  if (varg.logN < 5) { // first few frames raw — sanity check against the svag-mini layout
     varg.logN++;
     console.log('[varg] battery raw:', [...new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)]
       .map(b => b.toString(16).padStart(2, '0')).join(' '));
   }
-  // pick the endianness whose SOC lands in 0–100 (or 0–1000 ⇒ tenths of %)
-  let soc = null, le = true;
-  for (const e of [true, false]) {
-    const v = dv.getUint16(0, e);
-    if (v <= 100) { soc = v; le = e; break; }
-    if (v <= 1000) { soc = v / 10; le = e; break; }
-  }
-  if (soc == null) { soc = dv.getUint16(0, true); } // out of range both ways — surface it, don't hide it
+  // svag-mini confirms: plain LE u16, already a whole percent — no scaling
+  let soc = dv.getUint16(0, true);
+  if (soc > 100 && soc <= 1000) soc /= 10; // firmware drift to tenths would land here — absorb, don't lie
   varg.soc = Math.round(soc);
-  varg.soh = dv.getUint16(2, le);
-  varg.vbus = dv.getUint16(4, le); // scale TBD (V / dV / mV) — shown raw in the long-press detail
+  varg.soh = dv.getUint16(2, true);
+  varg.vbus = dv.getUint16(4, true); // scale TBD (V / dV / mV) — shown raw in the long-press detail
   vargUI();
+}
+
+function vargMapMsg(dv) { // Live svc, char 2004: first byte is the riding map (1–5)
+  if (!dv.byteLength) return;
+  varg.seen = Date.now();
+  const m = dv.getUint8(0);
+  if (m >= 1 && m <= 5) vargApplyState({ mode: m }); // hp/regen/tc stay VP-only — the VCU doesn't notify them here
+}
+
+/* Status svc, char 1002: 18 bytes of LE u16 bit-words. Layout + bit meanings
+   from svag-mini's state.c, cross-checked against the VP paths above (VP
+   re-serves these same words as Bike.STATUS_BITS.*):
+   @0 misc_bits (low nibble = walking_mode: 8 reverse, 12 crawl — confirmed on
+      the '25 EX via VP), @2 indicator_bits (b1 high beam, b2 right blinker,
+      b3 left blinker), @4 alert_bits (eight 2-bit severities, decoded in
+      vargAlerts), @6 fault_bits, @8 info_bits (b0 charging, b3 in-gear,
+      b4 awake — hibernating when 0). */
+function vargStatusMsg(dv) {
+  if (dv.byteLength < 10) return; // shorter frame = not the layout we decoded — leave the UI alone
+  varg.seen = Date.now();
+  const misc = dv.getUint16(0, true), ind = dv.getUint16(2, true),
+        alert = dv.getUint16(4, true), info = dv.getUint16(8, true);
+  // blinker bits toggle with the bulb (~3 Hz) — vargBlink already debounces pulses
+  if (ind & 8) vargBlink('L');
+  if (ind & 4) vargBlink('R');
+  if (varg.ind.beam !== !!(ind & 2)) { varg.ind.beam = !!(ind & 2); vargIndUI(); }
+  const on = !!(info & 16), inGear = !!(info & 8), walk = misc & 15;
+  vargApplyState({ special: !walk ? null : walk === 8 ? 'rev' : 'crawl', // any other walk value: safer loud than silent
+                   neutral: on && !inGear && !walk });
+  vargAlerts(alert);
+}
+
+const VARG_ALERT_FIELDS = [ // [shift, label] — 2-bit severity each; 0 = clear
+  [0, 'General'], [2, 'Battery temp'], [4, 'Motor temp'], [6, 'Coolant pump'],
+  [8, 'Cooling fan'], [10, 'Insulation'], [12, 'Battery derating'], [14, 'Inverter derating'],
+];
+function vargAlerts(bits) { // toast each escalation once; silence on clear (the ride needs eyes, not noise)
+  for (const [sh, label] of VARG_ALERT_FIELDS) {
+    const lvl = (bits >> sh) & 3, prev = varg.alerts[sh] || 0;
+    varg.alerts[sh] = lvl;
+    if (lvl > prev) { toast('⚠ Bike alert: ' + label + ' (level ' + lvl + ')'); vib([120, 80, 120]); }
+  }
 }
 
 function vargModeTxt() { // ready for when the mode characteristic lands
@@ -5753,21 +5806,53 @@ function vargApplyState(st) { // single entry point for the future mode/config d
   vargUI();
 }
 
+async function vargSub(server, svcId, chrId, fn) {
+  const svc = await server.getPrimaryService(svcId);
+  const ch = await svc.getCharacteristic(chrId);
+  // Chrome hands back the SAME characteristic object across reconnects — strip
+  // our old listener or every drop/retry cycle stacks another decoder call
+  if (ch._dnFn) ch.removeEventListener('characteristicvaluechanged', ch._dnFn);
+  ch._dnFn = e => fn(e.target.value);
+  ch.addEventListener('characteristicvaluechanged', ch._dnFn);
+  await ch.startNotifications(); // plain reads return nothing on this VCU — subscribe or bust
+  return ch;
+}
+
+function vargGuardsClear() { varg.guardT.forEach(clearTimeout); varg.guardT = []; }
+
 async function vargConnect(dev) {
-  varg.dev = dev; varg.state = 'connecting'; vargUI();
+  varg.dev = dev; varg.state = 'connecting'; varg.stage = 'link'; vargUI();
+  vargGuardsClear();
   dev.removeEventListener('gattserverdisconnected', vargDropped); // no dupes across retries
   dev.addEventListener('gattserverdisconnected', vargDropped);
-  const server = await dev.gatt.connect(); // resolves whenever the bike powers on in range
-  const svc = await server.getPrimaryService(VARG_SERVICE);
-  varg.batt = await svc.getCharacteristic(VARG_CHARS.battery);
-  varg.batt.addEventListener('characteristicvaluechanged', e => vargBattery(e.target.value));
-  await varg.batt.startNotifications(); // triggers the OS PIN dialog on first ever connect
-  // TODO(varg): subscribe mode/config + temps here once VARG_CHARS has them; their
-  // decoders should call vargApplyState({mode, special, hp, regen, tc}) — all UI hangs off it
+  const server = await dev.gatt.connect(); // resolves whenever the bike powers on in range — never timed out
+  varg.stage = 'pair'; vargUI();
+  /* From link-up onward a stall is real: it's almost always the MITM bonding
+     PIN dialog sitting unanswered (Android can bury it in the notification
+     shade, especially with the PWA fullscreen). Nudge at 20 s; at 60 s abort
+     into the retry loop — the half-made bond usually completes next attempt. */
+  varg.guardT = [
+    setTimeout(() => { toast('Still pairing — Android’s PIN prompt may be hiding in your notification shade.'); vib([80, 80, 80]); }, 20000),
+    setTimeout(() => { toast('Pairing stalled — retrying. Watch for the PIN prompt.');
+      if (dev.gatt.connected) dev.gatt.disconnect(); /* fires vargDropped → backoff retry */ }, 60000),
+  ];
+  try {
+    // battery first: subscribing to it forces the bond, so the PIN flow happens exactly once
+    varg.batt = await vargSub(server, VARG_SVC.battery, VARG_CHARS.battery, vargBattery);
+    /* Parity subs are best-effort: a bike granted before this build only
+       permitted the battery service (Chrome scopes access to the services in
+       optionalServices at pick time) — SecurityError here means Forget bike +
+       re-pair to unlock mode/indicators/alerts. SOC alone still rides. */
+    varg.map = await vargSub(server, VARG_SVC.live, VARG_CHARS.map, vargMapMsg)
+      .catch(e => { console.warn('[varg] no map char (' + e.name + ') — Forget bike + re-pair for full telemetry'); return null; });
+    varg.stat = await vargSub(server, VARG_SVC.status, VARG_CHARS.status, vargStatusMsg)
+      .catch(e => { console.warn('[varg] no status char (' + e.name + ') — Forget bike + re-pair for full telemetry'); return null; });
+  } finally { vargGuardsClear(); }
   varg.state = 'on'; varg.retryN = 0; varg.hogged = false; vargUI();
 }
 
 function vargDropped() {
+  vargGuardsClear(); // a mid-pair drop must not fire stale PIN nags later
   varg.soc = null; // stale % is worse than none
   varg.neutral = false; // ditto a stale green N
   vargSpecial(null); // no connection = no idea if we're still in reverse — never show a guess
@@ -5791,7 +5876,7 @@ function vargRetry() { // BLE flaps on a dirt bike — recover quietly, back off
 }
 
 function vargRelease() { // hand the bike to the Stark app for tuning
-  clearTimeout(varg.retryT);
+  clearTimeout(varg.retryT); vargGuardsClear();
   varg.state = 'released'; varg.soc = null;
   if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect();
   toast('Bike released — open the Stark app. Tap the pill to take it back.');
@@ -5825,8 +5910,9 @@ function vargHelpShow(kind) {
   el.innerHTML = kind === 'pre'
     ? `<b>Before you tap Connect</b><ol>
          <li>Power the bike on and stand next to it.</li>
+         <li>In the device list the bike is its <b>17-character VIN</b> (like <span class="kbd">VS9…</span>) — not "Stark".</li>
          <li>Chrome will ask to pair and may say it <b>needs permission</b> — that's Android, not the bike.</li>
-         <li>First pairing also shows a <b>PIN on the bike's display</b>; type it into the phone.</li>
+         <li>First pairing asks for a <b>4-digit PIN</b> — we'll show you the likely one; the bike's display may too.</li>
        </ol>
        <div class="btnRow"><button class="btn" id="vargHelpGo">Got it — connect</button>
          <button class="btn" id="vargHelpClose">Cancel</button></div>`
@@ -5835,21 +5921,43 @@ function vargHelpShow(kind) {
        <div class="btnRow"><button class="btn" id="vargHelpGo">Try again</button>
          <button class="btn" id="vargHelpClose">Close</button></div>`
     : `<b>Didn't see the bike?</b>
-       <div class="hint" style="margin-top:6px">Two things it usually is:</div>
+       <div class="hint" style="margin-top:6px">Three things it usually is:</div>
        <ol>
-         <li><b>The bike wasn't listed</b> — check it's powered on, in range, and not already held by the Stark app or VargPilot. Then retry showing every nearby device.</li>
+         <li><b>It's in the list but unrecognisable</b> — the bike shows up as its bare <b>17-character VIN</b> (like <span class="kbd">VS9…</span>), never as "Stark" or "Varg".</li>
+         <li><b>It really wasn't listed</b> — check it's powered on, in range, and not already held by the Stark app or VargPilot.</li>
          <li><b>Chrome couldn't scan</b> — if the prompt mentioned permissions:</li>
        </ol>
        <div class="sub">${VARG_PERM_STEPS}</div>
-       <div class="btnRow"><button class="btn" id="vargHelpAll">Show all devices</button>
+       <div class="btnRow"><button class="btn" id="vargHelpGo">Try again</button>
          <button class="btn" id="vargHelpClose">Close</button></div>`;
   el.style.display = '';
   const go = document.getElementById('vargHelpGo');
   if (go) go.onclick = () => { S.set.vargPre = 1; saveSet(); vargPick(); };
-  const all = document.getElementById('vargHelpAll');
-  if (all) all.onclick = () => { varg.pickAll = true; vargPick(); };
   document.getElementById('vargHelpClose').onclick = vargHelpHide;
   el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+/* First bonding demands a 4-digit PIN (the VCU requires MITM pairing). The
+   bike is supposed to show it on its own display, but the garmin-bridge
+   project reverse-engineered the derivation — SHA-256 over VIN + "-19700101"
+   — and the bike's advertised name IS its VIN. So we can tell the rider the
+   expected PIN before Android even asks for it. */
+async function vargPin(vin) {
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(vin + '-19700101')));
+  const d = (i, x, a) => ((h[i] ^ x) + a) % 10;
+  return String(d(15, 179, 239) * 1000 + d(9, 158, 100) * 100 + d(14, 236, 209) * 10 + d(3, 197, 228)).padStart(4, '0');
+}
+async function vargPinCard(name) { // non-blocking: sits on screen while the connect proceeds underneath
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(name || '')) return; // VINs never carry I/O/Q — anything else isn't one
+  const pin = await vargPin(name).catch(() => null);
+  if (!pin) return;
+  const el = vargHelpEl();
+  el.innerHTML = `<b>Pairing with ${name}</b>
+    <div class="hint" style="margin-top:6px">First-time pairing asks for a 4-digit PIN. The bike's display should show it —
+    if it doesn't, try <b style="font-size:1.3em">${pin}</b> (derived from this VIN).</div>
+    <div class="btnRow"><button class="btn" id="vargHelpClose">Close</button></div>`;
+  el.style.display = '';
+  document.getElementById('vargHelpClose').onclick = vargHelpHide;
 }
 
 async function vargPick() { // first-time pairing: needs the chooser (user gesture)
@@ -5859,20 +5967,23 @@ async function vargPick() { // first-time pairing: needs the chooser (user gestu
   if (!S.set.vargPre) { vargHelpShow('pre'); return; }
   vargHelpHide();
   try {
-    const dev = await navigator.bluetooth.requestDevice(varg.pickAll
-      ? { acceptAllDevices: true, optionalServices: [VARG_SERVICE] }
-      // the VCU may not advertise its custom service — OR in name prefixes as a net
-      : { filters: [{ services: [VARG_SERVICE] }, { namePrefix: 'Stark' }, { namePrefix: 'VARG' }],
-          optionalServices: [VARG_SERVICE] });
-    varg.pickAll = false; varg.retryN = 0;
+    /* The VCU advertises neither its custom services nor a brand name — its
+       BLE name is the bare 17-char VIN (svag-mini matches on exactly that),
+       and no requestDevice filter can say "looks like a VIN". So the chooser
+       shows everything and the rider picks the VIN — a one-time chore;
+       vargBoot() reclaims silently from then on. optionalServices must list
+       all three services or Chrome walls them off after connect. */
+    const dev = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true, optionalServices: Object.values(VARG_SVC) });
+    varg.retryN = 0;
+    vargPinCard(dev.name); // fire-and-forget — the PIN hint should be visible while Android asks
     await vargConnect(dev);
   } catch (e) {
-    // NotFoundError is ambiguous on Android — cancelled chooser, nothing matching,
-    // OR permission denied so the scan never ran. The panel covers both.
-    if (e.name === 'NotFoundError') vargHelpShow(varg.pickAll ? 'perm' : 'notfound');
+    // NotFoundError is ambiguous on Android — cancelled chooser OR permission
+    // denied so the scan never ran and the list sat empty. The panel covers both.
+    if (e.name === 'NotFoundError') vargHelpShow('notfound');
     else if (e.name === 'NotAllowedError' || e.name === 'SecurityError') vargHelpShow('perm');
     else toast('Bike connect failed: ' + e.message);
-    varg.pickAll = false;
     vargUI();
   }
 }
@@ -6041,9 +6152,11 @@ function vargUI() {
         retry: 'VargPilot unreachable — retrying every 5 s. Is the VP webserver on, and on this Wi-Fi?' }[varg.state]
     : !navigator.bluetooth
     ? 'This browser has no Web Bluetooth — use Chrome on Android (the Arkenstone works).'
-    : { off: 'Not connected — power the bike on, then Connect. First time asks for the PIN on the bike.',
-        connecting: 'Looking for the bike… (connects when it powers on in range)',
-        on: 'Connected — battery streaming. Tap the 🔋 pill to release the bike to the Stark app.',
+    : { off: 'Not connected — power the bike on, then Connect. It appears in the list as its 17-character VIN.',
+        connecting: varg.stage === 'pair'
+          ? 'Pairing & subscribing — watch for Android’s PIN prompt (it can hide in the notification shade).'
+          : 'Looking for the bike… (connects when it powers on in range)',
+        on: 'Connected — battery, mode & status streaming. Tap the 🔋 pill to release the bike to the Stark app.',
         released: 'Released — the Stark app can connect. Tap the pill to take the bike back.',
         retry: 'Connection dropped — retrying…' }[varg.state];
 }
@@ -6101,20 +6214,21 @@ function vargPreview(sp) {
 document.getElementById('vargPrevRev').onclick = () => vargPreview('rev');
 document.getElementById('vargPrevCrawl').onclick = () => vargPreview('crawl');
 document.getElementById('vargForgetBtn').onclick = async () => {
-  clearTimeout(varg.retryT);
+  clearTimeout(varg.retryT); vargGuardsClear();
   vargSpecial(null);
   if (varg.dev) {
     if (varg.dev.gatt.connected) varg.dev.gatt.disconnect();
     if (varg.dev.forget) await varg.dev.forget().catch(() => {}); // Chrome 110+: drops the site permission
   }
-  Object.assign(varg, { dev: null, batt: null, state: 'off', soc: null, soh: null, vbus: null,
+  Object.assign(varg, { dev: null, batt: null, map: null, stat: null, alerts: {},
+    state: 'off', soc: null, soh: null, vbus: null,
     mode: null, neutral: false, hp: null, regen: null, tc: null });
   vargUI(); toast('Bike forgotten');
 };
 
 function applyVarg() { // off, or a source flip: quiesce BOTH sources, then start the chosen one
   vargSpecial(null); vargIndReset(); vpClose();
-  clearTimeout(varg.retryT);
+  clearTimeout(varg.retryT); vargGuardsClear();
   if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect();
   varg.state = 'off'; varg.soc = null;
   if (S.set.varg) { if (S.set.vargSrc === 'vp') vpConnect(); else vargBoot(); }
