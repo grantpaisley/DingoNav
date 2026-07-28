@@ -1184,7 +1184,7 @@ const S = {
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargVin: '', vargPin: '', rideProfile: 'adventure', bigLeft: '',
+    varg: false, vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
     navMode: 'follow', startBrief: true },  // navMode: follow | explore | snap — survives restarts by design
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
@@ -5732,6 +5732,15 @@ const VARG_CHARS = {
   // the GATT dump (real EX, 2026-07-28) found the STANDARD Battery Level char
   // living inside the custom status service: one byte, 0–100. Free fallback.
   soc2a19: '00002a19-0000-1000-8000-00805f9b34fb',
+  /* Probe-derived, behind the "extra channels" setting until confirmed on the
+     dash. 2006 = four LE u32 counters; on Grant's EX they read 138860 /
+     146587 / 0 / 1307841, i.e. two trips (138.9, 146.6 km) and a 1307.8 km
+     odometer if the unit is metres — the total exceeding both trips is the
+     tell. 2002 = three LE i16, [0] steady ~52, [1] swinging 35–59 with
+     throttle, [2] steady ~-3: unidentified, shown raw to be matched against
+     the bike's own display. */
+  counters: '00002006-5374-6172-4b20-467574757265',
+  ch2002:   '00002002-5374-6172-4b20-467574757265',
 };
 const varg = {
   dev: null, batt: null, map: null, spd: null, stat: null, speed: null,
@@ -5748,6 +5757,7 @@ const varg = {
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null, noPersist: false,
   yield: false, waitStream: false, // yield = release a silent link so VP can grab the bike
   log: [], n: { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }, // on-phone connection log + per-char frame counters
+  odo: null, trips: null, raw2002: null, // "extra channels" — unconfirmed, telemetry page only
 };
 
 /* On-phone BLE log: field debugging happens on a handlebar phone with no
@@ -5808,6 +5818,26 @@ function vargSoc19(dv) { // standard Battery Level: single byte, 0–100 %
   if (!dv.byteLength) return;
   const v = dv.getUint8(0);
   if (v <= 100) { varg.soc = v; vargPaint(); }
+}
+
+/* Extra (unconfirmed) channels — only subscribed when the setting is on, so a
+   normal ride carries no extra BLE traffic. Values land on the telemetry page
+   labelled unconfirmed, to be matched against the bike's own display. */
+function vargCounters(dv) { // 2006: four LE u32. Probe read 138860/146587/0/1307841
+  varg.seen = Date.now();
+  if (dv.byteLength < 16) return;
+  const c = [0, 4, 8, 12].map(o => dv.getUint32(o, true));
+  if (!varg.n.ctr) { varg.n.ctr = 1; vlog('first counters frame: ' + c.join(', ')); }
+  // the largest counter is the odometer; the rest are trips (total > any trip)
+  const max = Math.max(...c);
+  varg.odo = max;
+  varg.trips = c.filter(v => v !== max);
+}
+function varg2002(dv) { // 2002: three LE i16, meaning unknown
+  varg.seen = Date.now();
+  if (dv.byteLength < 6) return;
+  varg.raw2002 = [0, 2, 4].map(o => dv.getInt16(o, true));
+  if (!varg.n.c2002) { varg.n.c2002 = 1; vlog('first 2002 frame: ' + varg.raw2002.join(', ')); }
 }
 
 function vargSpeedMsg(dv) { // Live svc, char 2001: i16 LE, km/h × 10 (negative in reverse)
@@ -5977,6 +6007,14 @@ async function vargConnect(dev) {
         return ch;
       })
       .catch(e => { vlog('2a19 subscribe FAILED: ' + e.name); return null; });
+    if (S.set.vargExtra) { // opt-in: unconfirmed channels, extra traffic
+      await vargSub(server, VARG_SVC.live, VARG_CHARS.counters, vargCounters)
+        .then(() => vlog('subscribed: counters (2006)'))
+        .catch(e => vlog('counters subscribe FAILED: ' + e.name));
+      await vargSub(server, VARG_SVC.live, VARG_CHARS.ch2002, varg2002)
+        .then(() => vlog('subscribed: ch 2002'))
+        .catch(e => vlog('2002 subscribe FAILED: ' + e.name));
+    }
   } finally { vargGuardsClear(); }
   varg.state = 'on'; varg.retryN = 0; varg.hogged = false; vargUI();
   /* Silent-connection watchdog: subscribed but nothing arrives ⇒ almost
@@ -6491,7 +6529,11 @@ function vargPageGridRender() {
     + cell(varg.vbus ?? '—', 'DC bus (raw)')
     + cell('Direct BLE<small> · ' + varg.state + '</small>', 'source')
     + cell(age, 'last frame')
-    + (alerts ? cell('⚠', alerts, 'alert') : '');
+    + (alerts ? cell('⚠', alerts, 'alert') : '')
+    // unconfirmed channels — shown only when the setting is on AND data arrived
+    + (varg.odo != null ? cell((varg.odo / 1000).toFixed(1) + '<small> km</small>', 'odometer?') : '')
+    + (varg.trips ? varg.trips.map((t, i) => cell((t / 1000).toFixed(1) + '<small> km</small>', 'trip ' + (i + 1) + '?')).join('') : '')
+    + (varg.raw2002 ? cell('<small>' + varg.raw2002.join(' · ') + '</small>', 'ch 2002 (unknown)') : '');
 }
 function vargPageBtnsRender() {
   const b = document.getElementById('vargPageBtns');
@@ -6590,7 +6632,7 @@ document.getElementById('vargForgetBtn').onclick = async () => {
   Object.assign(varg, { dev: null, batt: null, map: null, spd: null, stat: null, soc19: null, alerts: {},
     state: 'off', soc: null, soh: null, vbus: null, speed: null,
     mode: null, neutral: false, hp: null, regen: null, tc: null,
-    yield: false, waitStream: false });
+    odo: null, trips: null, raw2002: null, yield: false, waitStream: false });
   vargUI(); toast('Bike forgotten');
 };
 
@@ -6683,6 +6725,10 @@ const SETTINGS = [
   /* The 6-digit bond passkey. VargPilot lists it as "pair PIN"; the bike may
      show it too. Stored only to display during pairing — Android does the
      actual bonding, and there's no way (or need) to submit it programmatically. */
+  /* Unconfirmed channels found by the probe — off by default so a normal ride
+     carries no extra BLE traffic; on, the telemetry page shows odometer/trips
+     and the raw 2002 triple to be checked against the bike's display. */
+  { sec: 'ble', k: 'vargExtra', t: 'toggle', l: 'Extra channels (unconfirmed)', id: 'vargExtra', apply: () => applyVarg() },
   { sec: 'ble', k: 'vargPin', t: 'text', l: 'Pair PIN', id: 'vargPin', max: 6, ph: '6 digits (VargPilot shows it)',
     apply: () => { const el = document.getElementById('vargPin');
       S.set.vargPin = (S.set.vargPin || '').replace(/\D/g, '').slice(0, 6);
