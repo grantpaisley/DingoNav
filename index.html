@@ -5948,6 +5948,18 @@ async function vargConnect(dev) {
      certainly a bond that never completed (the exact 2026-07-28 field
      failure). Probe reads to pin the failure mode, then name the fix. */
   const t0 = Date.now();
+  /* If the VCU raises link encryption AFTER our subscribe writes, some stacks
+     reset the CCCD table at that moment — voiding the early subscriptions.
+     Rewriting them a few seconds in lands on the (possibly now-encrypted)
+     link. Cheap, harmless when already streaming (we only fire on silence). */
+  setTimeout(async () => {
+    if (varg.state !== 'on' || varg.seen >= t0) return;
+    vlog('6 s silent — rewriting CCCDs (in case encryption reset the subscriptions)');
+    for (const [label, ch] of [['battery', varg.batt], ['map', varg.map], ['speed', varg.spd], ['status', varg.stat]]) {
+      if (!ch) continue;
+      try { await ch.startNotifications(); } catch (e) { vlog('resubscribe ' + label + ' failed: ' + e.name); }
+    }
+  }, 6000);
   setTimeout(() => { if (varg.state === 'on' && varg.seen < t0) vargSilent(); }, 12000);
 }
 
@@ -5964,8 +5976,8 @@ async function vargSilent() { // subscribed 12 s ago, zero frames — find out w
           : e.name === 'NotSupportedError' ? ' — notify-only char (expected on this VCU)' : ''));
     }
   }
-  vlog('diagnosis: VCU subscribes fine on a plain link but only STREAMS over an encrypted one — an Android-side bond fixes it');
-  toast('Connected but no data — pair the bike in Android Settings → Bluetooth first (PIN ' + (S.set.vargPin || 'shown in VargPilot') + '), then reconnect. Details: Connection log in settings.');
+  vlog('diagnosis: subscriptions accepted but the VCU never streams — gate unidentified (an Android-side bond alone did NOT open it, field-tested 2026-07-28)');
+  toast('Connected but the bike never streams — see the Connection log in settings.');
 }
 
 function vargDropped() {
