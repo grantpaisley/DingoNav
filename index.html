@@ -5754,13 +5754,23 @@ const varg = {
    (and copyable) from the Connection log button in settings. */
 function vlog(msg) {
   varg.log.push(new Date().toTimeString().slice(0, 8) + ' ' + msg);
-  if (varg.log.length > 100) varg.log.shift();
+  if (varg.log.length > 300) varg.log.shift(); // a full channel probe + GATT dump must fit
   console.log('[varg]', msg);
   const el = document.getElementById('vargLogTxt');
   if (el) el.textContent = varg.log.join('\n'); // live while the card is open
 }
 const vhex = dv => [...new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)]
   .map(b => b.toString(16).padStart(2, '0')).join(' ');
+
+/* The bike is FAR chattier than assumed — one field session logged 8738 speed
+   frames and 1892 status frames in under a minute. Repainting per frame meant
+   thousands of DOM writes a minute for a number that changes by 0.1 km/h, so
+   decoders mark the UI dirty and one animation frame does the paint. */
+let vargRAF = 0;
+function vargPaint() {
+  if (vargRAF) return;
+  vargRAF = requestAnimationFrame(() => { vargRAF = 0; renderMain(); });
+}
 const vargPill = document.getElementById('vargPill');
 const vargStatus = document.getElementById('vargStatus');
 
@@ -5780,7 +5790,7 @@ function vargBattery(dv) {
   varg.soc = Math.round(soc);
   if (dv.byteLength >= 4) varg.soh = dv.getUint16(2, true);
   if (dv.byteLength >= 6) varg.vbus = dv.getUint16(4, true); // scale TBD — shown raw in the telemetry page
-  vargUI();
+  vargPaint();
 }
 
 function vargMapMsg(dv) { // Live svc, char 2004: first byte is the riding map (1–5)
@@ -5796,7 +5806,7 @@ function vargSoc19(dv) { // standard Battery Level: single byte, 0–100 %
   if (!varg.n.soc19++) vlog('first 2a19 frame (' + dv.byteLength + ' B): ' + vhex(dv));
   if (!dv.byteLength) return;
   const v = dv.getUint8(0);
-  if (v <= 100) { varg.soc = v; vargUI(); }
+  if (v <= 100) { varg.soc = v; vargPaint(); }
 }
 
 function vargSpeedMsg(dv) { // Live svc, char 2001: i16 LE, km/h × 10 (negative in reverse)
@@ -5804,7 +5814,7 @@ function vargSpeedMsg(dv) { // Live svc, char 2001: i16 LE, km/h × 10 (negative
   if (!varg.n.spd++) vlog('first speed frame (' + dv.byteLength + ' B): ' + vhex(dv));
   if (dv.byteLength < 2) return;
   varg.speed = Math.abs(dv.getInt16(0, true)) / 10;
-  renderMain(); // pill + big slot carry it — cheap, no full vargUI
+  vargPaint(); // ~8700 frames/min on the real bike — never paint per frame
 }
 
 /* Status svc, char 1002: 18 bytes of LE u16 bit-words. Layout + bit meanings
@@ -5875,8 +5885,8 @@ function vargApplyState(st) { // single entry point for the future mode/config d
   if (st.mode != null && st.mode !== varg.mode) { varg.mode = st.mode; modePing(); }
   // in/out of neutral is a mode change as far as the rider is concerned — ping the detail block
   if ('neutral' in st && !!st.neutral !== varg.neutral) { varg.neutral = !!st.neutral; modePing(); }
-  if ('special' in st) vargSpecial(st.special);
-  vargUI();
+  if ('special' in st) vargSpecial(st.special); // paints on change itself
+  vargPaint(); // status arrives ~30x/s — coalesce; modePing/vargSpecial handle real changes
 }
 
 const vprops = ch => { // what the VCU CLAIMS this characteristic can do
@@ -6023,13 +6033,31 @@ async function vargDump() {
    a better HUD number than the static map setting anyway.
    So: listen to every unmapped notify char at once and print what arrives;
    known values (VP's mode card, the bike's own display) identify each one.
-   Manual, time-boxed, unsubscribes itself — no ride-time overhead. */
+   Manual, time-boxed, unsubscribes itself — no ride-time overhead.
+
+   Findings from the first real run (2026-07-28, '25 EX):
+   - 00002003 = IMU, 12 B: six LE int16 = accel x/y/z then gyro x/y/z
+     (|accel| ≈ 2104 at rest ⇒ ~2048/g; gyros ≈ 0 stationary). Lean angle
+     is available from this if we ever want it.
+   - 00002100 = AGGREGATE channel for the live service, TLV-framed:
+     <tag><len><payload>… where tag is the characteristic's low byte —
+     e.g. `03 0c <12 B IMU> 02 06 <6 B> 01 04 <4 B speed> 04 01 <map>`.
+     One subscription could replace several.
+   - 00001100 / 00006100 look like the same aggregate idea per service.
+   - 00002006 = 16 B of four LE u32 counters, values ~138860 / 146587 —
+     metres would make those 138.9 / 146.6 km, i.e. odometer + trip.
+   - 00002002 = 6 B, three LE int16: first ~52 stable (temperature?), second
+     swings 35–62 with throttle, third ~-3 stable.
+   - 00002008 = 120 B of zeros (100 cell voltages would be 200 B; unknown).
+   - hp/regen/TC did NOT appear — consistent with them being config, not
+     telemetry. 00001005's 4-byte-record table is the only candidate left. */
 const VARG_PROBE_MS = 20000;
+const VARG_PROBE_CAP = 3; // logged frames per channel — see below
 async function vargProbeExtras() {
   const server = varg.dev && varg.dev.gatt;
   if (!server || !server.connected) { toast('Connect to the bike first'); return; }
   const known = new Set(Object.values(VARG_CHARS));
-  const subs = [];
+  const subs = [], seen = {};
   vlog('--- extra-channel probe (' + VARG_PROBE_MS / 1000 + ' s) ---');
   for (const [name, id] of Object.entries(VARG_SVC)) {
     let chs = [];
@@ -6038,11 +6066,16 @@ async function vargProbeExtras() {
       const p = c.properties || {};
       if (known.has(c.uuid) || !(p.notify || p.indicate)) continue;
       const tag = name + '/' + c.uuid.slice(0, 8);
-      const fn = e => vlog('  ' + tag + ': ' + vhex(e.target.value));
+      seen[tag] = 0;
+      /* Cap logging per channel. The first field run let one firehose channel
+         (2100, and 2008's 120-byte frames) blow the 100-line ring buffer, so
+         the battery-service channels never survived to be read. A few frames
+         each is all the mapping needs; the tail is counted, not printed. */
+      const fn = e => { if (++seen[tag] <= VARG_PROBE_CAP) vlog('  ' + tag + ': ' + vhex(e.target.value)); };
       try {
         c.addEventListener('characteristicvaluechanged', fn);
         await c.startNotifications();
-        subs.push([c, fn]);
+        subs.push([c, fn, tag]);
         if (p.read) { // a read gives an immediate sample even if it rarely notifies
           try { const dv = await c.readValue(); if (dv.byteLength) vlog('  ' + tag + ' read: ' + vhex(dv)); } catch (e) {}
         }
@@ -6055,6 +6088,8 @@ async function vargProbeExtras() {
       try { await c.stopNotifications(); } catch (e) {}
       c.removeEventListener('characteristicvaluechanged', fn);
     }
+    // frame counts per channel: identifies the firehoses and the silent ones
+    vlog('probe counts: ' + Object.entries(seen).map(([t, n]) => t + '=' + n).join(' '));
     vlog('--- probe ended (' + subs.length + ' channels) ---');
     toast('Probe finished — Connection log has the results.');
   }, VARG_PROBE_MS);
