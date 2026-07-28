@@ -5872,9 +5872,16 @@ function vargApplyState(st) { // single entry point for the future mode/config d
   vargUI();
 }
 
+const vprops = ch => { // what the VCU CLAIMS this characteristic can do
+  const p = ch.properties || {};
+  return ['read', 'write', 'writeWithoutResponse', 'notify', 'indicate']
+    .filter(k => p[k]).join('+') || 'none';
+};
+
 async function vargSub(server, svcId, chrId, fn) {
   const svc = await server.getPrimaryService(svcId);
   const ch = await svc.getCharacteristic(chrId);
+  vlog('  char ' + chrId.slice(0, 8) + ' props: ' + vprops(ch));
   // Chrome hands back the SAME characteristic object across reconnects — strip
   // our old listener or every drop/retry cycle stacks another decoder call
   if (ch._dnFn) ch.removeEventListener('characteristicvaluechanged', ch._dnFn);
@@ -5963,8 +5970,30 @@ async function vargConnect(dev) {
   setTimeout(() => { if (varg.state === 'on' && varg.seen < t0) vargSilent(); }, 12000);
 }
 
+/* Full GATT dump: every service Chrome will hand us (the three in
+   optionalServices) and every characteristic inside, with properties. If
+   this firmware moved the telemetry chars — or exposes ones we never tried
+   — it shows up here. Runs once per silent connection. */
+async function vargDump() {
+  const server = varg.dev && varg.dev.gatt;
+  if (!server || !server.connected) return;
+  vlog('--- GATT dump ---');
+  for (const [name, id] of Object.entries(VARG_SVC)) {
+    let svc;
+    try { svc = await server.getPrimaryService(id); }
+    catch (e) { vlog(name + ' svc ' + id.slice(0, 8) + ': ' + e.name); continue; }
+    let chs = [];
+    try { chs = await svc.getCharacteristics(); }
+    catch (e) { vlog(name + ' svc: getCharacteristics ' + e.name); continue; }
+    vlog(name + ' svc ' + id.slice(0, 8) + ' — ' + chs.length + ' chars:');
+    for (const c of chs) vlog('  ' + c.uuid.slice(0, 8) + ' [' + vprops(c) + ']');
+  }
+  vlog('--- end dump ---');
+}
+
 async function vargSilent() { // subscribed 12 s ago, zero frames — find out why, on the phone screen
   vlog('12 s connected, zero frames — probing reads');
+  await vargDump();
   for (const [label, ch] of [['battery', varg.batt], ['status', varg.stat]]) {
     if (!ch) { vlog('probe ' + label + ': never subscribed'); continue; }
     try {
