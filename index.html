@@ -804,7 +804,7 @@
 <div id="orientLabel">north up</div>
 <div id="banner">OFF TRACK</div>
 <div id="toast"></div>
-<div id="updBar"><span>New version ready</span><button class="btn" id="updGo">Update</button><button class="btn" id="updLater">Later</button></div>
+<div id="updBar"><span id="updTxt">New version ready</span><button class="btn" id="updGo">Update</button><button class="btn" id="updLater">Later</button></div>
 <div id="dlgShade"></div>
 <div id="dlg"><h4 id="dlgTitle"></h4><div id="dlgMsg"></div><button id="dlgOk">Got it</button></div>
 <!-- first visit only (who you are) now lives inside the startup card as #suIntro,
@@ -7131,22 +7131,39 @@ applyLayout(); // boot: saved layout applies before the first paint settles
    the app comes back to the foreground, so "on open" covers resume too.
    Never interrupts an active ride — a mid-ride update waits for STOP
    (stopNav checks updPending). */
-let updPending = false;
+let updPending = false, updOldV = null, updNewV = null;
+const updFmt = v => (v || '').replace(/^dingonav-/, '');
+function swVersion() { // ask the CURRENT controller which cache version it serves
+  return new Promise(res => {
+    const c = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!c) return res(null);
+    const ch = new MessageChannel();
+    ch.port1.onmessage = e => res(e.data);
+    c.postMessage('version', [ch.port2]);
+    setTimeout(() => res(null), 1500); // workers older than v45 never answer
+  });
+}
 function updOffer() {
   if (S.nav) { updPending = true; return; }
   updPending = false;
+  document.getElementById('updTxt').textContent = 'New version ready'
+    + (updOldV && updNewV && updOldV !== updNewV ? ': ' + updFmt(updOldV) + ' → ' + updFmt(updNewV) : '');
   document.getElementById('updBar').classList.add('on');
 }
 document.getElementById('updGo').onclick = () => location.reload();
 document.getElementById('updLater').onclick = () => document.getElementById('updBar').classList.remove('on');
 function swUpdateWatch(reg) {
   if (!reg) return;
+  swVersion().then(v => { updOldV = v; }); // remember what this session booted on
   document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
-  reg.addEventListener('updatefound', () => {
-    const w = reg.installing;
-    // no controller = the very first install, not an update — never prompt for that
-    if (!w || !navigator.serviceWorker.controller) return;
-    w.addEventListener('statechange', () => { if (w.state === 'activated') updOffer(); });
+  /* skipWaiting + clients.claim mean a new worker seizes control the moment it
+     activates — controllerchange is therefore both the update signal AND the
+     moment the controller can be asked for the NEW version number. On a very
+     first install there was no old controller: record, never prompt. */
+  navigator.serviceWorker.addEventListener('controllerchange', async () => {
+    const v = await swVersion();
+    if (!updOldV) { updOldV = v; return; } // first install claiming the page
+    updNewV = v; updOffer();
   });
 }
 

@@ -14,6 +14,10 @@ const FONTS = ['Noto Sans Regular', 'Noto Sans Medium', 'Noto Sans Italic'];
 const RANGES = ['0-255', '256-511', '512-767'];
 for (const f of FONTS) for (const r of RANGES) SHELL.push(`./basemap/fonts/${encodeURIComponent(f)}/${r}.pbf`);
 
+// the page asks which version is serving it — for the old → new update banner
+self.addEventListener('message', e => {
+  if (e.data === 'version' && e.ports[0]) e.ports[0].postMessage(CACHE);
+});
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
