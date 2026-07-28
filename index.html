@@ -5765,34 +5765,37 @@ const vhex = dv => [...new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)]
 const vargPill = document.getElementById('vargPill');
 const vargStatus = document.getElementById('vargStatus');
 
+/* Decoders mark seen + log BEFORE any length gate. The old order (gate first)
+   silently discarded every frame shorter than the assumed layout while the UI
+   said "no data" — and svag-mini only ever parses TWO bytes of the battery
+   char, so the 6-byte (soc/soh/vbus) assumption from the EDR forum may well
+   be wrong on real firmware. Decode whatever arrived; never drop silently. */
 function vargBattery(dv) {
-  if (dv.byteLength < 6) return; // not the layout we expect — raw log below will show what it is
   varg.seen = Date.now();
-  if (varg.logN < 5) { // first few frames raw — sanity check against the svag-mini layout
-    varg.logN++;
-    vlog('battery frame ' + ++varg.n.batt + ': ' + vhex(dv));
-  } else varg.n.batt++;
+  if (varg.logN < 5) { varg.logN++; vlog('battery frame ' + ++varg.n.batt + ' (' + dv.byteLength + ' B): ' + vhex(dv)); }
+  else varg.n.batt++;
+  if (dv.byteLength < 2) return;
   // svag-mini confirms: plain LE u16, already a whole percent — no scaling
   let soc = dv.getUint16(0, true);
   if (soc > 100 && soc <= 1000) soc /= 10; // firmware drift to tenths would land here — absorb, don't lie
   varg.soc = Math.round(soc);
-  varg.soh = dv.getUint16(2, true);
-  varg.vbus = dv.getUint16(4, true); // scale TBD (V / dV / mV) — shown raw in the long-press detail
+  if (dv.byteLength >= 4) varg.soh = dv.getUint16(2, true);
+  if (dv.byteLength >= 6) varg.vbus = dv.getUint16(4, true); // scale TBD — shown raw in the telemetry page
   vargUI();
 }
 
 function vargMapMsg(dv) { // Live svc, char 2004: first byte is the riding map (1–5)
-  if (!dv.byteLength) return;
   varg.seen = Date.now();
-  if (!varg.n.map++) vlog('first map frame: ' + vhex(dv));
+  if (!varg.n.map++) vlog('first map frame (' + dv.byteLength + ' B): ' + vhex(dv));
+  if (!dv.byteLength) return;
   const m = dv.getUint8(0);
   if (m >= 1 && m <= 5) vargApplyState({ mode: m }); // hp/regen/tc stay VP-only — the VCU doesn't notify them here
 }
 
 function vargSpeedMsg(dv) { // Live svc, char 2001: i16 LE, km/h × 10 (negative in reverse)
-  if (dv.byteLength < 2) return;
   varg.seen = Date.now();
-  if (!varg.n.spd++) vlog('first speed frame: ' + vhex(dv));
+  if (!varg.n.spd++) vlog('first speed frame (' + dv.byteLength + ' B): ' + vhex(dv));
+  if (dv.byteLength < 2) return;
   varg.speed = Math.abs(dv.getInt16(0, true)) / 10;
   renderMain(); // pill + big slot carry it — cheap, no full vargUI
 }
@@ -5806,9 +5809,9 @@ function vargSpeedMsg(dv) { // Live svc, char 2001: i16 LE, km/h × 10 (negative
       vargAlerts), @6 fault_bits, @8 info_bits (b0 charging, b3 in-gear,
       b4 awake — hibernating when 0). */
 function vargStatusMsg(dv) {
-  if (dv.byteLength < 10) { if (!varg.n.stat++) vlog('status frame too short (' + dv.byteLength + ' B): ' + vhex(dv)); return; }
   varg.seen = Date.now();
-  if (!varg.n.stat++) vlog('first status frame: ' + vhex(dv));
+  if (!varg.n.stat++) vlog('first status frame (' + dv.byteLength + ' B): ' + vhex(dv));
+  if (dv.byteLength < 10) return; // shorter than the misc/ind/alert/fault/info words we decode — logged above
   const misc = dv.getUint16(0, true), ind = dv.getUint16(2, true),
         alert = dv.getUint16(4, true), info = dv.getUint16(8, true);
   // blinker bits toggle with the bulb (~3 Hz) — vargBlink already debounces pulses
