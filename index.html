@@ -5751,7 +5751,7 @@ const varg = {
   neutral: false,
   hp: null, regen: null, tc: null, // per-mode curve settings (hp 0–80, regen/TC 0–100%)
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
-  seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null,
+  seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null, noPersist: false,
   log: [], n: { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }, // on-phone connection log + per-char frame counters
 };
 
@@ -6111,15 +6111,18 @@ function vargHelpShow(kind) {
     ? `<b>Chrome needs Bluetooth permission</b>${VARG_PERM_STEPS}
        <div class="btnRow"><button class="btn" id="vargHelpGo">Try again</button>
          <button class="btn" id="vargHelpClose">Close</button></div>`
-    : `<b>Didn't see the bike?</b>
-       <div class="hint" style="margin-top:6px">Three things it usually is:</div>
+    : `<b>Nothing to connect to?</b>
+       <div class="hint" style="margin-top:6px">The bike can only be <i>found</i> when it's free, but it only <i>streams</i> once
+       the Stark app or VargPilot has started the telemetry. So it's two steps, in this order:</div>
        <ol>
-         ${vin ? `<li><b>The VIN doesn't match</b> — the list only showed devices named exactly <span class="kbd">${vin}</span>. Double-check it, or browse everything instead:</li>`
-              : `<li><b>It's in the list but unrecognisable</b> — the bike shows up as its bare <b>17-character VIN</b> (like <span class="kbd">UDUEX1…</span>), never as "Stark" or "Varg".</li>`}
-         <li><b>It really wasn't listed</b> — a bike currently held by the Stark app or VargPilot stops advertising and is invisible to the scan. For this <i>first</i> pairing only, force-stop those apps and power-cycle the bike. (Afterwards do the opposite: leave them running and DingoNav reconnects without the chooser.)</li>
-         <li><b>Chrome couldn't scan</b> — if the prompt mentioned permissions:</li>
+         <li><b>Grant it once, bike free.</b> Force-stop the Stark app and VargPilot, power-cycle the bike, then tap Connect here
+             and pick the bike (it's the bare 17-character VIN${vin ? ` — <span class="kbd">${vin}</span>` : ', like <span class="kbd">UDUEX1…</span>'}). DingoNav remembers it permanently.</li>
+         <li><b>Then run VargPilot and leave it connected</b>, and tap Connect here again — DingoNav attaches to the same link,
+             no chooser needed, and rides along on its telemetry.</li>
        </ol>
-       <div class="sub">${VARG_PERM_STEPS}</div>
+       ${varg.noPersist ? `<div class="hint"><b>Heads-up:</b> this Chrome build has no remembered-device support, so step 2 can't work.
+         Enable <span class="kbd">chrome://flags/#enable-web-bluetooth-new-permissions-backend</span> and restart Chrome.</div>` : ''}
+       <div class="sub">Chrome mentioned permissions instead? ${VARG_PERM_STEPS}</div>
        <div class="btnRow">${vin ? '<button class="btn" id="vargHelpAll">Show all devices</button>' : ''}
          <button class="btn" id="vargHelpGo">Try again</button>
          <button class="btn" id="vargHelpClose">Close</button></div>`;
@@ -6169,11 +6172,20 @@ async function vargPinCard(name) { // non-blocking: sits on screen while the con
    Requires the site permission to already exist (getDevices). */
 async function vargPiggy() {
   if (!navigator.bluetooth || !navigator.bluetooth.getDevices) {
-    toast('This browser can’t reconnect without the chooser — use Chrome on Android.'); return false;
+    /* getDevices() is the persistent-permissions API — missing on older
+       Chrome, and gated behind a flag on some builds. Without it a held
+       bike is unreachable: it doesn't advertise, so the chooser can't
+       offer it either. Name the flag rather than failing mutely. */
+    vlog('getDevices() unavailable — no remembered-device API in this browser');
+    varg.noPersist = true;
+    return false;
   }
+  varg.noPersist = false;
   const vin = vinNorm(S.set.vargVin);
   let devs = [];
-  try { devs = await navigator.bluetooth.getDevices(); } catch (e) { vlog('getDevices failed: ' + e.name); }
+  try { devs = await navigator.bluetooth.getDevices(); }
+  catch (e) { vlog('getDevices failed: ' + e.name); return false; }
+  vlog('remembered devices: ' + devs.length + (devs.length ? ' (' + devs.map(d => d.name || '?').join(', ') + ')' : ''));
   const dev = devs.find(d => vinNorm(d.name || '') === vin) || devs[0];
   if (!dev) return false; // never granted on this phone — caller falls back to the chooser
   vlog('piggyback: connecting to remembered device (no scan)');
