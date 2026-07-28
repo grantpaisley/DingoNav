@@ -30,7 +30,12 @@
 <body>
 
 <h1>DingoNav ↔ Stark Varg EX</h1>
-<div class="sub">BLE telemetry integration — 2025 Varg EX · Arkenstone phone · read-only, display only. July 2026.</div>
+<div class="sub">BLE telemetry integration — 2025 Varg EX · Arkenstone phone · read-only, display only. Rev 2, 28 July 2026.</div>
+<div class="note">Rev 2: the protocol is no longer guesswork. Layouts below are cross-checked against two working
+open-source clients — <a href="https://github.com/b1naryth1ef/svag-mini">svag-mini</a> (ESP32 firmware, verified
+on real MX/EX/SM) and <a href="https://github.com/tonysilvasa/stark-varg-garmin-bridge">stark-varg-garmin-bridge</a> —
+and against the STATUS_BITS words VargPilot re-serves, which we confirmed live on the '25 EX. Remaining unknowns
+are flagged <span class="tag tbd">TBD</span>.</div>
 
 <h2>Architecture</h2>
 <svg viewBox="0 0 840 190" role="img" aria-label="Architecture diagram">
@@ -48,9 +53,9 @@
 
   <rect x="390" y="30" width="230" height="120" rx="12" fill="#f4f7fa" stroke="#d8e0e8"/>
   <text x="505" y="55" text-anchor="middle" font-size="14" font-weight="700" fill="#1a2530">Stark Varg EX — VCU</text>
-  <text x="505" y="80" text-anchor="middle" font-size="12" fill="#5c6f80">GATT service 6000…</text>
+  <text x="505" y="80" text-anchor="middle" font-size="12" fill="#5c6f80">GATT services 1000 / 2000 / 6000</text>
   <text x="505" y="99" text-anchor="middle" font-size="12" fill="#5c6f80">notify-only (reads return nothing)</text>
-  <text x="505" y="118" text-anchor="middle" font-size="12" fill="#5c6f80">non-standard BLE stack</text>
+  <text x="505" y="118" text-anchor="middle" font-size="12" fill="#5c6f80">advertises name = bare 17-char VIN</text>
 
   <rect x="650" y="52" width="180" height="76" rx="12" fill="#fff" stroke="#d8e0e8" stroke-dasharray="5 4"/>
   <text x="740" y="80" text-anchor="middle" font-size="13" font-weight="600" fill="#5c6f80">Stark app / VargPilot</text>
@@ -61,36 +66,70 @@
 
 <h2>Connection flow</h2>
 <ol>
-  <li><code>requestDevice</code> filtered on service <code>6000…</code> (namePrefix fallback) → Android shows the per-VIN <b>PIN</b> bond dialog once.</li>
-  <li><code>gatt.connect()</code> → <code>getPrimaryService</code> → <code>getCharacteristic</code>.</li>
+  <li><code>requestDevice</code> with <b><code>acceptAllDevices</code></b> — the VCU advertises <i>neither</i> its custom
+      services nor a "Stark" name, so no filter can find it. The rider picks the bike's <b>17-char VIN</b> from the list
+      (one-time chore; <code>getDevices()</code> reclaims silently forever after). All three services must be in
+      <code>optionalServices</code> or Chrome walls them off post-connect.</li>
+  <li>Bonding is <b>MITM + Secure Connections</b> → a 4-digit PIN is mandatory. It's <b>derivable from the VIN</b>
+      (garmin-bridge): <code>SHA-256(VIN + "-19700101")</code>, four digit-extractions → PIN. Since the advertised name
+      IS the VIN, DingoNav shows the rider the expected PIN before Android asks.</li>
+  <li><code>gatt.connect()</code> (untimed — resolves when the bike powers on in range) → subscribe battery first
+      (forces the bond exactly once) → then map + status, best-effort.</li>
   <li><b><code>startNotifications()</code> only</b> — never <code>readValue()</code> (returns nothing on this VCU).</li>
-  <li>Decode notifications → HUD. First 5 raw frames logged to console to pin endianness/scale.</li>
-  <li>Reconnects use <code>getDevices()</code> — bonded bike, no picker, no PIN. Drops auto-retry with backoff (1→15 s).</li>
+  <li>Watchdogs from link-up: a stall in the pair stage is almost always the buried Android PIN dialog — nudge at 20 s,
+      abort to retry at 60 s. Drops auto-retry with backoff (1→15 s).</li>
+  <li>Decode notifications → HUD. First 5 raw battery frames still logged as a sanity check against the layouts below.</li>
 </ol>
 
 <h2>Characteristics</h2>
-<div class="sub">Service <code>00006000-5374-6172-4b20-467574757265</code> — UUID suffix is ASCII “Star K Future”.</div>
+<div class="sub">Base UUID <code>xxxxxxxx-5374-6172-4b20-467574757265</code> — suffix is ASCII “StarK Future”. All words little-endian. Three services carry everything DingoNav shows:</div>
 <table>
-  <tr><th>Signal</th><th>Characteristic</th><th>Layout</th><th>Status</th></tr>
-  <tr><td>Battery</td><td><code>00006004-…</code></td>
-      <td>u16 SOC · u16 SOH · u16 V<sub>bus</sub> (endianness/scale unconfirmed)</td>
+  <tr><th>Signal</th><th>Service / characteristic</th><th>Layout</th><th>Status</th></tr>
+  <tr><td>Battery</td><td><code>00006000</code> / <code>00006004</code></td>
+      <td>u16 SOC (<b>whole %</b>, no scaling) · u16 SOH · u16 V<sub>bus</sub> (unit TBD)</td>
       <td><span class="tag known">WIRED</span></td></tr>
-  <tr><td>Reverse / crawl engaged</td><td>?</td><td>? — priority 1 (safety display)</td><td><span class="tag tbd">ASKING</span></td></tr>
-  <tr><td>Active ride mode 1–5</td><td>?</td><td>? — just which map is live</td><td><span class="tag tbd">ASKING</span></td></tr>
-  <tr><td>Active hp / regen / TC</td><td>?</td><td>? — effective values of the live mode</td><td><span class="tag tbd">ASKING</span></td></tr>
-  <tr><td>Motor + inverter temp</td><td>?</td><td>? — for thermal-cutoff warning</td><td><span class="tag tbd">ASKING</span></td></tr>
+  <tr><td>Active ride mode 1–5</td><td><code>00002000</code> / <code>00002004</code></td>
+      <td>byte 0 = riding map index</td>
+      <td><span class="tag known">WIRED</span></td></tr>
+  <tr><td>Reverse / crawl, blinkers, beam, neutral, alerts</td><td><code>00001000</code> / <code>00001002</code></td>
+      <td>18 bytes of u16 bit-words — full decode below</td>
+      <td><span class="tag known">WIRED</span></td></tr>
+  <tr><td>Speed</td><td><code>00002000</code> / <code>00002001</code></td>
+      <td>i16, km/h × 10 — DingoNav uses GPS instead; documented for completeness</td>
+      <td><span class="tag known">KNOWN</span></td></tr>
+  <tr><td>Active hp / regen / TC</td><td>—</td><td>Not notified over BLE by any known client — VargPilot-only (<code>Vcu.BIKE_CONFIG.MAP.*</code>)</td>
+      <td><span class="tag tbd">VP ONLY</span></td></tr>
+  <tr><td>Motor / inverter temps</td><td>—</td><td>Raw temps not found on BLE; the VCU notifies graded <b>alert severities</b> instead (below) — good enough for the thermal warning</td>
+      <td><span class="tag tbd">PARTIAL</span></td></tr>
+</table>
+
+<h2>Status characteristic 1002 — bit decode</h2>
+<div class="sub">Per svag-mini's <code>state.c</code>; the same words VargPilot re-serves as <code>Bike.STATUS_BITS.*</code>.</div>
+<table>
+  <tr><th>Offset</th><th>Word</th><th>Decode</th></tr>
+  <tr><td><code>@0</code></td><td>misc_bits</td>
+      <td>low nibble = <b>walking_mode</b>: <code>8</code> = reverse, <code>12</code> = crawl (values confirmed live on the '25 EX via VP) — drives the full-screen takeover</td></tr>
+  <tr><td><code>@2</code></td><td>indicator_bits</td>
+      <td>b1 high beam · b2 right blinker · b3 left blinker (bits toggle with the bulb ~3 Hz — debounce) · b12 check-engine</td></tr>
+  <tr><td><code>@4</code></td><td>alert_bits</td>
+      <td>eight 2-bit severities (0 = clear): general <code>b0-1</code>, battery temp <code>b2-3</code>, motor temp <code>b4-5</code>, coolant pump <code>b6-7</code>, cooling fan <code>b8-9</code>, insulation <code>b10-11</code>, battery derating <code>b12-13</code>, inverter (IGBT) derating <code>b14-15</code></td></tr>
+  <tr><td><code>@6</code></td><td>fault_bits</td><td>fault flags — not yet surfaced in DingoNav</td></tr>
+  <tr><td><code>@8</code></td><td>info_bits</td>
+      <td>b0 charging · b1 charger connected · b3 in-gear · b4 awake (hibernating when 0) · b5 pump on · b6 fan on. <b>Neutral</b> is inferred: awake ∧ ¬in-gear ∧ walking_mode = 0</td></tr>
+  <tr><td><code>@10</code></td><td>lock_status</td><td>u8 — not used by DingoNav</td></tr>
+  <tr><td><code>@14</code></td><td>battery_status</td><td>u32 — not used by DingoNav</td></tr>
 </table>
 
 <svg viewBox="0 0 840 92" role="img" aria-label="Battery byte layout">
-  <text x="10" y="18" font-size="13" font-weight="700" fill="#1a2530">6004… notification — 6 bytes</text>
+  <text x="10" y="18" font-size="13" font-weight="700" fill="#1a2530">6004… notification — 6 bytes, all u16 LE (confirmed via svag-mini)</text>
   <rect x="10" y="30" width="220" height="42" fill="#e2f3e9" stroke="#1a9e5c"/>
-  <text x="120" y="49" text-anchor="middle" font-size="13" font-weight="600" fill="#1a2530">bytes 0–1 · SOC %</text>
+  <text x="120" y="49" text-anchor="middle" font-size="13" font-weight="600" fill="#1a2530">bytes 0–1 · SOC, whole %</text>
   <text x="120" y="65" text-anchor="middle" font-size="11" fill="#5c6f80">battery pill</text>
-  <rect x="230" y="30" width="220" height="42" fill="#f4f7fa" stroke="#d8e0e8"/>
-  <text x="340" y="49" text-anchor="middle" font-size="13" font-weight="600" fill="#1a2530">bytes 2–3 · SOH</text>
+  <rect x="230" y="30" width="220" height="42" fill="#e2f3e9" stroke="#1a9e5c"/>
+  <text x="340" y="49" text-anchor="middle" font-size="13" font-weight="600" fill="#1a2530">bytes 2–3 · SOH %</text>
   <text x="340" y="65" text-anchor="middle" font-size="11" fill="#5c6f80">static on EX — long-press only</text>
   <rect x="450" y="30" width="220" height="42" fill="#f4f7fa" stroke="#d8e0e8"/>
-  <text x="560" y="49" text-anchor="middle" font-size="13" font-weight="600" fill="#1a2530">bytes 4–5 · DC bus V</text>
+  <text x="560" y="49" text-anchor="middle" font-size="13" font-weight="600" fill="#1a2530">bytes 4–5 · DC bus</text>
   <text x="560" y="65" text-anchor="middle" font-size="11" fill="#5c6f80">unit TBD — long-press only</text>
 </svg>
 
@@ -119,27 +158,36 @@
   <text x="120" y="145" font-size="11" fill="#c92f2f">⚠ stock app auto-reconnects aggressively — force-close it after tuning</text>
 </svg>
 
-<h2>Display behaviours (built &amp; tested — awaiting UUIDs)</h2>
+<h2>Display behaviours (built, wired &amp; browser-verified — awaiting first on-bike run)</h2>
 <table>
   <tr><th>Trigger</th><th>Behaviour</th></tr>
   <tr><td>VCU reports <b>reverse</b></td>
       <td>Whole screen tinted <b style="color:var(--bad)">red</b>, word REVERSE knocked out to transparent, pulsing · truck-backup beep every 0.9 s + vibration</td></tr>
   <tr><td>VCU reports <b>crawl</b></td>
       <td>Same, <b style="color:var(--warn)">orange</b> / CRAWL · low two-tone every 1.3 s</td></tr>
-  <tr><td>Mode change</td><td>2 s flash card: <code>M3 · 45 hp · regen 30% · TC 60%</code> · big translucent mode digit persists (styled like the km/h readout)</td></tr>
+  <tr><td>Mode change</td><td>2 s flash card: <code>M3 · 45 hp · regen 30% · TC 60%</code> · big translucent mode digit persists (styled like the km/h readout). Over direct BLE only the digit shows — hp/regen/TC come from VargPilot</td></tr>
+  <tr><td>Bike alert escalates</td><td>One-shot toast + vibration per severity step (<code>⚠ Bike alert: Motor temp (level 2)</code>); silent on clear — the ride needs eyes, not noise</td></tr>
   <tr><td>Battery</td><td>🔋 % pill top-right · red ≤15% · dimmed if stale &gt;20 s · long-press = SOH, V<sub>bus</sub>, hp/regen/TC</td></tr>
   <tr><td>BLE drops mid-reverse</td><td>Overlay + beeper killed instantly — never display a state the bike isn’t confirming</td></tr>
 </table>
 <div class="note">The overlay is driven only by VCU state notifications — it fires when reverse <i>actually engages</i> (after the bike’s own ~1.4 s hold), so it can never show a guess. Alert sounds follow the app’s master mute.</div>
 
-<h2>Open questions (for the EX-app dev)</h2>
+<h2>Answered since rev 1</h2>
+<ol>
+  <li><s>UUIDs + layouts for reverse/crawl, ride mode, temps</s> — all mapped above (svag-mini; walking-mode values confirmed on the EX via VP). hp/regen/TC turn out to be VP-only.</li>
+  <li><s>Battery endianness/scale</s> — little-endian, SOC is a whole percent (svag-mini <code>parse_le_u16</code>).</li>
+  <li><s>Write/handshake before notifications?</s> — no; both open-source clients just write the CCCD (<code>startNotifications()</code>) and frames flow. Bonding is the only gate (MITM + Secure Connections).</li>
+  <li><s>Where does the PIN come from?</s> — derivable from the VIN: <code>SHA-256(VIN + "-19700101")</code> (garmin-bridge).</li>
+</ol>
+
+<h2>Still open (for the EX-app dev)</h2>
 <ol class="q">
-  <li>UUIDs + byte/bit layout for the four <span class="tag tbd">ASKING</span> rows above.</li>
-  <li>Battery: is SOC plain 0–100? What unit is V<sub>bus</sub>? Little- or big-endian?</li>
-  <li>Does the per-VIN PIN bond work from a <b>browser</b> (Web Bluetooth) pairing dialog, or must it be bonded via Android first?</li>
-  <li>Do notifications stream immediately after subscribing, or is a write/handshake needed first?</li>
-  <li>Any CCCD/subscription quirks on their stack? A limit on simultaneous subscriptions?</li>
-  <li>Typical notification rate on 6004?</li>
+  <li>V<sub>bus</sub> unit on <code>6004</code> bytes 4–5 — V, dV or mV?</li>
+  <li>Does the MITM bond complete from a <b>browser</b> (Web Bluetooth) pairing dialog, or must Android bond first? (First on-bike run will settle it — watchdogs + PIN card are in place either way.)</li>
+  <li>Typical notification rates on <code>6004</code> / <code>2004</code> / <code>1002</code>?</li>
+  <li>Can a <b>second GATT client piggyback</b> on the same bond while the stock app stays connected? garmin-bridge does exactly this from native Android — if Chrome can too, DingoNav's release/reclaim handoff becomes unnecessary.</li>
+  <li>walking_mode values other than 0/8/12 — do any exist? (DingoNav currently treats unknown non-zero as crawl: safer loud than silent.)</li>
+  <li>fault_bits (<code>@6</code>) semantics — worth surfacing beyond the alert severities?</li>
 </ol>
 
 </body>
