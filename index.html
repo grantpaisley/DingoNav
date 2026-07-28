@@ -7235,6 +7235,7 @@ function swUpdateWatch(reg) {
   if (!reg) return;
   swVersion().then(v => { updOldV = v; }); // remember what this session booted on
   document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  setInterval(() => { if (!document.hidden) reg.update().catch(() => {}); }, 600000); // in continuous use: check every 10 min too
   /* skipWaiting + clients.claim mean a new worker seizes control the moment it
      activates — controllerchange is therefore both the update signal AND the
      moment the controller can be asked for the NEW version number. On a very
