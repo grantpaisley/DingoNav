@@ -5762,6 +5762,7 @@ const varg = {
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null, noPersist: false,
   yield: false, waitStream: false, // yield = release a silent link so VP can grab the bike
   yieldN: 0, absent: false, // consecutive no-stream cycles (widens the free window); bike was away last attempt
+  btOff: false, // Bluetooth-off already toasted this outage
   log: [], n: { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }, // on-phone connection log + per-char frame counters
   odo: null, trips: null, raw2002: null, cells: null, temps: null, // "extra channels"
 };
@@ -5785,6 +5786,19 @@ function vlogSave() { vlogT = 0; try { localStorage.dnVargLog = JSON.stringify(v
 window.addEventListener('pagehide', vlogSave);
 try { const prev = JSON.parse(localStorage.dnVargLog || '[]'); if (prev.length) varg.log.push(...prev); } catch (e) {}
 varg.log.push('--- session start ' + new Date().toLocaleString() + ' ---');
+/* Adapter + API state up front — half of all field mysteries ("instant
+   NetworkError forever") are the phone side: Bluetooth off, a wedged stack,
+   or an older Chrome missing the APIs. Name it in the first log lines. */
+if (navigator.bluetooth) {
+  vlog('env: getDevices ' + (navigator.bluetooth.getDevices ? 'yes' : 'NO')
+    + ', watchAdvertisements ' + ('BluetoothDevice' in window && BluetoothDevice.prototype.watchAdvertisements ? 'yes' : 'NO'));
+  if (navigator.bluetooth.getAvailability) {
+    navigator.bluetooth.getAvailability().then(a => { if (!a) vlog('env: NO Bluetooth adapter — is Bluetooth turned on?'); });
+    navigator.bluetooth.addEventListener('availabilitychanged',
+      e => vlog('Bluetooth adapter ' + (e.value ? 'is back' : 'GONE — Bluetooth turned off?')));
+  }
+}
+const verr = e => e.name + (e.message ? ' — ' + e.message : ''); // NetworkError alone never names its cause
 const vhex = dv => [...new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)]
   .map(b => b.toString(16).padStart(2, '0')).join(' ');
 
@@ -6069,7 +6083,7 @@ async function vargConnect(dev) {
   varg.dev = dev; varg.state = 'connecting'; varg.stage = 'link'; vargUI();
   vargGuardsClear();
   varg.n = { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }; varg.logN = 0;
-  vlog('connecting to "' + (dev.name || '?') + '"');
+  vlog('connecting to "' + (dev.name || '?') + '"' + (dev.gatt.connected ? ' (link already up)' : ''));
   dev.removeEventListener('gattserverdisconnected', vargDropped); // no dupes across retries
   dev.addEventListener('gattserverdisconnected', vargDropped);
   // fast when the bike is up (or VP holds it — we join the phone's link); an
@@ -6144,7 +6158,7 @@ async function vargConnect(dev) {
         .catch(e => vlog(label + ' subscribe FAILED: ' + e.name));
     }
   } finally { vargGuardsClear(); }
-  varg.state = 'on'; varg.retryN = 0; varg.hogged = false; varg.absent = false; vargUI();
+  varg.state = 'on'; varg.retryN = 0; varg.hogged = false; varg.absent = false; varg.btOff = false; vargUI();
   /* Silent-connection watchdog: subscribed but nothing arrives ⇒ either a
      bond that never completed (the exact 2026-07-28 field failure) or — the
      normal case after a bike restart — nothing has started the VCU's stream
@@ -6355,12 +6369,23 @@ function vargRetry() { // BLE flaps on a dirt bike — recover quietly, never gi
     try { await vargConnect(dev); }
     catch (e) {
       if (g !== vargRetryG) return;
-      vlog('retry #' + (n + 1) + ' failed: ' + e.name);
+      vlog('retry #' + (n + 1) + ' failed: ' + verr(e));
       if (e.name === 'AbsentError') { varg.absent = true; varg.yield = true; } // off or away: watch for it, don't hammer
       else if (n + 1 >= 4 && !varg.hogged) { // sustained REAL failures — surface the usual suspects once
         varg.hogged = true;
         toast('Can’t reach the bike — make sure VargPilot (or the Stark app) is connected to it, then tap the 🔋 pill → Reconnect.');
       }
+      /* Instant NetworkError in a loop is the phone refusing, not the bike:
+         Bluetooth off, or a missing/stale Android bond (field, 2026-07-31 —
+         a fresh install skipped the Settings-app pairing). Name the one we
+         can detect; point at the bond for the rest. */
+      if (e.name === 'NetworkError' && navigator.bluetooth.getAvailability)
+        navigator.bluetooth.getAvailability().then(a => {
+          if (a || varg.btOff) return;
+          varg.btOff = true;
+          vlog('adapter reports unavailable — Bluetooth is OFF');
+          toast('Bluetooth is off — turn it on and DingoNav will reconnect.');
+        });
       vargRetry();
     }
   };
@@ -6386,7 +6411,7 @@ async function vargEnsure(why) {
   if (!dev) { vlog('reconnect: nothing remembered — tap Connect'); return; }
   try { await vargConnect(dev); }
   catch (e) {
-    vlog('reconnect failed: ' + e.name);
+    vlog('reconnect failed: ' + verr(e));
     if (e.name === 'AbsentError') { varg.absent = true; varg.yield = true; }
     vargRetry();
   }
@@ -6460,7 +6485,8 @@ function vargHelpShow(kind) {
              the stream is running.</li>
        </ol>
        ${varg.noPersist ? `<div class="hint"><b>Heads-up:</b> this Chrome build has no remembered-device support, so step 2 can't work.
-         Enable <span class="kbd">chrome://flags/#enable-web-bluetooth-new-permissions-backend</span> and restart Chrome.</div>` : ''}
+         Update Chrome (newer versions have it built in) — or on older builds enable
+         <span class="kbd">chrome://flags/#enable-web-bluetooth-new-permissions-backend</span> and restart Chrome.</div>` : ''}
        <div class="sub">Chrome mentioned permissions instead? ${VARG_PERM_STEPS}</div>
        <div class="btnRow">${vin ? '<button class="btn" id="vargHelpAll">Show all devices</button>' : ''}
          <button class="btn" id="vargHelpGo">Try again</button>
@@ -6518,7 +6544,7 @@ async function vargPiggy() {
     vlog('getDevices() unavailable — no remembered-device API in this browser. '
       + 'Piggyback CANNOT work without it: a bike held by VargPilot stops advertising, so the chooser can never offer it. '
       + 'Enable chrome://flags/#enable-web-bluetooth-new-permissions-backend and restart Chrome.');
-    if (!varg.noPersist) toast('This Chrome can’t remember devices — enable chrome://flags/#enable-web-bluetooth-new-permissions-backend and restart, or reconnecting needs the bike free every time.');
+    if (!varg.noPersist) toast('This Chrome can’t remember devices — update Chrome (newer versions have it built in) or enable chrome://flags/#enable-web-bluetooth-new-permissions-backend; otherwise reconnecting needs the bike free every time.');
     varg.noPersist = true;
     return false;
   }
@@ -6531,7 +6557,7 @@ async function vargPiggy() {
   const dev = devs.find(d => vinNorm(d.name || '') === vin) || devs[0];
   if (!dev) return false; // never granted on this phone — caller falls back to the chooser
   vlog('piggyback: connecting to remembered device (no scan)');
-  try { await vargConnect(dev); } catch (e) { vlog('piggyback connect failed: ' + e.name); vargDropped(); }
+  try { await vargConnect(dev); } catch (e) { vlog('piggyback connect failed: ' + verr(e)); vargDropped(); }
   return true;
 }
 
@@ -6588,7 +6614,10 @@ async function vargBoot() { // reclaim a previously-permitted bike with zero tap
   if (!S.set.varg || !navigator.bluetooth || !navigator.bluetooth.getDevices) return;
   try {
     const devs = await navigator.bluetooth.getDevices();
-    if (devs.length && varg.state === 'off') { varg.retryN = 2; vargConnect(devs[0]).catch(vargDropped); }
+    if (devs.length && varg.state === 'off') {
+      varg.retryN = 2;
+      vargConnect(devs[0]).catch(e => { vlog('boot connect failed: ' + verr(e)); vargDropped(); });
+    }
   } catch (e) { /* permissions backend unavailable — Connect button still works */ }
 }
 
@@ -6650,7 +6679,7 @@ function vargUI() {
     : !navigator.bluetooth
     ? 'This browser has no Web Bluetooth — use Chrome on Android (the Arkenstone works).'
     : varg.noPersist && varg.state !== 'on'
-    ? 'This Chrome can’t remember devices, so it can only connect while the bike is free. Enable chrome://flags/#enable-web-bluetooth-new-permissions-backend and restart Chrome to attach while VargPilot holds it.'
+    ? 'This Chrome can’t remember devices, so it can only connect while the bike is free. Update Chrome (newer versions have this built in) — or on older builds enable chrome://flags/#enable-web-bluetooth-new-permissions-backend and restart.'
     : { off: vinNorm(S.set.vargVin)
           ? 'Not connected — power the bike on, then Connect. The pairing list will show only your bike.'
           : 'Not connected — power the bike on, then Connect. First time asks for the bike’s VIN.',
