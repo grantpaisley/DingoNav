@@ -5761,6 +5761,7 @@ const varg = {
   ind: { L: false, R: false, beam: false, lastL: 0, lastR: 0, sinceL: 0, sinceR: 0, warnL: false, warnR: false },
   seen: 0, retryN: 0, retryT: null, hogged: false, logN: 0, sndT: null, noPersist: false,
   yield: false, waitStream: false, // yield = release a silent link so VP can grab the bike
+  yieldN: 0, absent: false, // consecutive no-stream cycles (widens the free window); bike was away last attempt
   log: [], n: { batt: 0, map: 0, spd: 0, stat: 0, soc19: 0 }, // on-phone connection log + per-char frame counters
   odo: null, trips: null, raw2002: null, cells: null, temps: null, // "extra channels"
 };
@@ -5772,9 +5773,18 @@ function vlog(msg) {
   varg.log.push(new Date().toTimeString().slice(0, 8) + ' ' + msg);
   if (varg.log.length > 300) varg.log.shift(); // a full channel probe + GATT dump must fit
   console.log('[varg]', msg);
+  if (!vlogT) vlogT = setTimeout(vlogSave, 3000);
   const el = document.getElementById('vargLogTxt');
   if (el) el.textContent = varg.log.join('\n'); // live while the card is open
 }
+/* Connection bugs love to end in a reload or a force-quit-everything — keep
+   the log tail in localStorage so the previous ride's last minutes are still
+   readable afterwards. Throttled so the 30 Hz decode path never touches it. */
+let vlogT = 0;
+function vlogSave() { vlogT = 0; try { localStorage.dnVargLog = JSON.stringify(varg.log.slice(-150)); } catch (e) {} }
+window.addEventListener('pagehide', vlogSave);
+try { const prev = JSON.parse(localStorage.dnVargLog || '[]'); if (prev.length) varg.log.push(...prev); } catch (e) {}
+varg.log.push('--- session start ' + new Date().toLocaleString() + ' ---');
 const vhex = dv => [...new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)]
   .map(b => b.toString(16).padStart(2, '0')).join(' ');
 
@@ -5972,6 +5982,89 @@ async function vargSub(server, svcId, chrId, fn) {
 
 function vargGuardsClear() { varg.guardT.forEach(clearTimeout); varg.guardT = []; }
 
+/* ---- bike-restart recovery (field bug, 2026-07-31) ----
+   Power-cycling the bike with VargPilot running locked everyone out: the
+   retry loop's pending gatt.connect() grabbed the bike the instant it booted,
+   and a held bike stops advertising — so VP's scan-based reconnect never saw
+   a single advert, sat on "searching" until force-quit, and the VCU never
+   started the stream. The 12 s-held / 8 s-free yield cycle then starved VP's
+   background-throttled scan forever; recovery meant the manual
+   force-quit-VP / connect / restart-VP dance.
+   The cure: never race VP for a bike only VP can start. While the bike is
+   absent or silent, WATCH ADVERTISEMENTS instead of holding a connection —
+   adverts flowing means the bike is free and VP hasn't found it yet (stay
+   off the air); adverts stopping means something just connected (join it and
+   ride along). watchAdvertisements ships behind the same Chrome flag as
+   getDevices; where it's missing, fall back to timed windows: held short,
+   freed long. */
+const VARG_ABSENT_MS = 6000; // a present bike links in ~1 s; longer ⇒ it's off or away
+const VARG_CHECK_MS = 5000; // re-check hold: frames arrive <1 s when the stream runs
+const VARG_FREE_MS = [8000, 16000, 30000]; // escalating hands-off windows for VP's scan
+const VARG_FREE_EXTEND_MS = 30000; // extra patience while adverts show the bike still free
+const VARG_AD_GONE_MS = 4000; // adverts seen, then none for this long ⇒ the bike was taken
+
+const vargAds = { ctl: null, n: 0, last: 0, rssi: null };
+function vargAdSeen(e) { vargAds.n++; vargAds.last = Date.now(); vargAds.rssi = e.rssi ?? null; }
+function vargAdsStop() { if (vargAds.ctl) { vargAds.ctl.abort(); vargAds.ctl = null; } }
+async function vargAdsStart(dev) { // true = watching; false = API missing or refused
+  if (!dev || !dev.watchAdvertisements) return false;
+  if (vargAds.ctl) return true;
+  const ctl = new AbortController();
+  try {
+    dev.removeEventListener('advertisementreceived', vargAdSeen); // one listener, ever
+    dev.addEventListener('advertisementreceived', vargAdSeen);
+    await dev.watchAdvertisements({ signal: ctl.signal });
+    vargAds.ctl = ctl; vargAds.n = 0; vargAds.last = 0; vargAds.rssi = null;
+    return true;
+  } catch (e) { vlog('watchAdvertisements unavailable: ' + e.name); return false; }
+}
+
+/* One hands-off window. Resolves the moment adverts stop after being seen
+   (VP/Stark just connected — join now), extends while they keep flowing
+   (connecting would only steal the bike back), else runs out the clock.
+   live() false-ing (manual reconnect, release) abandons the wait. */
+async function vargFreeWait(dev, ms, live) {
+  const watching = await vargAdsStart(dev);
+  vlog('standing back ' + ms / 1000 + ' s so VargPilot can take the bike' + (watching ? ' (watching adverts)' : ''));
+  const t0 = Date.now();
+  try {
+    while (live()) {
+      await new Promise(r => setTimeout(r, 500));
+      if (!live()) return;
+      const now = Date.now(), free = vargAds.last && now - vargAds.last <= VARG_AD_GONE_MS;
+      if (watching && vargAds.last && !free) {
+        vlog('adverts stopped (' + vargAds.n + ' seen, rssi ' + vargAds.rssi + ') — something connected to the bike; attaching');
+        return;
+      }
+      if (now - t0 < ms) continue;
+      if (watching && free && now - t0 < ms + VARG_FREE_EXTEND_MS) continue; // still free: VP hasn't found it — keep standing back
+      vlog(!watching ? 'window over — trying again'
+        : vargAds.n ? 'window over — bike still free (' + vargAds.n + ' adverts, rssi ' + vargAds.rssi + '); quick stream check'
+        : 'window over — no adverts seen (bike held, off, or out of range); trying a connect');
+      return;
+    }
+  } finally { vargAdsStop(); }
+}
+
+/* gatt.connect() left pending while the bike is off grabs it the instant it
+   boots — beating VP to a bike only VP can start. When adverts are watchable
+   we can afford to time the attempt out and watch instead; without them the
+   pending connect stays our only way to catch the bike's return. */
+async function vargLink(dev) {
+  if (!dev.watchAdvertisements) return dev.gatt.connect();
+  let tid;
+  const p = dev.gatt.connect();
+  p.catch(() => {}); // an abandoned attempt may reject long after we've moved on
+  try {
+    return await Promise.race([p, new Promise((_, rej) => {
+      tid = setTimeout(() => { const e = new Error('bike absent'); e.name = 'AbsentError'; rej(e); }, VARG_ABSENT_MS);
+    })]);
+  } catch (e) {
+    if (e.name === 'AbsentError') { try { dev.gatt.disconnect(); } catch (e2) {} } // cancel the pending grab
+    throw e;
+  } finally { clearTimeout(tid); }
+}
+
 async function vargConnect(dev) {
   varg.dev = dev; varg.state = 'connecting'; varg.stage = 'link'; vargUI();
   vargGuardsClear();
@@ -5979,7 +6072,9 @@ async function vargConnect(dev) {
   vlog('connecting to "' + (dev.name || '?') + '"');
   dev.removeEventListener('gattserverdisconnected', vargDropped); // no dupes across retries
   dev.addEventListener('gattserverdisconnected', vargDropped);
-  const server = await dev.gatt.connect(); // resolves whenever the bike powers on in range — never timed out
+  // fast when the bike is up (or VP holds it — we join the phone's link); an
+  // absent bike aborts into advert-watching instead of leaving a pending grab
+  const server = await vargLink(dev);
   vlog('link up — pairing & subscribing');
   varg.stage = 'pair'; vargUI();
   /* From link-up onward a stall is real: it's almost always the MITM bonding
@@ -6049,26 +6144,37 @@ async function vargConnect(dev) {
         .catch(e => vlog(label + ' subscribe FAILED: ' + e.name));
     }
   } finally { vargGuardsClear(); }
-  varg.state = 'on'; varg.retryN = 0; varg.hogged = false; vargUI();
-  /* Silent-connection watchdog: subscribed but nothing arrives ⇒ almost
-     certainly a bond that never completed (the exact 2026-07-28 field
-     failure). Probe reads to pin the failure mode, then name the fix. */
+  varg.state = 'on'; varg.retryN = 0; varg.hogged = false; varg.absent = false; vargUI();
+  /* Silent-connection watchdog: subscribed but nothing arrives ⇒ either a
+     bond that never completed (the exact 2026-07-28 field failure) or — the
+     normal case after a bike restart — nothing has started the VCU's stream
+     yet. The first silent link gets the full 12 s plus diagnostics; once in
+     the waiting-for-stream loop a 5 s sniff is decisive (status alone
+     notifies ~30×/s) and keeps the bike mostly free for VargPilot. */
   const t0 = Date.now();
-  // frames flowing ⇒ we're past the waiting-for-the-stream phase
-  setTimeout(() => { if (varg.seen >= t0) varg.waitStream = false; }, 12500);
-  /* If the VCU raises link encryption AFTER our subscribe writes, some stacks
-     reset the CCCD table at that moment — voiding the early subscriptions.
-     Rewriting them a few seconds in lands on the (possibly now-encrypted)
-     link. Cheap, harmless when already streaming (we only fire on silence). */
-  setTimeout(async () => {
-    if (varg.state !== 'on' || varg.seen >= t0) return;
-    vlog('6 s silent — rewriting CCCDs (in case encryption reset the subscriptions)');
-    for (const [label, ch] of [['battery', varg.batt], ['map', varg.map], ['speed', varg.spd], ['status', varg.stat]]) {
-      if (!ch) continue;
-      try { await ch.startNotifications(); } catch (e) { vlog('resubscribe ' + label + ' failed: ' + e.name); }
+  if (!varg.waitStream)
+    /* If the VCU raises link encryption AFTER our subscribe writes, some
+       stacks reset the CCCD table at that moment — voiding the early
+       subscriptions. Rewriting them a few seconds in lands on the (possibly
+       now-encrypted) link. Cheap, harmless when already streaming (we only
+       fire on silence). Skipped on quick re-checks — their window is shorter. */
+    setTimeout(async () => {
+      if (varg.state !== 'on' || varg.seen >= t0) return;
+      vlog('6 s silent — rewriting CCCDs (in case encryption reset the subscriptions)');
+      for (const [label, ch] of [['battery', varg.batt], ['map', varg.map], ['speed', varg.spd], ['status', varg.stat]]) {
+        if (!ch) continue;
+        try { await ch.startNotifications(); } catch (e) { vlog('resubscribe ' + label + ' failed: ' + e.name); }
+      }
+    }, 6000);
+  setTimeout(() => {
+    if (varg.state !== 'on') return;
+    if (varg.seen >= t0) { // stream confirmed — recovery over
+      if (varg.waitStream) vlog('stream is running — riding along');
+      varg.waitStream = false; varg.yieldN = 0;
+      return;
     }
-  }, 6000);
-  setTimeout(() => { if (varg.state === 'on' && varg.seen < t0) vargSilent(); }, 12000);
+    vargSilent();
+  }, varg.waitStream ? VARG_CHECK_MS : 12000);
 }
 
 /* Full GATT dump: every service Chrome will hand us (the three in
@@ -6169,18 +6275,21 @@ async function vargProbeExtras() {
   }, VARG_PROBE_MS);
 }
 
-async function vargSilent() { // subscribed 12 s ago, zero frames — find out why, on the phone screen
-  vlog('12 s connected, zero frames — probing reads');
-  await vargDump();
-  for (const [label, ch] of [['battery', varg.batt], ['status', varg.stat]]) {
-    if (!ch) { vlog('probe ' + label + ': never subscribed'); continue; }
-    try {
-      const dv = await ch.readValue();
-      vlog('probe read ' + label + ': ' + dv.byteLength + ' B ' + (dv.byteLength ? vhex(dv) + ' — data readable but notifications silent' : '(empty — VCU only speaks via notify)'));
-    } catch (e) {
-      vlog('probe read ' + label + ' FAILED: ' + e.name
-        + (/security|auth|allowed/i.test(e.name + e.message) ? ' — LINK NOT ENCRYPTED (pair in Android Settings)'
-          : e.name === 'NotSupportedError' ? ' — notify-only char (expected on this VCU)' : ''));
+async function vargSilent() { // subscribed, zero frames — release the bike; diagnose on the first strike only
+  if (varg.waitStream) vlog('still no stream (check #' + (varg.yieldN + 1) + ')');
+  else {
+    vlog('12 s connected, zero frames — probing reads');
+    await vargDump();
+    for (const [label, ch] of [['battery', varg.batt], ['status', varg.stat]]) {
+      if (!ch) { vlog('probe ' + label + ': never subscribed'); continue; }
+      try {
+        const dv = await ch.readValue();
+        vlog('probe read ' + label + ': ' + dv.byteLength + ' B ' + (dv.byteLength ? vhex(dv) + ' — data readable but notifications silent' : '(empty — VCU only speaks via notify)'));
+      } catch (e) {
+        vlog('probe read ' + label + ' FAILED: ' + e.name
+          + (/security|auth|allowed/i.test(e.name + e.message) ? ' — LINK NOT ENCRYPTED (pair in Android Settings)'
+            : e.name === 'NotSupportedError' ? ' — notify-only char (expected on this VCU)' : ''));
+      }
     }
   }
   /* THE important behaviour, learned the hard way: a connected-but-silent
@@ -6221,33 +6330,41 @@ async function vargResolve() {
   } catch (e) { return varg.dev; }
 }
 
-function vargRetry() { // BLE flaps on a dirt bike — recover quietly, back off to 20 s, never give up
-  clearTimeout(varg.retryT);
+let vargRetryG = 0; // bump to abandon an in-flight retry wait (manual reconnect, release, toggle)
+function vargRetryCancel() { vargRetryG++; clearTimeout(varg.retryT); vargAdsStop(); }
+
+function vargRetry() { // BLE flaps on a dirt bike — recover quietly, never give up
+  vargRetryCancel();
   if (!S.set.varg || varg.state === 'released') return; // not ours to retry
-  const n = varg.retryN++;
-  /* After yielding a silent link, wait a clear window (8 s) rather than the
-     usual fast backoff — VargPilot needs an unoccupied bike to connect to,
-     and a 1 s retry would slam the door on it. */
-  const wait = varg.yield ? 8000 : Math.min(20000, 1000 * 2 ** Math.min(n, 5));
-  varg.yield = false;
+  const g = vargRetryG, n = varg.retryN++;
   varg.state = 'retry'; vargUI();
-  varg.retryT = setTimeout(async () => {
+  /* After yielding a silent link — or finding the bike absent — the hands-off
+     window comes FIRST and escalates. VargPilot's scan is background-throttled
+     on Android; the old fixed 8 s window starved it forever. */
+  const freeMs = varg.yield ? VARG_FREE_MS[Math.min(varg.yieldN++, VARG_FREE_MS.length - 1)] : 0;
+  varg.yield = false;
+  const run = async () => {
+    if (freeMs) { await vargFreeWait(varg.dev, freeMs, () => g === vargRetryG); if (g !== vargRetryG) return; }
     // from the third attempt on, refresh the handle every time — the stale-object
     // case is invisible otherwise and retries a corpse indefinitely
     const dev = n >= 2 ? await vargResolve() : varg.dev;
+    if (g !== vargRetryG) return;
     if (!dev) { vlog('retry: no remembered device — tap Connect'); varg.state = 'off'; vargUI(); return; }
     if (dev !== varg.dev) vlog('retry: using a fresh device handle');
     vlog('retry #' + (n + 1));
     try { await vargConnect(dev); }
     catch (e) {
+      if (g !== vargRetryG) return;
       vlog('retry #' + (n + 1) + ' failed: ' + e.name);
-      if (n + 1 >= 4 && !varg.hogged) { // sustained failure — surface the usual suspects once
+      if (e.name === 'AbsentError') { varg.absent = true; varg.yield = true; } // off or away: watch for it, don't hammer
+      else if (n + 1 >= 4 && !varg.hogged) { // sustained REAL failures — surface the usual suspects once
         varg.hogged = true;
         toast('Can’t reach the bike — make sure VargPilot (or the Stark app) is connected to it, then tap the 🔋 pill → Reconnect.');
       }
       vargRetry();
     }
-  }, wait);
+  };
+  varg.retryT = setTimeout(run, freeMs ? 0 : Math.min(20000, 1000 * 2 ** Math.min(n, 5)));
 }
 
 /* One entry point for "get the bike back if it isn't streaming": used by the
@@ -6257,21 +6374,31 @@ async function vargEnsure(why) {
   if (!S.set.varg || varg.state === 'released') return;
   if (varg.state === 'on' && varg.seen && Date.now() - varg.seen < 20000) return; // healthy
   if (varg.state === 'connecting') return; // already trying
+  // the recovery loop is deliberately standing back so VargPilot can take the
+  // bike — an app-resume must not barge in and grab it; the rider's own tap may
+  if (varg.state === 'retry' && why !== 'manual') return;
   vlog('reconnect (' + why + ')');
-  clearTimeout(varg.retryT);
-  varg.retryN = 0; varg.hogged = false;
+  vargRetryCancel();
+  varg.retryN = 0; varg.hogged = false; varg.yieldN = 0;
+  if (why === 'manual') varg.waitStream = false; // rider reset: full first-strike diagnostics again
   if (varg.dev && varg.dev.gatt.connected) { try { varg.dev.gatt.disconnect(); } catch (e) {} } // half-open links never recover
   const dev = await vargResolve();
   if (!dev) { vlog('reconnect: nothing remembered — tap Connect'); return; }
-  try { await vargConnect(dev); } catch (e) { vlog('reconnect failed: ' + e.name); vargRetry(); }
+  try { await vargConnect(dev); }
+  catch (e) {
+    vlog('reconnect failed: ' + e.name);
+    if (e.name === 'AbsentError') { varg.absent = true; varg.yield = true; }
+    vargRetry();
+  }
 }
 
 // coming back to the app is the commonest moment to discover the bike dropped
 document.addEventListener('visibilitychange', () => { if (!document.hidden) vargEnsure('app resumed'); });
 
 function vargRelease() { // hand the bike to the Stark app for tuning
-  clearTimeout(varg.retryT); vargGuardsClear();
+  vargRetryCancel(); vargGuardsClear();
   varg.state = 'released'; varg.soc = null; varg.speed = null;
+  varg.waitStream = false; varg.yieldN = 0; varg.absent = false;
   if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect();
   toast('Bike released — open the Stark app. Take it back from the 🔋 pill’s telemetry page.');
   vargUI();
@@ -6533,7 +6660,9 @@ function vargUI() {
         on: 'Connected — battery, speed, mode & status streaming. Tap the 🔋 pill for the full telemetry page.',
         released: 'Released — the Stark app can connect. Take the bike back from the 🔋 pill’s telemetry page.',
         // the yield-and-re-attach loop is the normal startup path, not a fault
-        retry: varg.waitStream
+        retry: varg.absent
+          ? 'Bike is off or out of range — watching for it. DingoNav attaches by itself once VargPilot starts the telemetry.'
+          : varg.waitStream
           ? 'Waiting for VargPilot (or the Stark app) to start the bike’s telemetry — leave it running and DingoNav attaches by itself.'
           : 'Connection dropped — retrying…' }[varg.state];
 }
@@ -6667,7 +6796,7 @@ function vargPreview(sp) {
 document.getElementById('vargPrevRev').onclick = () => vargPreview('rev');
 document.getElementById('vargPrevCrawl').onclick = () => vargPreview('crawl');
 document.getElementById('vargForgetBtn').onclick = async () => {
-  clearTimeout(varg.retryT); vargGuardsClear();
+  vargRetryCancel(); vargGuardsClear();
   vargSpecial(null);
   if (varg.dev) {
     if (varg.dev.gatt.connected) varg.dev.gatt.disconnect();
@@ -6677,15 +6806,16 @@ document.getElementById('vargForgetBtn').onclick = async () => {
     state: 'off', soc: null, soh: null, vbus: null, speed: null,
     mode: null, neutral: false, hp: null, regen: null, tc: null,
     odo: null, trips: null, raw2002: null, cells: null, temps: null,
-    yield: false, waitStream: false });
+    yield: false, waitStream: false, yieldN: 0, absent: false });
   vargUI(); toast('Bike forgotten');
 };
 
 function applyVarg() { // telemetry toggled: quiesce, then reclaim the bike if it's on
   vargSpecial(null); vargIndReset();
-  clearTimeout(varg.retryT); vargGuardsClear();
+  vargRetryCancel(); vargGuardsClear();
   if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect();
   varg.state = 'off'; varg.soc = null; varg.speed = null;
+  varg.waitStream = false; varg.yieldN = 0; varg.absent = false;
   if (S.set.varg) vargBoot();
   vargUI();
 }
