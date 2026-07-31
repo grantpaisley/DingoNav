@@ -6568,7 +6568,18 @@ async function vargPiggy() {
   const dev = devs.find(d => vinNorm(d.name || '') === vin) || devs[0];
   if (!dev) return false; // never granted on this phone — caller falls back to the chooser
   vlog('piggyback: connecting to remembered device (no scan)');
-  try { await vargConnect(dev); } catch (e) { vlog('piggyback connect failed: ' + verr(e)); vargDropped(); }
+  try { await vargConnect(dev); }
+  catch (e) {
+    vlog('piggyback connect failed: ' + verr(e));
+    /* "Not in range" through the remembered handle means Chrome can't reach
+       the bike with what the stored permission alone gives it (fresh install:
+       no bond, no live sighting — field, 2026-07-31). The CHOOSER is the
+       recovery: its scan re-teaches Chrome the bike and refreshes the grant.
+       Fall through to it while the rider's Connect tap is still live —
+       swallowing this into the retry loop trapped them with no path back. */
+    if (vargGone(e)) { vlog('remembered handle unreachable — opening the chooser to re-learn the bike'); return false; }
+    vargDropped();
+  }
   return true;
 }
 
