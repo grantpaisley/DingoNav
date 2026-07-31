@@ -1189,7 +1189,7 @@ const S = {
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
+    varg: false, vargOwn: false, vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
     navMode: 'follow', startBrief: true },  // navMode: follow | explore | snap — survives restarts by design
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
@@ -6019,7 +6019,6 @@ function vargGuardsClear() { varg.guardT.forEach(clearTimeout); varg.guardT = []
 const VARG_ABSENT_MS = 6000; // a present bike links in ~1 s; longer ⇒ it's off or away
 const VARG_CHECK_MS = 5000; // re-check hold: frames arrive <1 s when the stream runs
 const VARG_FREE_MS = [8000, 16000, 30000]; // escalating hands-off windows for VP's scan
-const VARG_FREE_EXTEND_MS = 30000; // extra patience while adverts show the bike still free
 const VARG_AD_GONE_MS = 4000; // adverts seen, then none for this long ⇒ the bike was taken
 
 /* "Bluetooth Device is no longer in range" is Chrome's INSTANT NetworkError
@@ -6044,27 +6043,32 @@ async function vargAdsStart(dev) { // true = watching; false = API missing or re
   } catch (e) { vlog('watchAdvertisements unavailable: ' + e.name); return false; }
 }
 
-/* One hands-off window. Resolves the moment adverts stop after being seen
-   (VP/Stark just connected — join now), extends while they keep flowing
-   (connecting would only steal the bike back), else runs out the clock.
+/* One watch window. Resolves the moment the bike is seen advertising —
+   CATCH IT, don't stand back: on phones where Chrome can't join a VP-held
+   link (field, 2026-07-31), whoever grabs the bike first owns it, and VP
+   (native) can always attach to OUR link while the reverse never works.
+   Also resolves when adverts stop after being seen (something connected —
+   join it; works where Chrome can), else runs out the clock.
    live() false-ing (manual reconnect, release) abandons the wait. */
 async function vargFreeWait(dev, ms, live) {
   const watching = await vargAdsStart(dev);
-  vlog('standing back ' + ms / 1000 + ' s so VargPilot can take the bike' + (watching ? ' (watching adverts)' : ''));
+  vlog('watching for the bike, up to ' + ms / 1000 + ' s' + (watching ? ' (adverts)' : ''));
   const t0 = Date.now();
   try {
     while (live()) {
       await new Promise(r => setTimeout(r, 500));
       if (!live()) return;
-      const now = Date.now(), free = vargAds.last && now - vargAds.last <= VARG_AD_GONE_MS;
-      if (watching && vargAds.last && !free) {
+      if (watching && vargAds.n >= 2) { // steadily advertising = free — grab it before anything else does
+        vlog('bike is advertising (' + vargAds.n + ' adverts, rssi ' + vargAds.rssi + ') — catching it now');
+        return;
+      }
+      const now = Date.now();
+      if (watching && vargAds.last && now - vargAds.last > VARG_AD_GONE_MS) {
         vlog('adverts stopped (' + vargAds.n + ' seen, rssi ' + vargAds.rssi + ') — something connected to the bike; attaching');
         return;
       }
       if (now - t0 < ms) continue;
-      if (watching && free && now - t0 < ms + VARG_FREE_EXTEND_MS) continue; // still free: VP hasn't found it — keep standing back
       vlog(!watching ? 'window over — trying again'
-        : vargAds.n ? 'window over — bike still free (' + vargAds.n + ' adverts, rssi ' + vargAds.rssi + '); quick stream check'
         : 'window over — no adverts seen (bike held, off, or out of range); trying a connect');
       return;
     }
@@ -6317,13 +6321,30 @@ async function vargSilent() { // subscribed, zero frames — release the bike; d
       }
     }
   }
-  /* THE important behaviour, learned the hard way: a connected-but-silent
-     DingoNav link BLOCKS VargPilot (or the Stark app) from connecting — and
-     one of those has to connect for the VCU to start streaming at all. So a
-     silent link is worse than no link: let it go, wait a beat, and try again.
-     Repeat until something starts the telemetry, then we attach and ride
-     along. This is what removes the manual "forget the bike so VP can
-     connect" step riders were doing by hand. */
+  /* Two worlds, one switch. Where Chrome can JOIN a VP-held link (the
+     original phone), a silent link is worse than no link: release it so a
+     scanning VP can take the bike, then re-attach — the yield path below.
+     Where Chrome CANNOT join (fresh Chrome installs, field 2026-07-31),
+     releasing is surrender: VP takes the bike and DingoNav is locked out
+     until the rider force-quits it. There the winning move is to HOLD the
+     silent link — VP (native) attaches to OUR link when (re)opened and
+     starts the telemetry. That's the "Keep the bike once caught" toggle. */
+  if (S.set.vargOwn) {
+    if (!varg.waitStream) { varg.waitStream = true;
+      toast('Holding the bike — open (or reopen) VargPilot; it attaches to this link and starts the telemetry.'); }
+    vlog('holding the silent link (Keep the bike is on) — waiting for VargPilot to attach');
+    const g = varg.holdG = (varg.holdG || 0) + 1; // a newer silent connection supersedes this loop
+    const t0 = Date.now();
+    let n = 0;
+    const check = () => setTimeout(() => {
+      if (varg.holdG !== g || varg.state !== 'on' || !S.set.vargOwn) return; // superseded, dropped, released or toggled
+      if (varg.seen >= t0) { vlog('stream is running — riding along'); varg.waitStream = false; varg.yieldN = 0; return; }
+      if (++n % 12 === 0) vlog('still holding — no stream after ' + Math.round(n * VARG_CHECK_MS / 1000) + ' s (is VargPilot open?)');
+      check();
+    }, VARG_CHECK_MS);
+    check();
+    return;
+  }
   vlog('no stream — releasing the link so VargPilot/Stark can start the telemetry, then re-attaching');
   varg.yield = true; // vargRetry waits a full window instead of milliseconds
   if (!varg.waitStream) { varg.waitStream = true;
@@ -6713,6 +6734,7 @@ function vargUI() {
         // the yield-and-re-attach loop is the normal startup path, not a fault
         retry: varg.absent
           ? 'Bike is off or out of range — watching for it. DingoNav attaches by itself once VargPilot starts the telemetry.'
+            + (S.set.vargOwn ? ' If VargPilot already has the bike, quit and reopen VargPilot — DingoNav catches the bike automatically and VP re-attaches.' : '')
           : varg.waitStream
           ? 'Waiting for VargPilot (or the Stark app) to start the bike’s telemetry — leave it running and DingoNav attaches by itself.'
           : 'Connection dropped — retrying…' }[varg.state];
@@ -6955,6 +6977,12 @@ const SETTINGS = [
      carries no extra BLE traffic; on, the telemetry page shows odometer/trips
      and the raw 2002 triple to be checked against the bike's display. */
   { sec: 'ble', k: 'vargExtra', t: 'toggle', l: 'Extra channels (unconfirmed)', id: 'vargExtra', apply: () => applyVarg() },
+  /* Some Chrome installs can never JOIN a bike VargPilot already holds ("no
+     longer in range") — there, whoever grabs the bike first owns it, and VP
+     can always attach to OUR link while the reverse fails. This flips the
+     silent-link strategy from release-and-yield to hold-until-VP-attaches.
+     Leave OFF where riding along on VP's link works. */
+  { sec: 'ble', k: 'vargOwn', t: 'toggle', l: 'Keep the bike once caught (if reconnects always fail, turn this on)' },
   { sec: 'ble', k: 'vargPin', t: 'text', l: 'Pair PIN', id: 'vargPin', max: 6, ph: '6 digits (VargPilot shows it)',
     apply: () => { const el = document.getElementById('vargPin');
       S.set.vargPin = (S.set.vargPin || '').replace(/\D/g, '').slice(0, 6);
