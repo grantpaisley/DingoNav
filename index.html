@@ -1030,13 +1030,6 @@
     <div data-reg="stark"></div>
     <div class="hint" id="vargStatus"></div>
 
-    <h3 id="vpHead" style="display:none">VargPilot server</h3>
-    <div data-reg="vp" id="vpReg" style="display:none"></div>
-    <div class="btnRow" id="vpRow" style="display:none"><button class="btn" id="vpBtn">Connect</button><button class="btn" id="vpProbeBtn">Probe API → console</button></div>
-    <div class="hint" id="vpHint" style="display:none">VargPilot holds the bike's Bluetooth — flawlessly — and re-serves telemetry from its built-in webserver.
-      Running VP on this phone → <b>http://127.0.0.1:8080</b>; on another device use the URL VP displays (same Wi-Fi).
-      No pairing, no scanning: if VP has the bike, DingoNav has the data.</div>
-
     <h3>Bike connection</h3>
     <div data-reg="ble" id="bleReg" style="display:none"></div>
     <div class="btnRow" id="vargRow" style="display:none"><button class="btn" id="vargBtn">Connect bike…</button><button class="btn" id="vargForgetBtn">Forget bike</button><button class="btn" id="vargLogBtn">Connection log</button></div>
@@ -1196,7 +1189,7 @@ const S = {
   set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
     profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
     compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargSrc: 'ble', vpUrl: '', vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
+    varg: false, vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
     navMode: 'follow', startBrief: true },  // navMode: follow | explore | snap — survives restarts by design
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
@@ -6345,7 +6338,7 @@ function vargDropped() {
   varg.speed = null; // ditto a frozen speedo
   varg.neutral = false; // ditto a stale green N
   vargSpecial(null); // no connection = no idea if we're still in reverse — never show a guess
-  if (varg.state === 'released' || !S.set.varg || S.set.vargSrc !== 'ble') { vargUI(); return; }
+  if (varg.state === 'released' || !S.set.varg) { vargUI(); return; }
   varg.state = 'retry'; vargUI(); vargRetry();
 }
 
@@ -6367,7 +6360,7 @@ function vargRetryCancel() { vargRetryG++; clearTimeout(varg.retryT); vargAdsSto
 
 function vargRetry() { // BLE flaps on a dirt bike — recover quietly, never give up
   vargRetryCancel();
-  if (!S.set.varg || S.set.vargSrc !== 'ble' || varg.state === 'released') return; // not ours to retry
+  if (!S.set.varg || varg.state === 'released') return; // not ours to retry
   const g = vargRetryG, n = varg.retryN++;
   varg.state = 'retry'; vargUI();
   /* After yielding a silent link — or finding the bike absent — the hands-off
@@ -6414,7 +6407,7 @@ function vargRetry() { // BLE flaps on a dirt bike — recover quietly, never gi
    resume hook, the stale-data watchdog and the manual Reconnect button, so
    every recovery path behaves identically. */
 async function vargEnsure(why) {
-  if (!S.set.varg || S.set.vargSrc !== 'ble' || varg.state === 'released') return;
+  if (!S.set.varg || varg.state === 'released') return;
   if (varg.state === 'on' && varg.seen && Date.now() - varg.seen < 20000) return; // healthy
   if (varg.state === 'connecting') return; // already trying
   // the recovery loop is deliberately standing back so VargPilot can take the
@@ -6575,7 +6568,18 @@ async function vargPiggy() {
   const dev = devs.find(d => vinNorm(d.name || '') === vin) || devs[0];
   if (!dev) return false; // never granted on this phone — caller falls back to the chooser
   vlog('piggyback: connecting to remembered device (no scan)');
-  try { await vargConnect(dev); } catch (e) { vlog('piggyback connect failed: ' + verr(e)); vargDropped(); }
+  try { await vargConnect(dev); }
+  catch (e) {
+    vlog('piggyback connect failed: ' + verr(e));
+    /* "Not in range" through the remembered handle means Chrome can't reach
+       the bike with what the stored permission alone gives it (fresh install:
+       no bond, no live sighting — field, 2026-07-31). The CHOOSER is the
+       recovery: its scan re-teaches Chrome the bike and refreshes the grant.
+       Fall through to it while the rider's Connect tap is still live —
+       swallowing this into the retry loop trapped them with no path back. */
+    if (vargGone(e)) { vlog('remembered handle unreachable — opening the chooser to re-learn the bike'); return false; }
+    vargDropped();
+  }
   return true;
 }
 
@@ -6639,143 +6643,13 @@ async function vargBoot() { // reclaim a previously-permitted bike with zero tap
   } catch (e) { /* permissions backend unavailable — Connect button still works */ }
 }
 
-/* ---------------- VargPilot webserver source ----------------
-   Removed 2026-07-28 when direct BLE was proven; RESTORED 2026-07-31 after a
-   fresh install showed Chrome refusing to reach a VP-held bike ("no longer in
-   range") no matter what — a native app can always win a BLE arbitration
-   fight that Web Bluetooth can't even enter. VP holds the bike (the thing it
-   does flawlessly) and re-serves fully-decoded telemetry from its built-in
-   BikeStore webserver: no scanning, no bonds, no advertising races. Same
-   phone → http://127.0.0.1:8080. Also the only route to iOS.
-   Protocol (confirmed against a live VP 0.1.125 instance, 2026-07): one
-   WebSocket at <base>/ws; server greets with {op:'hello'} then
-   {op:'catalog', paths:[{path,writable}…]}; client sends {op:'sub',
-   paths:[…]} and receives {op:'prop', path, value, t} per update. Server
-   pings every 15 s (browser auto-pongs); paths are dot-hierarchical.
-   Full spec + decode notes: docs/plans/2026-07-28-vargpilot-webserver-source.md */
-const vp = { ws: null, retryT: null, cfg: { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} }, rpm: 0, walk: 0 };
-const VP_P = { // the paths DingoNav displays, verified live on a '25 EX (2026-07)
-  soc: 'Battery.SOC.soc_pct', soh: 'Battery.SOC.soh_pct', vbus: 'Battery.SOC.dc_bus_v',
-  mode: 'Live.MAPS.riding_map',
-  // ground truth for the takeover, confirmed on the bike: a human-readable string —
-  // "NEUTRAL" / "DRIVE" / "CRAWL REV" (reverse) / "CRAWL FWD" (crawl). Cleaner than
-  // walking_mode (8=rev, 12=crawl) which we keep as a fallback below.
-  drive: 'derived.power.drive_state',
-  walk: 'Bike.STATUS_BITS.misc_bits.walking_mode',
-  blinkerL: 'Bike.STATUS_BITS.indicator_bits.blinker_left', // toggles ~3 Hz with the bulb — debounced below
-  blinkerR: 'Bike.STATUS_BITS.indicator_bits.blinker_right',
-  beam: 'Bike.STATUS_BITS.indicator_bits.beam_long', // steady while high beam on
-};
-const vpMapPaths = m => [ // per-mode config: "torque" is the power (hp) slider on the EX
-  ['Vcu.BIKE_CONFIG.MAP.' + m + '.torque', 'hp', m],
-  ['Vcu.BIKE_CONFIG.MAP.' + m + '.regen', 'regen', m],
-  ['derived.tc.' + m + '.power_tc', 'tc', m],
-];
-function vpUrlBase() {
-  let u = (S.set.vpUrl || '').trim();
-  if (!u) return '';
-  if (!/^https?:\/\//i.test(u)) u = 'http://' + u;
-  return u.replace(/\/+$/, '');
-}
-function vpClose() {
-  clearTimeout(vp.retryT);
-  if (vp.ws) { vp.ws.onclose = null; vp.ws.close(); vp.ws = null; }
-}
-function vpConnect() {
-  vpClose();
-  if (!vpUrlBase()) { varg.state = 'off'; vargUI(); return; }
-  varg.state = 'connecting'; vargUI();
-  vlog('VP: connecting to ' + vpUrlBase() + '/ws');
-  const ws = new WebSocket(vpUrlBase().replace(/^http/i, 'ws') + '/ws');
-  vp.ws = ws;
-  ws.onmessage = e => {
-    let m; try { m = JSON.parse(e.data); } catch (err) { return; }
-    if (m.op === 'catalog') { // server's hello → catalog; subscribing marks us live
-      const want = [...Object.values(VP_P)];
-      for (let i = 1; i <= 5; i++) for (const [p] of vpMapPaths(i)) want.push(p);
-      const have = new Set((m.paths || []).map(p => p.path));
-      const missing = want.filter(p => !have.has(p));
-      if (missing.length) console.warn('[vp] catalog is missing:', missing, '— VP version drift? full catalog:', m.paths);
-      ws.send(JSON.stringify({ op: 'sub', paths: want.filter(p => have.has(p)) }));
-      vpSniff(m.paths); // opportunistic: VP knows the VIN + pair PIN — capture them so Direct BLE is pre-configured
-      vlog('VP: connected — ' + (m.paths || []).length + ' catalog paths' + (missing.length ? ', ' + missing.length + ' wanted paths missing' : ''));
-      varg.state = 'on'; varg.seen = Date.now(); vargUI();
-    } else if (m.op === 'prop') vpProp(m.path, m.value);
-  };
-  ws.onclose = () => {
-    vlog('VP: link closed — retrying in 3 s');
-    varg.soc = null; vargSpecial(null); vargIndReset(); // no feed = no live indicator/reverse state
-    varg.state = 'retry'; vargUI();
-    vp.retryT = setTimeout(vpConnect, 3000);
-  };
-}
-/* VargPilot already holds the bike, so its catalog is the cheapest source of
-   the two facts Direct BLE needs from the rider: the VIN (exact-name chooser
-   filter) and the 6-digit pair PIN (confirmed visible in VP's UI, 2026-07).
-   Exact path names are version-drift-prone, so sniff by pattern and only
-   fill blanks — never clobber what the rider typed. */
-function vpSniff(paths) {
-  const names = (paths || []).map(p => p.path);
-  const want = [];
-  vp.vinPath = vp.pinPath = null;
-  const vinP = names.find(p => /(^|[._])vin([._]|$)/i.test(p));
-  const pinP = names.find(p => /pair[._]?pin|pin[._]?code|passkey/i.test(p));
-  if (vinP && !vinNorm(S.set.vargVin)) { vp.vinPath = vinP; want.push(vinP); }
-  if (pinP && !S.set.vargPin) { vp.pinPath = pinP; want.push(pinP); }
-  if (want.length && vp.ws) vp.ws.send(JSON.stringify({ op: 'sub', paths: want }));
-}
-
-function vpProp(path, v) {
-  varg.seen = Date.now();
-  if (path === vp.vinPath) {
-    const vin = vinNorm(String(v));
-    if (vinLooks(vin)) { S.set.vargVin = vin; saveSet(); renderSettings('ble');
-      toast('Bike VIN captured from VargPilot — Direct BLE is set up.'); }
-    vp.vinPath = null; return;
-  }
-  if (path === vp.pinPath) {
-    const pin = String(v).replace(/\D/g, '');
-    if (pin) { S.set.vargPin = pin.padStart(6, '0'); saveSet(); }
-    vp.pinPath = null; return;
-  }
-  if (path === VP_P.soc) { varg.soc = Math.round(+v); vargUI(); return; }
-  if (path === VP_P.soh) { varg.soh = +v; return; }
-  if (path === VP_P.vbus) { varg.vbus = +v; return; }
-  if (path === VP_P.drive) { // confirmed on the bike: "CRAWL REV" = reverse, "CRAWL FWD" = crawl
-    vp.sawDrive = true;
-    const s = String(v).toUpperCase();
-    vargApplyState({ special: s.includes('REV') ? 'rev' : s.includes('CRAWL') ? 'crawl' : null,
-      neutral: s.includes('NEUTRAL') });
-    return;
-  }
-  if (path === VP_P.walk) { // fallback only if drive_state never arrives: 8 = reverse, 12 = crawl
-    vp.walk = +v;
-    if (vp.sawDrive) return; // drive_state is authoritative — don't second-guess it
-    vargApplyState({ special: !vp.walk ? null : vp.walk === 8 ? 'rev' : 'crawl' });
-    return;
-  }
-  if (path === VP_P.blinkerL) { if (v) vargBlink('L'); return; } // only the "true" pulses matter
-  if (path === VP_P.blinkerR) { if (v) vargBlink('R'); return; }
-  if (path === VP_P.beam) { varg.ind.beam = !!v; vargIndUI(); return; }
-  if (path === VP_P.mode) { vpApplyMode(+v); return; }
-  for (let m = 1; m <= 5; m++) for (const [p, field] of vpMapPaths(m))
-    if (path === p) { vp.cfg[m][field] = Math.round(+v); if (m === varg.mode) vpApplyMode(m); return; }
-}
-function vpApplyMode(m) {
-  if (m >= 1 && m <= 5) vargApplyState({ mode: m, hp: vp.cfg[m].hp, regen: vp.cfg[m].regen, tc: vp.cfg[m].tc });
-}
-async function vpProbe() { // one-shot recon, results to console — raw material for the spec doc
-  const base = vpUrlBase();
-  if (!base) { toast('Set the VargPilot server URL first'); return; }
-  toast('Probing ' + base + ' — see console');
-  for (const p of ['/', '/api', '/api/channels', '/channels', '/api/telemetry', '/status']) {
-    try {
-      const r = await fetch(base + p);
-      console.log('[vp] GET', p, '→', r.status, (await r.text()).slice(0, 800));
-    } catch (e) { console.log('[vp] GET', p, '→', e.message, '(CORS-blocked ≠ down — check the Network tab)'); }
-  }
-}
-
+/* The VargPilot webserver WebSocket used to be a second telemetry source here.
+   Removed 2026-07-28 once direct BLE was proven on the bike — the protocol,
+   its verified path map and the restore steps live in
+   docs/plans/2026-07-28-vargpilot-webserver-source.md (that's also the route
+   to iOS support, which Web Bluetooth can't provide). The VargPilot APP is
+   still part of the working setup: it starts the telemetry that direct BLE
+   piggybacks on. */
 const BLINK_OFF_MS = 700; // no "true" pulse for this long ⇒ blinker is off (survives the 3 Hz gaps)
 const BLINK_NAG_MS = 30000; // blinker on this long ⇒ "did you forget it?" reminder
 
@@ -6811,10 +6685,9 @@ setInterval(() => { // blinker watchdog + self-cancel nag
   if (ch) vargIndUI();
 }, 250);
 function vargUI() {
-  const on = S.set.varg, vpSrc = S.set.vargSrc === 'vp';
-  for (const id of ['vpHead', 'vpReg', 'vpRow', 'vpHint']) document.getElementById(id).style.display = on && vpSrc ? '' : 'none';
-  document.getElementById('vargRow').style.display = on && !vpSrc ? '' : 'none';
-  document.getElementById('bleReg').style.display = on && !vpSrc ? '' : 'none';
+  const on = S.set.varg;
+  document.getElementById('vargRow').style.display = on ? '' : 'none';
+  document.getElementById('bleReg').style.display = on ? '' : 'none';
   document.getElementById('vargRow2').style.display = on ? '' : 'none';
   const mb = document.getElementById('vargModeBig');
   mb.classList.toggle('on', on && varg.state === 'on' && (varg.mode != null || varg.neutral));
@@ -6825,12 +6698,6 @@ function vargUI() {
   document.getElementById('vargMode').textContent = varg.state === 'on' ? vargModeTxt() : '';
   renderMain(); // fills both number slots (renderPill rides along)
   vargStatus.textContent = !on ? 'Off — telemetry pill hidden.'
-    : vpSrc ? {
-        off: 'Set the VargPilot server URL below, then Connect.',
-        connecting: 'Connecting to VargPilot at ' + (vpUrlBase() || '—') + '…',
-        on: 'VargPilot connected — telemetry streaming.',
-        released: '',
-        retry: 'VargPilot unreachable — retrying every 3 s. Is VP running with its webserver on?' }[varg.state]
     : !navigator.bluetooth
     ? 'This browser has no Web Bluetooth — use Chrome on Android (the Arkenstone works).'
     : varg.noPersist && varg.state !== 'on'
@@ -6845,7 +6712,7 @@ function vargUI() {
         released: 'Released — the Stark app can connect. Take the bike back from the 🔋 pill’s telemetry page.',
         // the yield-and-re-attach loop is the normal startup path, not a fault
         retry: varg.absent
-          ? 'Bike is off or unreachable — watching for it. If VargPilot has the bike and this never connects, switch Source to VargPilot above: it reads VP’s webserver instead of fighting it for Bluetooth.'
+          ? 'Bike is off or out of range — watching for it. DingoNav attaches by itself once VargPilot starts the telemetry.'
           : varg.waitStream
           ? 'Waiting for VargPilot (or the Stark app) to start the bike’s telemetry — leave it running and DingoNav attaches by itself.'
           : 'Connection dropped — retrying…' }[varg.state];
@@ -6880,7 +6747,7 @@ function vargPageGridRender() {
     + cell(varg.soh ? varg.soh + '<small>%</small>' : '—', 'battery health')
     // confirmed deci-volts: 3689 ⇒ 368.9 V, matching 100 cells × 3.69 V
     + cell(varg.vbus != null ? (varg.vbus / 10).toFixed(1) + '<small> V</small>' : '—', 'pack voltage')
-    + cell((S.set.vargSrc === 'vp' ? 'VargPilot' : 'Direct BLE') + '<small> · ' + varg.state + '</small>', 'source')
+    + cell('Direct BLE<small> · ' + varg.state + '</small>', 'source')
     + cell(age, 'last frame')
     + (alerts ? cell('⚠', alerts, 'alert') : '')
     // unconfirmed channels — shown only when the setting is on AND data arrived
@@ -6893,9 +6760,9 @@ function vargPageGridRender() {
     + (varg.raw2002 ? cell('<small>' + varg.raw2002.join(' · ') + '</small>', 'ch 2002 (unknown)') : '');
 }
 function vargPageBtnsRender() {
-  const b = document.getElementById('vargPageBtns'), ble = S.set.vargSrc !== 'vp';
-  b.innerHTML = (ble && varg.state === 'on' ? '<button class="btn" id="vpgRelease">Release bike to Stark app</button>' : '')
-    + (ble && varg.state === 'released' ? '<button class="btn" id="vpgResume">Take the bike back</button>' : '')
+  const b = document.getElementById('vargPageBtns');
+  b.innerHTML = (varg.state === 'on' ? '<button class="btn" id="vpgRelease">Release bike to Stark app</button>' : '')
+    + (varg.state === 'released' ? '<button class="btn" id="vpgResume">Take the bike back</button>' : '')
     // Reconnect is always offered: "connected" is not proof of streaming
     + '<button class="btn" id="vpgRetry">Reconnect</button>'
     + '<button class="btn" id="vpgClose">Close</button>';
@@ -6903,8 +6770,8 @@ function vargPageBtnsRender() {
   if (q('vpgRelease')) q('vpgRelease').onclick = () => { vargRelease(); rerender(); };
   if (q('vpgResume')) q('vpgResume').onclick = () => { vargResume(); rerender(); };
   if (q('vpgRetry')) q('vpgRetry').onclick = () => {
-    if (S.set.vargSrc === 'vp') { vpConnect(); toast('Reconnecting to VargPilot…'); }
-    else { varg.seen = 0; vargEnsure('manual'); toast('Reconnecting to the bike…'); } // seen=0 so a stale "on" can't short-circuit it
+    varg.seen = 0; // so a stale "on" can't short-circuit the reconnect
+    vargEnsure('manual'); toast('Reconnecting to the bike…');
     vargPageClose();
   };
   if (q('vpgClose')) q('vpgClose').onclick = vargPageClose;
@@ -6994,17 +6861,15 @@ document.getElementById('vargForgetBtn').onclick = async () => {
   vargUI(); toast('Bike forgotten');
 };
 
-function applyVarg() { // off, or a source flip: quiesce BOTH sources, then start the chosen one
-  vargSpecial(null); vargIndReset(); vpClose();
+function applyVarg() { // telemetry toggled: quiesce, then reclaim the bike if it's on
+  vargSpecial(null); vargIndReset();
   vargRetryCancel(); vargGuardsClear();
   if (varg.dev && varg.dev.gatt.connected) varg.dev.gatt.disconnect();
   varg.state = 'off'; varg.soc = null; varg.speed = null;
   varg.waitStream = false; varg.yieldN = 0; varg.absent = false;
-  if (S.set.varg) { if (S.set.vargSrc === 'vp') vpConnect(); else vargBoot(); }
+  if (S.set.varg) vargBoot();
   vargUI();
 }
-document.getElementById('vpBtn').onclick = () => { audio(); vpConnect(); }; // tap doubles as WebAudio unlock
-document.getElementById('vpProbeBtn').onclick = vpProbe;
 /* A % that quietly stopped updating lies — dim it after 20 s of silence, and
    after 35 s stop trusting the link at all: a GATT connection can stay
    "connected" long after the bike stopped talking (or after VargPilot took
@@ -7013,7 +6878,7 @@ setInterval(() => {
   if (varg.state !== 'on' || !varg.seen) return;
   const quiet = Date.now() - varg.seen;
   if (quiet > 20000) vargPill.classList.add('wait');
-  if (quiet > 35000 && S.set.vargSrc === 'ble') { // the VP source has its own 3 s onclose retry
+  if (quiet > 35000) {
     vlog('no frames for ' + Math.round(quiet / 1000) + ' s — treating the link as dead');
     varg.seen = 0; // don't re-fire on the same silence while the reconnect runs
     vargEnsure('stream went quiet');
@@ -7080,9 +6945,6 @@ const SETTINGS = [
     apply: () => { if (mapReady) map.setLayoutProperty('breadcrumb', 'visibility', S.set.trail ? 'visible' : 'none'); } },
   // Stark
   { sec: 'stark', k: 'varg', t: 'toggle', l: 'Bike telemetry', id: 'setVarg', apply: () => applyVarg() },
-  { sec: 'stark', k: 'vargSrc', t: 'seg', l: 'Source', segId: 'vargSrcSeg',
-    opts: [['ble', 'Direct BLE'], ['vp', 'VargPilot']], apply: () => applyVarg() },
-  { sec: 'vp', k: 'vpUrl', t: 'text', l: 'Server URL', id: 'vpUrl', max: 80, ph: 'http://127.0.0.1:8080', apply: () => applyVarg() },
   // VIN doubles as the bike's BLE name — with it set, the pairing chooser shows ONLY the bike
   { sec: 'ble', k: 'vargVin', t: 'text', l: 'Bike VIN', id: 'vargVin', max: 17, ph: 'UDUEX1… (frame sticker)',
     apply: () => { const el = document.getElementById('vargVin'); if (el) el.value = S.set.vargVin = vinNorm(S.set.vargVin); } },
