@@ -493,6 +493,7 @@
   body.daymode #panel .sw input:checked + span{background:#34c759}
   #panelNav{display:flex; gap:10px; margin-bottom:6px}
   #panelNav #navBtn{flex:1}
+  #verLine{font-size:12px; color:var(--dim); text-align:right; margin:10px 0 -6px}
   #setTabs{display:flex; gap:5px; margin:14px 0 4px}
   #setTabs button{flex:1; padding:10px 0; border-radius:10px; border:1px solid #2a3540; background:var(--panel2);
     color:var(--dim); font-size:13px; font-weight:700; cursor:pointer}
@@ -960,6 +961,10 @@
     <button id="navBtn" disabled>Start</button>
   </div>
   <div data-reg="style"></div>
+
+  <!-- which build is actually running (the SW cache name) — the first thing
+       support needs when "did the update land?" comes up in the field -->
+  <div id="verLine">DingoNav</div>
 
   <div id="setTabs">
     <button data-t="Account">Account</button>
@@ -7600,6 +7605,9 @@ function swVersion() { // ask the CURRENT controller which cache version it serv
     setTimeout(() => res(null), 1500); // workers older than v45 never answer
   });
 }
+function updVerLine(v) { // menu header: which build is actually serving this page
+  if (v) document.getElementById('verLine').textContent = 'DingoNav ' + updFmt(v);
+}
 function updOffer() {
   if (S.nav) { updPending = true; return; }
   updPending = false;
@@ -7611,7 +7619,7 @@ document.getElementById('updGo').onclick = () => location.reload();
 document.getElementById('updLater').onclick = () => document.getElementById('updBar').classList.remove('on');
 function swUpdateWatch(reg) {
   if (!reg) return;
-  swVersion().then(v => { updOldV = v; }); // remember what this session booted on
+  swVersion().then(v => { updOldV = v; updVerLine(v); }); // remember what this session booted on
   document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
   setInterval(() => { if (!document.hidden) reg.update().catch(() => {}); }, 600000); // in continuous use: check every 10 min too
   /* skipWaiting + clients.claim mean a new worker seizes control the moment it
@@ -7620,6 +7628,7 @@ function swUpdateWatch(reg) {
      first install there was no old controller: record, never prompt. */
   navigator.serviceWorker.addEventListener('controllerchange', async () => {
     const v = await swVersion();
+    updVerLine(v);
     if (!updOldV) { updOldV = v; return; } // first install claiming the page
     updNewV = v; updOffer();
   });
