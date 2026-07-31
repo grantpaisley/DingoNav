@@ -6022,6 +6022,12 @@ const VARG_FREE_MS = [8000, 16000, 30000]; // escalating hands-off windows for V
 const VARG_FREE_EXTEND_MS = 30000; // extra patience while adverts show the bike still free
 const VARG_AD_GONE_MS = 4000; // adverts seen, then none for this long ⇒ the bike was taken
 
+/* "Bluetooth Device is no longer in range" is Chrome's INSTANT NetworkError
+   when its pre-connect scan can't see the bike and no Android bond shortcuts
+   it (field, 2026-07-31: unbonded phone + bike held by VP = this, forever).
+   It means the same thing as our own connect timeout — the bike can't be
+   reached right now — so both take the advert-watching path, not the hammer. */
+const vargGone = e => e.name === 'AbsentError' || /no longer in range/i.test(e.message || '');
 const vargAds = { ctl: null, n: 0, last: 0, rssi: null };
 function vargAdSeen(e) { vargAds.n++; vargAds.last = Date.now(); vargAds.rssi = e.rssi ?? null; }
 function vargAdsStop() { if (vargAds.ctl) { vargAds.ctl.abort(); vargAds.ctl = null; } }
@@ -6375,7 +6381,7 @@ function vargRetry() { // BLE flaps on a dirt bike — recover quietly, never gi
     catch (e) {
       if (g !== vargRetryG) return;
       vlog('retry #' + (n + 1) + ' failed: ' + verr(e));
-      if (e.name === 'AbsentError') { varg.absent = true; varg.yield = true; } // off or away: watch for it, don't hammer
+      if (vargGone(e)) { varg.absent = true; varg.yield = true; } // off, away or unreachable: watch for it, don't hammer
       else if (n + 1 >= 4 && !varg.hogged) { // sustained REAL failures — surface the usual suspects once
         varg.hogged = true;
         toast('Can’t reach the bike — make sure VargPilot (or the Stark app) is connected to it, then tap the 🔋 pill → Reconnect.');
@@ -6417,7 +6423,7 @@ async function vargEnsure(why) {
   try { await vargConnect(dev); }
   catch (e) {
     vlog('reconnect failed: ' + verr(e));
-    if (e.name === 'AbsentError') { varg.absent = true; varg.yield = true; }
+    if (vargGone(e)) { varg.absent = true; varg.yield = true; }
     vargRetry();
   }
 }
