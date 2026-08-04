@@ -283,10 +283,6 @@
   /* portrait / square: the four butt up edge-to-edge, ¼ of the screen each */
   body.portrait #baseRow{padding:0; align-items:stretch}
   body.portrait #baseRow .ctl{flex:1 1 0; width:auto; margin:0; border-radius:0; height:88px}
-  /* turn mode: ADD MARK owns the bottom centre — the zoom pair steps aside */
-  body.turnmode #zoomOut, body.turnmode #zoomIn{display:none}
-  body.portrait.turnmode #baseRow .ctl{flex:0 0 25vw}
-  body.portrait.turnmode #baseRow #dotBtn{margin-left:auto}
   /* START: green, stopped-with-a-track only. In landscape it's an in-flow member of the
      base row, sitting in the gap between the + and the dot. */
   /* margin-left:auto here makes THREE auto margins in the row (zoomOut, START, dot), so
@@ -404,19 +400,6 @@
   #gloveClose{position:fixed; left:10px; bottom:calc(var(--chromeB,0px) + 8px);
     width:88px; height:88px; border-radius:24px; font-size:40px;
     background:rgba(34,41,48,.95); text-shadow:0 1px 6px rgba(0,0,0,.8)}
-  /* TURN MODE: double-tap the map while riding — zoomed, compass-up; MARK TURN arms, tap places */
-  #markTurn{position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(var(--chromeB,0px) + 12px); z-index:18; display:none; padding:0 44px;
-    height:92px; border:none; border-radius:24px; background:var(--warn); color:#231a00;
-    font-size:26px; font-weight:900; letter-spacing:.03em; box-shadow:0 6px 24px rgba(0,0,0,.55);
-    cursor:pointer}
-  #markTurn.armed{background:var(--accent); color:#00222c}
-  body.turnmode #markTurn{display:block}
-  #turnHint{position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(var(--chromeB,0px) + 116px); z-index:18; display:none; font-size:13px;
-    color:var(--fg); background:rgba(14,18,22,.75); padding:6px 14px; border-radius:999px;
-    pointer-events:none; white-space:nowrap}
-  body.turnmode #turnHint{display:block}
 
   /* MARK PICKER: full-screen 3×3 kind grid — tap the track in turn mode to place,
      long-press an existing mark to change its kind */
@@ -649,7 +632,6 @@
     body.portrait #baseRow .ctl{height:52px}
     #startBtn, #revToggle{height:52px; font-size:18px; padding:0 22px; bottom:calc(var(--chromeB,0px) + 68px)}
     #hud{left:74px; right:74px}
-    #markTurn{height:64px; font-size:20px; padding:0 30px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
     #progress.expanded #progCanvas{height:44px}
@@ -851,8 +833,6 @@
   <div class="ctl" id="dotBtn" title="centre on me"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
 </div>
 <button id="revToggle" title="ride direction — tap to reverse"><svg class="ic"><use href="#i-arrow-left-right"/></svg><span id="revLbl">FORWARD</span></button>
-<button id="markTurn" title="add a mark on the track">ADD MARK</button>
-<div id="turnHint">ADD MARK then tap the track · tap a point to remove · long-press a point to change it</div>
 <div id="markPicker">
   <div id="markPickerHead"><b id="markPickerTitle">Add mark here</b>
     <button id="markPickerClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
@@ -2315,8 +2295,8 @@ async function initMap() {
     if (S.nav) autoCompass(); // threshold-mode compass tracks zoom level
     if (e.originalEvent) trainEvent('zoom-gesture');
   });
-  // riding: double-tap toggles TURN MODE; single taps (point removal, armed
-  // placement) wait out the double-tap window so the two can't collide
+  // riding: double-tap toggles the snap zoom; single taps (point menu, tap-to-add)
+  // wait out the double-tap window so the two can't collide
   let rideTapT = null;
   map.on('click', e => {
     if (!S.nav) { S.cueEdit ? cueEditTap(e.lngLat) : trackTap(e.lngLat); return; }
@@ -2327,7 +2307,7 @@ async function initMap() {
     if (!S.nav) return; // planning keeps the normal double-click zoom
     e.preventDefault(); // eat MapLibre's own double-tap zoom while riding
     clearTimeout(rideTapT); rideTapT = null;
-    S.turn ? exitTurnMode() : enterTurnMode();
+    S.snapZoom ? exitSnapZoom() : enterSnapZoom();
   });
   initLongPress();
   // the N button's red needle counter-rotates with the map — always pointing true north
@@ -2864,7 +2844,7 @@ function cruiseZoom(la) {
    travel direction (heading south → dot drifts toward the top of the screen). */
 let camOffX = 0, camOffY = 0;
 function camTargetOff() {
-  if (S.turn) return [0, Math.round(innerHeight * 0.18)]; // turn mode: junction fills the view ahead
+  if (S.snapZoom) return [0, Math.round(innerHeight * 0.18)]; // snap zoom: junction fills the view ahead
   const o = effOrient();
   if (o === 'north') {
     if (S.courseBearing == null || !S.pos || S.pos.speed < 1.5) return [camOffX, camOffY]; // hold last
@@ -2884,8 +2864,8 @@ function followCamera() {
   camOffX += (tx - camOffX) * 0.18; camOffY += (ty - camOffY) * 0.18; // slow migration, not a jump
   const opts = { center: [lo, la], duration: ADV('easeMs'), easing: t => t,
     offset: [Math.round(camOffX), Math.round(camOffY)] };
-  if (S.turn) { // turn mode: compass-up to the heading, tight zoom held while following
-    opts.zoom = S.turn.zoom;
+  if (S.snapZoom) { // snap zoom: compass-up to the heading, tight zoom held while following
+    opts.zoom = S.snapZoom.zoom;
     if (S.courseBearing != null) opts.bearing = S.courseBearing;
   } else {
     // off track: freeze the zoom (keep centring) until back on track — no lurching auto-zoom while lost
@@ -3487,7 +3467,7 @@ function startNav() {
 }
 function stopNav() {
   S.nav = false;
-  exitTurnMode(false);
+  exitSnapZoom(false);
   S._turnCue = null; applyCdArrows(); applyMoveGestures();
   S.autoOrient = false; S.autoBlock = false; applyOrient(); // hand orientation back to the rider's mode
   document.body.classList.remove('navving', 'hasroute');
@@ -3598,8 +3578,6 @@ function onFix(lat, lon, acc, speed, heading) {
   if (hdg != null && !isNaN(hdg) && (spd || 0) > 2)
     S.courseBearing = S.courseBearing == null ? hdg : S.courseBearing + angDiff(S.courseBearing, hdg) * 0.4;
   renderMain(); applyMoveGestures();
-  // turn mode decays on its own once the junction is cleared — no tap-out needed mid-corner
-  if (S.turn && dist(x, y, S.turn.ax, S.turn.ay) > 60) exitTurnMode();
   refreshPosLayers(); followCamera();
   if (!S.nav || !ns) return;
   // breadcrumb drops for EVERY ride — off-track, free-ride, exploring. It used to sit below
@@ -4004,42 +3982,30 @@ function applyMoveGestures() {
   else { map.touchZoomRotate.enable(); map.doubleClickZoom.enable(); }
 }
 
-/* ---------------- TURN MODE ----------------
-   Unmarked intersection, double-tap the map: snap zoom in, compass-up to the
-   heading, rider low-third — resolve which fork is the track. Double-tap again
-   (or ride ~60 m past the junction) returns to the riding zoom.
-   MARK TURN is two-step: press to arm, then tap the track to place (a stray tap
-   costs one tap — tap a point to remove it). Tap elsewhere right after removing
-   = the point re-places there (move = delete + place).
+/* ---------------- SNAP ZOOM ----------------
+   Unmarked intersection, double-tap the map while riding: snap zoom in to the
+   "zoom in" preset, compass-up to the heading, rider low-third — resolve which
+   fork is the track. Double-tap again eases back to exactly the zoom you left.
+   Manual both ways, and it works at any speed — this is the junction gesture.
    Turn points ARE cues: they ride the existing overlay system, anchored to geometry —
    every pass of every analysed track sharing the segment gets the point. */
-const markTurnBtn = document.getElementById('markTurn');
-function setMarkArm(on) {
-  if (S.turn) S.turn.arming = on;
-  markTurnBtn.textContent = on ? 'Tap track to choose' : 'Add mark';
-  markTurnBtn.classList.toggle('armed', on);
-}
-function enterTurnMode() {
-  if (S.turn || !mapReady || !S.pos) return;
+function enterSnapZoom() {
+  if (S.snapZoom || !mapReady || !S.pos) return;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
   // remember the target zoom: followCamera keeps re-easing while we move, and each
   // ease without a zoom would freeze the interrupted entry animation mid-flight
-  S.turn = { prevZoom: map.getZoom(), zoom: Math.max(16.5, zoomForSpan(presetSpan('min'), la)),
-    ax: S.pos.x, ay: S.pos.y, removed: null, arming: false };
-  document.body.classList.add('turnmode');
-  setMarkArm(false);
-  setFollow(true); S.dotFit = false; // entering centres you — the dot/square shows square
+  S.snapZoom = { prevZoom: map.getZoom(), zoom: Math.max(16.5, zoomForSpan(presetSpan('min'), la)) };
+  setFollow(true); S.dotFit = false; // snapping in centres you on the junction
   const brg = S.courseBearing != null ? S.courseBearing : (S.pos.heading || 0);
-  map.easeTo({ center: [lo, la], zoom: S.turn.zoom,
+  map.easeTo({ center: [lo, la], zoom: S.snapZoom.zoom,
     bearing: brg, offset: [0, Math.round(innerHeight * 0.18)], duration: 450 });
   setHold(null); vib([40]);
-  trainEvent('turnmode');
+  trainEvent('snapzoom');
 }
-function exitTurnMode(restore = true) {
-  if (!S.turn) return;
-  trainEvent('turnmode-exit');
-  const t = S.turn; S.turn = null;
-  document.body.classList.remove('turnmode');
+function exitSnapZoom(restore = true) {
+  if (!S.snapZoom) return;
+  trainEvent('snapzoom-exit');
+  const t = S.snapZoom; S.snapZoom = null;
   if (restore && mapReady) {
     const opts = { zoom: t.prevZoom, duration: 500 };
     if (effOrient() === 'north') opts.bearing = 0; // north-up gets its north back
@@ -4052,34 +4018,8 @@ function rideTap(lngLat) {
   const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
   const tapR = Math.max(15, mpp * 30);
   const hit = findTurnPointNear(x, y, tapR);
-  if (!S.turn) {
-    // a direct tap on a point outside turn mode says "this turn is obvious" — remove it,
-    // and the auto-zoom it was driving releases with it
-    if (hit) { removeTurnPointAt(hit.x, hit.y); toast('Turn point removed'); vib([60]); }
-    return; // empty taps do nothing — TURN MODE is a double-tap
-  }
-  if (S.turn.arming) { // ADD MARK armed — the tapped spot opens the kind picker
-    if (nearestPass(x, y)) { setMarkArm(false); openMarkPicker(x, y); }
-    else toast('No track there — tap on the route');
-    return;
-  }
-  if (hit) {
-    S.turn.removed = true;
-    removeTurnPointAt(hit.x, hit.y);
-    toast('Turn point removed — tap the track to re-place it'); vib([60]);
-    return;
-  }
-  if (S.turn.removed) { // move = delete + place
-    if (addTurnPointAt(x, y)) { S.turn.removed = null; toast('Turn point moved'); vib([60]); }
-    else toast('No track there — tap on the route');
-  }
-  // empty tap otherwise: nothing — double-tap leaves turn mode
+  if (hit) { removeTurnPointAt(hit.x, hit.y); toast('Turn point removed'); vib([60]); }
 }
-markTurnBtn.onclick = () => {
-  if (!S.turn) return;
-  setMarkArm(!S.turn.arming);
-  toast(S.turn.arming ? 'Tap the track to choose a mark' : 'Placement cancelled');
-};
 /* nearest visible turn point (any analysed track) within R metres */
 function findTurnPointNear(x, y, R) {
   let best = null, bd = R;
@@ -4639,7 +4579,7 @@ const TRAIN_PTS = [
 const TRAIN_CUES = [
   { ll: [-33.31876,151.35342], deg: 115,  type: 'right', name: 'Middle Ridge Rd' }, // ~297 m
   { ll: [-33.31619,151.35258], deg: -56,  type: 'left' },                           // ~612 m
-  { ll: [-33.31692,151.35053], deg: 117,  type: 'right' },                          // ~839 m — the TURN MODE fork
+  { ll: [-33.31692,151.35053], deg: 117,  type: 'right' },                          // ~839 m — the snap-zoom fork
   { ll: [-33.31415,151.34879], deg: 73,   type: 'right' },                          // ~1195 m
   { ll: [-33.31362,151.3504],  deg: -81,  type: 'left' },                           // ~1367 m
   { ll: [-33.31179,151.34908], deg: -90,  type: 'left' },                           // ~1608 m
@@ -4725,12 +4665,12 @@ const TRAIN_STEPS = [
   { title: 'Mute', target: '#gMute', advance: { ev: 'unmute' },
     html: 'Tap <b>Mute</b>, then tap it <b>again</b> to un-mute. Muted, all beeps stop — ' +
       'except <b>danger barks, which always sound</b>.' },
-  { at: t => t.alerts[2].at - 45, title: 'Turn mode', advance: { ev: 'turnmode' },
+  { at: t => t.alerts[2].at - 45, title: 'Snap zoom', advance: { ev: 'snapzoom' },
     html: 'Unmarked fork ahead. <b>Double-tap the map</b>: it snap-zooms in and turns track-up ' +
       'so you can read which fork is yours.' },
-  { title: 'Marks — then back out', target: '#markTurn', advance: { ev: 'turnmode-exit' },
-    html: 'In turn mode, <b>ADD MARK</b> pins this junction for everyone who shares the pack ' +
-      '(press it, tap the track — not now, this is a tour). <b>Double-tap again</b> to ride on.' },
+  { title: 'Marks — then back out', advance: { ev: 'snapzoom-exit' },
+    html: '<b>Tap the track</b> to pin a turn point at this junction for everyone who shares the pack; ' +
+      'tap any point to change or delete it (not now, this is a tour). <b>Double-tap again</b> to ride on.' },
   { at: t => t.alerts[2].at + 110, title: 'Going off track', advance: { ack: true },
     html: 'Now watch — we\'ll <b>overshoot on purpose</b>. You\'ll hear a <b>low growl</b> and ' +
       'see a red banner with your distance back to the route.' },
