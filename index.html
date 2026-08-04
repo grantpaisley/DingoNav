@@ -1293,7 +1293,7 @@ const ADV_D = {
   chevSize: 15, chevGap: 90, // direction Vs — drawn in the casing colour, so they dim with the travelled case
   slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
   colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
-  colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
+  colTrail: '#909090', trailProm: 1, gpsAcc: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
   // backtrack breadcrumb: one solid red line, drawn at a share of the route core so the
   // covered segments still read either side of it (1 = full core width)
   colCrumb: '#ff2d2d', crumbOp: 0.75, crumbFrac: 0.75,
@@ -2463,13 +2463,6 @@ function addOverlays() {
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': clsMatch(), 'line-opacity': 0.35,
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
-  // heatmap under the route corridor — its own layer so the opacity is a knob
-  // (0 = dash gaps show pure basemap; raise it to see the recordings beneath the route)
-  map.addSource('heatU', { type: 'geojson', data: EMPTY });
-  map.addLayer({ id: 'heat-under', type: 'line', source: 'heatU',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': clsMatch(), 'line-opacity': ADV('heatUnderOp'),
-      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
   // every loaded track rides in route blue WITHOUT casing — the casing is the
   // selection signal (the selected track alone gets the cased nav treatment)
   map.addLayer({ id: 'tracks-other', type: 'line', source: 'tracksOther',
@@ -2650,93 +2643,13 @@ function circlePoly(lat, lon, radiusM) {
   }
   return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] } };
 }
-/* heatmap knocked out along the selected route, so the dash gaps in the route line show the
-   basemap underneath instead of heatmap orange. Data-level clip: heatmap vertices within
-   heatMask metres of the route (long segments get sampled so a straight run can't sneak
-   across) are split off into an "under" collection drawn by heat-under at its own opacity
-   (default fully transparent — dial heatUnderOp up to see the recordings beneath the route).
-   Cached per track — it's a one-off sweep. */
-let heatMaskCache = { src: null, key: '', data: null };
-function maskedHeatData() {
-  if (!S.heat) return { keep: EMPTY, under: EMPTY };
-  const trk = S.tracks[S.sel], M = ADV('heatMask');
-  if (!trk || !M) return { keep: S.heat.geojson, under: EMPTY };
-  const key = trk.id + ':' + M;
-  if (heatMaskCache.src === S.heat && heatMaskCache.key === key) return heatMaskCache.data;
-  const M2 = M * M, C = trk.cell;
-  // route bbox (+M) fast-rejects the bulk of the heatmap before any grid lookups
-  let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
-  for (let i = 0; i < trk.n; i++) {
-    const x = trk.xy[i * 2], y = trk.xy[i * 2 + 1];
-    if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
-    if (y < by0) by0 = y; if (y > by1) by1 = y;
-  }
-  bx0 -= M; by0 -= M; bx1 += M; by1 += M;
-  const nearRoute = (x, y) => { // 3×3 grid cells around the point cover the mask radius
-    if (x < bx0 || x > bx1 || y < by0 || y > by1) return false;
-    const cx = (x / C) | 0, cy = (y / C) | 0;
-    for (let ix = cx - 1; ix <= cx + 1; ix++) for (let iy = cy - 1; iy <= cy + 1; iy++) {
-      const a = trk.grid.get(ix + ',' + iy); if (!a) continue;
-      for (const i of a) { const dx = trk.xy[i * 2] - x, dy = trk.xy[i * 2 + 1] - y; if (dx * dx + dy * dy < M2) return true; }
-    }
-    return false;
-  };
-  const featsK = [], featsU = [];
-  for (const f of S.heat.geojson.features) {
-    const g = f.geometry; if (!g) continue;
-    const parts = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : null;
-    if (!parts) { featsK.push(f); continue; }
-    const runsK = [], runsU = [];
-    for (const coords of parts) {
-      let curK = [], curU = [], px = null, py = null, pc = null;
-      // boundary points join the under-run so the faint layer stays continuous with the kept line
-      const emit = (ll, keep) => {
-        if (keep) {
-          if (curU.length) { curU.push(ll); if (curU.length > 1) runsU.push(curU); curU = []; }
-          curK.push(ll);
-        } else {
-          if (curK.length) { curU.push(curK[curK.length - 1]); if (curK.length > 1) runsK.push(curK); curK = []; }
-          curU.push(ll);
-        }
-      };
-      for (const c of coords) {
-        const [x, y] = toXY(c[1], c[0]);
-        if (px != null) {
-          const seg = dist(px, py, x, y);
-          // sample long segments so the check can't be jumped — but only near the route bbox
-          if (seg > 30 && seg < 2000 &&
-              !(Math.max(px, x) < bx0 || Math.min(px, x) > bx1 || Math.max(py, y) < by0 || Math.min(py, y) > by1)) {
-            const steps = Math.ceil(seg / 15);
-            for (let s = 1; s < steps; s++) {
-              const t = s / steps;
-              emit([pc[0] + (c[0] - pc[0]) * t, pc[1] + (c[1] - pc[1]) * t], !nearRoute(px + (x - px) * t, py + (y - py) * t));
-            }
-          }
-        }
-        emit(c, !nearRoute(x, y));
-        px = x; py = y; pc = c;
-      }
-      if (curK.length > 1) runsK.push(curK);
-      if (curU.length > 1) runsU.push(curU);
-    }
-    for (const r of runsK) featsK.push({ type: 'Feature', properties: f.properties,
-      geometry: { type: 'LineString', coordinates: r } });
-    for (const r of runsU) featsU.push({ type: 'Feature', properties: f.properties,
-      geometry: { type: 'LineString', coordinates: r } });
-  }
-  heatMaskCache = { src: S.heat, key, data: {
-    keep: { type: 'FeatureCollection', features: featsK },
-    under: { type: 'FeatureCollection', features: featsU } } };
-  return heatMaskCache.data;
-}
 function refreshMapData() {
   if (!mapReady) return;
-  const heat = maskedHeatData();
+  const heat = S.heat ? S.heat.geojson : EMPTY;
   // archived local rides join the bundle heat as 'own' class — ridden trails accumulate on-device
-  map.getSource('heat').setData(!S.rides.length ? heat.keep : { type: 'FeatureCollection',
-    features: heat.keep.features.concat(S.rides.map(r => ({ type: 'Feature', properties: { class: 'own' },
+  map.getSource('heat').setData(!S.rides.length ? heat : { type: 'FeatureCollection',
+    features: heat.features.concat(S.rides.map(r => ({ type: 'Feature', properties: { class: 'own' },
       geometry: { type: 'LineString', coordinates: r.pts } }))) });
-  map.getSource('heatU').setData(heat.under);
   map.getSource('tracksOther').setData({ type: 'FeatureCollection',
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
       geometry: { type: 'LineString', coordinates: t.coordsLL } })) });
@@ -7272,8 +7185,6 @@ const SETTINGS = [
   { h: 'Rendering & misc' },
   { k: 'btnOp', t: 'range', adv: 1, l: 'Riding button opacity', min: 0.1, max: 1, step: 0.05 },
   { k: 'trailGap', t: 'range', adv: 1, l: 'Breadcrumb point spacing (m)', min: 5, max: 100, step: 5 },
-  { k: 'heatMask', t: 'range', adv: 1, l: 'Heatmap knockout along route (m, 0 = off)', min: 0, max: 60, step: 2 },
-  { k: 'heatUnderOp', t: 'range', adv: 1, l: 'Heatmap under route opacity', min: 0, max: 0.5, step: 0.02 },
   { k: 'routeWOut', t: 'range', adv: 1, l: 'Route width zoomed out (px)', min: 2, max: 14, step: 0.5 },
   { k: 'routeWIn', t: 'range', adv: 1, l: 'Route width zoomed in (px)', min: 4, max: 20, step: 0.5 },
   { k: 'coreFrac', t: 'range', adv: 1, l: 'Core share of route width', min: 0.4, max: 0.95, step: 0.01 },
@@ -7318,7 +7229,6 @@ function advApply(k) {
   if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // segment features bake the colour in
   else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM' || k === 'colDone') refreshRouteFeatures(); // baked into features
-  else if (k === 'heatMask') { heatMaskCache.key = ''; refreshMapData(); } // re-clip with the new radius
   else if (k === 'colTrail' || k === 'trailProm') { clearTimeout(restyleT); restyleT = setTimeout(() => setMapStyle(S.set.mapStyle), 400); }
   else applyAdvPaint();
 }
@@ -7345,8 +7255,6 @@ function applyAdvPaint() {
   map.setPaintProperty('surf-recent', 'line-width', coreW());
   // keep the tiny mark-dot tier matched to the route width sliders
   if (!S.cueEdit) map.setPaintProperty('mark-dots', 'circle-radius', markDotR());
-  map.setPaintProperty('heat-under', 'line-opacity', ADV('heatUnderOp'));
-  map.setPaintProperty('heat-under', 'line-color', clsMatch());
   for (const l of ['dir-vs-rem', 'dir-vs-done']) {
     map.setLayoutProperty(l, 'visibility', ADV('chevSize') > 0 ? 'visible' : 'none');
     map.setLayoutProperty(l, 'text-size', Math.max(1, ADV('chevSize')));
@@ -7475,7 +7383,6 @@ function applyAllSettings() {
   applyOrient(); applyStrava(); applyHill(); applyVarg();
   document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   if (S.nav) S.set.wake ? requestWake() : releaseWake();
-  heatMaskCache.key = ''; // heatMask may have changed — force a re-clip
   if (mapReady) setMapStyle(S.set.mapStyle).then(() => { applyAdvPaint(); refreshMapData(); drawProgress(true); });
   startFriends();
 }
