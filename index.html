@@ -274,21 +274,27 @@
   /* the glyph steps down out of the needle's way rather than the needle riding over it */
   #orientCtl #orientGlyph{margin-top:8px; line-height:1}
   #baseRow{position:fixed; left:0; right:0; bottom:calc(var(--chromeB,0px) + 8px); z-index:16;
-    display:flex; align-items:flex-end; padding:0 10px; pointer-events:none}
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 10px; pointer-events:none}
   #baseRow .ctl, #baseRow #startBtn{pointer-events:auto}
-  /* landscape: ☰ hard left, dot hard right, − / + together in the centre, START after the + */
-  #zoomOut{margin-left:auto} #zoomIn{margin-left:10px} #dotBtn{margin-left:auto}
-  /* the dot is the one round face — centre-on-me */
+  /* the dot is the one round face — centre-on-me. It only shows once the map is away
+     from you (drag, the box button); its slot is HELD while hidden so ☰ − + never move */
+  body.following #baseRow #dotBtn{opacity:0; pointer-events:none} /* two ids: outranks the navving idle-fade opacity */
+  #dotBtn{transition:opacity .2s}
   body:not(.portrait) #baseRow #dotBtn{width:96px; height:96px; border-radius:50%; font-size:44px}
   /* portrait / square: the four butt up edge-to-edge, ¼ of the screen each */
   body.portrait #baseRow{padding:0; align-items:stretch}
   body.portrait #baseRow .ctl{flex:1 1 0; width:auto; margin:0; border-radius:0; height:88px}
+  /* riding: the row grows for gloves and goes near-transparent — icons over the map,
+     full face only while pressed (the --navOp idle fade still applies on top) */
+  body.navving #baseRow .ctl{width:104px; height:104px; font-size:46px;
+    background:rgba(22,28,34,.35); border-color:rgba(42,53,64,.5)}
+  body.navving.portrait #baseRow .ctl{width:auto; height:104px}
+  body.navving:not(.portrait) #baseRow #dotBtn{width:104px; height:104px}
+  body.navving #baseRow .ctl:active{background:rgba(22,28,34,.92)}
   /* START: green, stopped-with-a-track only. In landscape it's an in-flow member of the
      base row, sitting in the gap between the + and the dot. */
-  /* margin-left:auto here makes THREE auto margins in the row (zoomOut, START, dot), so
-     the free space splits into equal thirds and START lands midway between + and the dot.
-     With START hidden it falls back to the original two-auto split, ☰ | − + | ◎. */
-  #startBtn{margin-left:auto; z-index:16; flex:none;
+  /* space-between on the row spreads ☰ − + START ◎ evenly, START simply joining in */
+  #startBtn{z-index:16; flex:none;
     height:68px; padding:0 32px; border:none; border-radius:18px; background:var(--ok); color:#04240f;
     font-size:22px; font-weight:800; letter-spacing:.03em; cursor:pointer; display:none;
     box-shadow:0 4px 18px rgba(0,0,0,.45)}
@@ -638,6 +644,10 @@
     #vargPill .vm, #vargPill .u{font-size:13px}
     body:not(.portrait) #baseRow #dotBtn{width:64px; height:64px; border-radius:50%; font-size:30px}
     body.portrait #baseRow .ctl{height:52px}
+    /* short screens: the riding enlargement would eat the map — stay compact */
+    body.navving #baseRow .ctl{width:72px; height:64px; font-size:30px}
+    body.navving.portrait #baseRow .ctl{width:auto; height:64px}
+    body.navving:not(.portrait) #baseRow #dotBtn{width:72px; height:72px}
     #startBtn, #revToggle{height:52px; font-size:18px; padding:0 22px; bottom:calc(var(--chromeB,0px) + 68px)}
     #hud{left:74px; right:74px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
@@ -2297,7 +2307,7 @@ async function initMap() {
   });
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
-  map.on('dragstart', () => { if (S.nav) setFollow(false); S.dotFit = false; trainEvent('drag'); });
+  map.on('dragstart', () => { setFollow(false); S.dotFit = false; trainEvent('drag'); }); // any drag = away from centre, the dot appears
   // gesture zoom (pinch / wheel) while navigating = hold, same as the ± buttons
   map.on('zoomend', e => {
     if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom());
@@ -3041,7 +3051,7 @@ function fitTap() { // box: zoom out to the whole track
 document.getElementById('boxBtn').onclick = fitTap;
 function setFollow(on) {
   S.follow = on;
-  document.getElementById('dotBtn').classList.toggle('active', on); // lit = centred on you
+  document.body.classList.toggle('following', on); // following = the dot has nothing to offer, hide it
 }
 setFollow(true);
 
@@ -4681,7 +4691,7 @@ const TRAIN_STEPS = [
   { title: 'The whole track', target: '#boxBtn', advance: { ev: 'fit' },
     html: 'Tap the <b>box button</b> (top right) — the map zooms right out to frame the whole ride.' },
   { title: 'Come home', target: '#dotBtn', advance: { ev: 'recentre' },
-    html: 'And the <b>dot button</b> (bottom right) snaps you back onto yourself. <b>Tap it</b> to carry on.' },
+    html: 'The <b>dot button</b> (bottom right) appears whenever the map is off you — <b>tap it</b> to snap back onto yourself and carry on.' },
   { title: 'Zoom when stopped', advance: { ev: 'zoom-gesture' },
     html: 'You\'re stopped right now, so <b>pinch to zoom</b> works (on a computer: scroll). ' +
       'Above walking pace finger-zoom locks so a glove brush can\'t wreck the view — riding, use the − / + buttons.' },
