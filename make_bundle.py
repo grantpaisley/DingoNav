@@ -15,7 +15,9 @@ p.add_argument('tracks', nargs='*', help='GPX files')
 p.add_argument('-o', '--out', default='bundle.json')
 a = p.parse_args()
 
-bundle = {}
+# v2 (shared-tiles design): packs carry data, not maps — Nav corridor-caches
+# tiles from the shared archive. Tile-source defaults live in Nav.
+bundle = {'formatVersion': 2}
 if a.heatmap:
     bundle['heatmap'] = json.load(open(a.heatmap))
     bundle['heatmapName'] = os.path.basename(a.heatmap)

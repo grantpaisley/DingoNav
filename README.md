@@ -10,6 +10,17 @@ with the Dingo heatmap and track overlays on top. North is always up.
 - **Offline basemap**: one `.pmtiles` file covers the whole riding area (roads, tracks,
   rivers, place labels). Auto-downloaded on first open and stored on-device (IndexedDB);
   swap areas via ☰ → *Load .pmtiles basemap…*.
+- **Shared tile archive (pack v2)**: with no local `.pmtiles`, maps come from the
+  shared archive at `tiles.dingodirt.com` — each pack's ride corridor is prefetched
+  once (resumable, with progress) and cached for offline; deleting a pack releases
+  its tiles. v2 packs are a few hundred KB (`bundle.json` only, `formatVersion: 2`);
+  v1 packs with embedded tiles keep working unchanged. Self-hosters: point
+  `localStorage['dtiles-base']` (or a pack's `tiles` override) at any archive built
+  with `Dingo/tools/build-tiles/`. Once the shared archive is live, the bundled
+  `basemap/*.pmtiles` can be dropped from the deploy.
+- **Aerial imagery (personal)**: ☰ → set a `{z}/{x}/{y}` tile URL (NSW Six Maps
+  preset included, CC BY 4.0) and the *Sat* style renders from it — corridor-cached
+  at z12–15 for offline. Device-only; never part of packs.
 - **Terrain shading**: an optional second `.pmtiles` (elevation, ~8 MB per area) adds
   hillshade relief under the trails — gullies and ridges readable at a glance, still flat
   north-up 2D so nothing about the fast-follower UX changes. Auto-downloaded like the
