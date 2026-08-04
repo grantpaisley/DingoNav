@@ -60,10 +60,9 @@
   #hudSpeed.cd{color:var(--warn)} #hudSpeed.cd small{color:var(--warn)}
   #hudSpeed.low{color:var(--bad)}
   /* riding: N owns the top-left corner — the speed readout sits below it, slightly inboard,
-     with the hold/lock pills stacked underneath */
+     with the hold pill stacked underneath */
   body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 106px); left:16px}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 256px)}
-  body.navving #lockPill{top:calc(env(safe-area-inset-top) + 292px)}
   /* Stark Varg pill — the SECOND number slot: it carries whatever the big left readout
      didn't take (battery if the big one is speed, speed if the big one is battery). Sits
      immediately left of the box button and matches its height, so the two read as one row.
@@ -279,10 +278,8 @@
   #baseRow .ctl, #baseRow #startBtn{pointer-events:auto}
   /* landscape: ☰ hard left, dot hard right, − / + together in the centre, START after the + */
   #zoomOut{margin-left:auto} #zoomIn{margin-left:10px} #dotBtn{margin-left:auto}
-  /* the dot is the one round face — centre-on-me; wears the centre-lock ring */
+  /* the dot is the one round face — centre-on-me */
   body:not(.portrait) #baseRow #dotBtn{width:96px; height:96px; border-radius:50%; font-size:44px}
-  #dotBtn.locked{border-color:var(--accent); color:var(--accent);
-    box-shadow:0 0 0 4px rgba(0,229,255,.25)}
   /* portrait / square: the four butt up edge-to-edge, ¼ of the screen each */
   body.portrait #baseRow{padding:0; align-items:stretch}
   body.portrait #baseRow .ctl{flex:1 1 0; width:auto; margin:0; border-radius:0; height:88px}
@@ -325,11 +322,10 @@
   body.navving #cueEditBtn{display:none !important} /* planning-only */
   #cueEditBtn.active{border-color:var(--warn); color:var(--warn)}
   /* stacked under the speed readout, clear of the glance card (top centre) */
-  #holdPill, #lockPill{position:fixed; top:64px; left:12px; z-index:14;
+  #holdPill{position:fixed; top:64px; left:12px; z-index:14;
     display:none; padding:6px 14px; border-radius:999px; font-size:14px; color:var(--fg);
     background:rgba(22,28,34,.75); border:1px solid #2a3540}
   #holdPill.on{display:block}
-  #lockPill.on{display:block; top:100px; border-color:var(--accent)}
   #north{position:fixed; left:12px; bottom:120px; z-index:10; width:88px; height:88px; border-radius:50%;
     background:rgba(22,28,34,.9); border:1px solid #2a3540; display:flex; align-items:center; justify-content:center;
     font-weight:800; color:var(--bad); font-size:30px; cursor:pointer}
@@ -638,7 +634,6 @@
     /* shrunk corner buttons → the readouts tuck under them sooner */
     body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px); left:12px}
     body.navving #holdPill{top:calc(env(safe-area-inset-top) + 148px)}
-    body.navving #lockPill{top:calc(env(safe-area-inset-top) + 182px)}
     #vargModeBig{font-size:76px; top:calc(env(safe-area-inset-top) + 64px); right:12px}
     #vargModeDetail{font-size:16px; column-gap:8px}
     body.navving #vargInd{top:calc(env(safe-area-inset-top) + 70px)}
@@ -765,7 +760,6 @@
   <symbol id="i-arrow-up" viewBox="0 0 24 24"><line x1="12" x2="12" y1="19" y2="5"/><polyline points="5 12 12 5 19 12"/></symbol>
   <symbol id="i-arrow-big-left" viewBox="0 0 24 24"><path d="M18 15h-6v4l-7-7 7-7v4h6v6z"/></symbol>
   <symbol id="i-arrow-big-right" viewBox="0 0 24 24"><path d="M6 9h6V5l7 7-7 7v-4H6V9z"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
   <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></symbol>
   <symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
@@ -865,7 +859,6 @@
   <div id="markGrid"></div>
 </div>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
-<div id="lockPill" title="centre lock — long-press map to unlock"><svg class="ic"><use href="#i-lock"/></svg> locked</div>
 
 <!-- Startup / readiness screen. `loading` is in the MARKUP so the card paints before
      the app script runs. The card is up while boot is working OR while first-run
@@ -2336,7 +2329,7 @@ async function initMap() {
     clearTimeout(rideTapT); rideTapT = null;
     S.turn ? exitTurnMode() : enterTurnMode();
   });
-  initLockGesture();
+  initLongPress();
   // the N button's red needle counter-rotates with the map — always pointing true north
   map.on('rotate', () => { const n = document.getElementById('orientNeedle');
     if (n) n.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
@@ -3063,22 +3056,11 @@ function setFollow(on) {
 }
 setFollow(true);
 
-/* ---------------- centre lock: long-press the map to pin yourself centred ----------------
-   Locked = drag-pan disabled, so a glove brush can't knock the map off you at speed.
-   Long-press again to unlock; while unlocked + panned away, long-press recentres AND locks. */
-const lockPill = document.getElementById('lockPill');
-function setLock(on) {
-  S.lock = on; lockPill.classList.toggle('on', on);
-  document.getElementById('dotBtn').classList.toggle('locked', on); // the dot wears the lock state
-  if (mapReady) on ? map.dragPan.disable() : map.dragPan.enable(); // drag is otherwise always live
-  trainEvent(on ? 'lock' : 'unlock');
-}
-lockPill.onclick = () => { setLock(false); toast('Centre lock off'); };
-
-/* the dot button always comes home; hold-to-lock is gone
-   (2026-07-17 design) — centre lock lives on the map long-press only. */
+/* the dot button always comes home (2026-07-17 design). Long-press has one job
+   left (2026-08-04 design): stopped, near a track → the track picker. Centre
+   lock is gone — drag-pan is always live; taps handle marks. */
 document.getElementById('dotBtn').onclick = recentreTap;
-function initLockGesture() {
+function initLongPress() {
   const el = map.getContainer();
   let timer = null, start = null;
   const cancel = () => { if (timer) clearTimeout(timer); timer = null; };
@@ -3088,31 +3070,16 @@ function initLockGesture() {
     start = [p.clientX, p.clientY];
     cancel();
     timer = setTimeout(() => {
-      timer = null; vib([40]);
-      // long-press ON a mark: change its kind (the picker), not the centre lock
-      if (mapReady && start) {
-        const r = el.getBoundingClientRect();
-        const ll = map.unproject([start[0] - r.left, start[1] - r.top]);
-        const [mx, my] = toXY(ll.lat, ll.lng);
-        const mpp = spanForZoom(map.getZoom(), ll.lat) / (el.clientHeight || 700);
-        const hit = findTurnPointNear(mx, my, Math.max(15, mpp * 30));
-        if (hit) { openMarkPicker(hit.x, hit.y, { cue: hit.cue }); return; }
-        // long-press ON a track line: the picker — including the one already selected.
-        // Stopped only: while riding this gesture is the centre lock, and the route is
-        // exactly where a rider's thumb lands, so the two would fight constantly.
-        if (!S.nav && S.tracks.length) {
-          const tapR = Math.max(20, mpp * 24);
-          let bd = Infinity;
-          for (const t of S.tracks) bd = Math.min(bd, nearestOnTrack(t, mx, my).d);
-          if (bd <= tapR) { openTrackPicker('pick'); return; }
-        }
-      }
-      if (S.lock) { setLock(false); toast('Centre lock off — map can be moved'); }
-      else {
-        setLock(true); setFollow(true);
-        if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 400 }); }
-        toast('Centre lock on — long-press to release');
-      }
+      timer = null;
+      if (!mapReady || !start || S.nav || !S.tracks.length) return;
+      const r = el.getBoundingClientRect();
+      const ll = map.unproject([start[0] - r.left, start[1] - r.top]);
+      const [mx, my] = toXY(ll.lat, ll.lng);
+      const mpp = spanForZoom(map.getZoom(), ll.lat) / (el.clientHeight || 700);
+      const tapR = Math.max(20, mpp * 24);
+      let bd = Infinity;
+      for (const t of S.tracks) bd = Math.min(bd, nearestOnTrack(t, mx, my).d);
+      if (bd <= tapR) { vib([40]); openTrackPicker('pick'); }
     }, 600);
   };
   const move = e => {
@@ -3529,7 +3496,7 @@ function stopNav() {
   document.getElementById('banner').classList.remove('on');
   prog.classList.remove('on', 'offtrack', 'countdown');
   document.getElementById('gloveBtn').classList.remove('on');
-  setHold(null); setLock(false);
+  setHold(null);
   closeGlove();
   placeProgress();
   const nb = document.getElementById('navBtn'); nb.textContent = 'Start'; nb.classList.remove('stop');
@@ -4774,9 +4741,6 @@ const TRAIN_STEPS = [
   { title: 'Back on — and direction', advance: { ack: true },
     html: 'That chirp = back on track. One more trick: ride a route in the <b>wrong direction</b> and ' +
       'DingoNav notices, flips every cue around, and tells you — no setting to find.' },
-  { at: t => t.alerts[4].at + 80, title: 'Centre lock', advance: { ev: 'lock' },
-    html: '<b>Press and hold the map</b> for a second: <b>centre lock</b>. The map pins to you and dragging ' +
-      'is disabled, so a knee or glove brush can\'t move it. Long-press again later to release.' },
   { at: t => t.alerts[8].at - 250, title: 'Danger marks', advance: { ack: true },
     html: 'A <b>danger mark</b> is ahead — riders drop these on washouts, wires, cliffs. It <b>triple-barks ' +
       'at 200 m</b> and again at 50 m — <b>even when muted</b>. Roll on and listen.' },
