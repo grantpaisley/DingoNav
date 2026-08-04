@@ -117,13 +117,15 @@
   /* The full tile list for a pack's tracks. Returns [{z,x,y}] sorted by zoom
      (low zooms first — the map is usable soonest that way). maxzoom caps the
      result per source (hillshade stops at 12). */
+  /* Pass coreZooms: null / bboxZooms: null to skip a tier (aerial uses
+     corridor-only — imagery is too heavy for area tiers). */
   function corridorTiles(tracks, opts) {
     const o = Object.assign({}, DEFAULTS, opts || {});
     const set = new Set();
-    addBboxTiles(set, o.coreBbox, o.coreZooms[0], o.coreZooms[1]);
+    if (o.coreZooms) addBboxTiles(set, o.coreBbox, o.coreZooms[0], o.coreZooms[1]);
     const bbox = trackBbox(tracks, o.bboxPadKm);
     if (bbox) {
-      addBboxTiles(set, bbox, o.bboxZooms[0], o.bboxZooms[1]);
+      if (o.bboxZooms) addBboxTiles(set, bbox, o.bboxZooms[0], o.bboxZooms[1]);
       addCorridorTiles(set, tracks, o.corridorKm, o.corridorZooms[0], o.corridorZooms[1]);
     }
     const out = [];

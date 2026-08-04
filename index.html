@@ -1009,6 +1009,13 @@
     <div id="dtileStatus">Shared tile cache: —</div>
     <div class="btnRow"><button class="btn" id="dtileClearBtn">Clear shared tile cache</button></div>
     <div class="hint">With no local .pmtiles loaded, maps come from the shared dingodirt archive: each pack's ride corridor is fetched once and cached for offline. Deleting a pack releases its tiles.</div>
+    <h3>Aerial imagery (personal)</h3>
+    <div class="btnRow">
+      <input id="aerialUrl" type="url" placeholder="https://…/{z}/{y}/{x} tile URL template"
+        style="flex:1;min-width:0;background:transparent;color:inherit;border:1px solid #555;border-radius:8px;padding:8px">
+      <button class="btn" id="aerialNswBtn">NSW</button>
+    </div>
+    <div class="hint">Optional {z}/{x}/{y} tile URL for the Sat map style — your device only, never part of packs. Ride corridors are cached at z12–15 for offline. The NSW button fills the Six Maps imagery service (CC BY 4.0).</div>
     <div data-reg="map"></div>
     <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
     <div class="btnRow"><button class="btn" id="fsBtn"><svg class="ic"><use href="#i-maximize"/></svg> Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
@@ -1317,9 +1324,17 @@ const DTILES = {
   files: { basemap: 'basemap-au.pmtiles', hillshade: 'hillshade-au.pmtiles' },
   maxzoom: { basemap: 14, hillshade: 12 },
   remotes: {},
+  // v2 packs may carry a `tiles` override ({basemap: url, hillshade: url}) —
+  // one active pack at a time, so the first pack with one wins
+  override() { for (const p of S.packs.values()) if (p.tilesOverride) return p.tilesOverride; return null; },
+  url(src) { const o = this.override(); return (o && o[src]) || this.base + this.files[src]; },
+  // overridden archives cache under their own namespace — no cross-archive mixing
+  ns(src) { const o = this.override(); return o && o[src] ? '@' + textHash(o[src]) : ''; },
+  tileKey(src, z, x, y) { return src + this.ns(src) + '/' + z + '/' + x + '/' + y; },
   remote(src) {
-    if (!this.remotes[src]) this.remotes[src] = new pmtiles.PMTiles(this.base + this.files[src]);
-    return this.remotes[src];
+    const u = this.url(src);
+    if (!this.remotes[u]) this.remotes[u] = new pmtiles.PMTiles(u);
+    return this.remotes[u];
   },
 };
 let sharedBase = false, sharedHill = false; // serving from the shared archive?
@@ -1335,7 +1350,7 @@ async function dtileServe(params) {
   const m = params.url.match(/^dtile:\/\/(\w+)\/(\d+)\/(\d+)\/(\d+)$/);
   if (!m) return { data: null };
   const [, src, z, x, y] = m;
-  const key = `${src}/${z}/${x}/${y}`;
+  const key = DTILES.tileKey(src, z, x, y);
   try {
     const rec = await idb.tget(key);
     if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() };
@@ -1353,29 +1368,70 @@ async function dtileServe(params) {
   return { data: src === 'hillshade' ? DEM_BLANK.buffer.slice(0) : null };
 }
 
+/* ---- aerial: personal per-device imagery source (never pack content) ----
+   S.set.aerialUrl is a {z}/{x}/{y} tile URL template. Serves cache-first
+   like dtile://; the corridor prefetch caches z12-15 along the track only. */
+const AERIAL_ZOOMS = [12, 15];
+function aerialConfigured() { return !!(S.set.aerialUrl && S.set.aerialUrl.includes('{z}')); }
+function aerialTileUrl(z, x, y) {
+  return S.set.aerialUrl.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+}
+function aerialKey(z, x, y) {
+  return 'aerial@' + textHash(S.set.aerialUrl || '') + '/' + z + '/' + x + '/' + y;
+}
+async function aerialServe(params) {
+  const m = params.url.match(/^aerial:\/\/(\d+)\/(\d+)\/(\d+)$/);
+  if (!m || !aerialConfigured()) return { data: STRAVA_BLANK.buffer.slice(0) };
+  const [, z, x, y] = m;
+  const key = aerialKey(z, x, y);
+  try {
+    const rec = await idb.tget(key);
+    if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() };
+  } catch (e) {}
+  if (navigator.onLine) {
+    try {
+      const resp = await fetch(aerialTileUrl(z, x, y));
+      if (resp.ok) {
+        const data = await resp.arrayBuffer();
+        idb.tput({ key, src: 'aerial', blob: new Blob([data]) }).catch(() => {});
+        return { data };
+      }
+    } catch (e) {}
+  }
+  return { data: STRAVA_BLANK.buffer.slice(0) }; // transparent — basemap shows through
+}
+
 /* Prefetch a pack's corridor into the cache. Resumable: present tiles are
    skipped, so re-running after a dropped connection costs the delta. */
 let dtileFetching = false;
 async function prefetchCorridor(slug) {
-  if (!(sharedBase || sharedHill) || dtileFetching) return;
+  if (!(sharedBase || sharedHill || aerialConfigured()) || dtileFetching) return;
   // coordsLL is [lon, lat] pairs (GeoJSON order) — hand corridor.js explicit objects
   const tracks = S.tracks.filter(t => (t.pack || '') === slug && t.coordsLL)
     .map(t => t.coordsLL.map(p => ({ lon: p[0], lat: p[1] })));
   if (!tracks.length) return;
   dtileFetching = true;
   try {
+    // each job: cache key + how to fetch its bytes
     const jobs = [];
     if (sharedBase) for (const t of DingoCorridor.corridorTiles(tracks, { maxzoom: DTILES.maxzoom.basemap }))
-      jobs.push({ src: 'basemap', ...t });
+      jobs.push({ src: 'basemap', key: DTILES.tileKey('basemap', t.z, t.x, t.y),
+        get: () => DTILES.remote('basemap').getZxy(t.z, t.x, t.y).then(r => r && r.data) });
     if (sharedHill) for (const t of DingoCorridor.corridorTiles(tracks, { maxzoom: DTILES.maxzoom.hillshade }))
-      jobs.push({ src: 'hillshade', ...t });
+      jobs.push({ src: 'hillshade', key: DTILES.tileKey('hillshade', t.z, t.x, t.y),
+        get: () => DTILES.remote('hillshade').getZxy(t.z, t.x, t.y).then(r => r && r.data) });
+    // aerial: corridor tier only (imagery is heavy) from the device's source
+    if (aerialConfigured())
+      for (const t of DingoCorridor.corridorTiles(tracks,
+        { coreZooms: null, bboxZooms: null, corridorZooms: AERIAL_ZOOMS, maxzoom: AERIAL_ZOOMS[1] }))
+        jobs.push({ src: 'aerial', key: aerialKey(t.z, t.x, t.y),
+          get: () => fetch(aerialTileUrl(t.z, t.x, t.y)).then(r => r.ok ? r.arrayBuffer() : null) });
     const have = new Set(await idb.tkeys().catch(() => []));
-    const todo = jobs.filter(j => !have.has(`${j.src}/${j.z}/${j.x}/${j.y}`));
-    const keys = jobs.map(j => `${j.src}/${j.z}/${j.x}/${j.y}`);
+    const todo = jobs.filter(j => !have.has(j.key));
     // reference set first — an interrupted fetch still owns its tiles
-    for (const src of ['basemap', 'hillshade'])
+    for (const src of ['basemap', 'hillshade', 'aerial'])
       await idb.rput({ id: slug + '|' + src, pack: slug, src,
-        keys: keys.filter(k => k.startsWith(src + '/')) }).catch(() => {});
+        keys: jobs.filter(j => j.src === src).map(j => j.key) }).catch(() => {});
     if (!todo.length) { updateDtileStatus(); return; }
     toast(`Fetching offline maps: ${todo.length} tiles…`);
     let done = 0, errs = 0;
@@ -1383,8 +1439,8 @@ async function prefetchCorridor(slug) {
       while (todo.length) {
         const j = todo.shift();
         try {
-          const t = await DTILES.remote(j.src).getZxy(j.z, j.x, j.y);
-          if (t && t.data) await idb.tput({ key: `${j.src}/${j.z}/${j.x}/${j.y}`, src: j.src, blob: new Blob([t.data]) });
+          const data = await j.get();
+          if (data) await idb.tput({ key: j.key, src: j.src, blob: new Blob([data]) });
         } catch (e) { errs++; }
         if (++done % 400 === 0) toast(`Offline maps: ${done} tiles…`);
       }
@@ -1398,7 +1454,7 @@ async function prefetchCorridor(slug) {
 /* Drop a pack's tile references and GC tiles nothing references any more. */
 async function dropTileRefs(slug) {
   try {
-    await idb.rdel(slug + '|basemap'); await idb.rdel(slug + '|hillshade');
+    await idb.rdel(slug + '|basemap'); await idb.rdel(slug + '|hillshade'); await idb.rdel(slug + '|aerial');
     const refs = await idb.rall();
     const wanted = new Set();
     for (const r of refs) for (const k of r.keys || []) wanted.add(k);
@@ -2095,6 +2151,19 @@ async function buildStyle() {
     }
     return { version: 8, glyphs, sources, layers };
   }
+  // Satellite via the device aerial source (no baked sat tiles in the pack):
+  // corridor-cached z12-15 offline, live-fetched while online. Personal layer —
+  // never pack content (pack-v2 design).
+  if (S.set.mapStyle === 'satellite' && aerialConfigured()) {
+    const glyphs = (baseUrlRef || new URL('basemap/', location.href).href) + 'fonts/{fontstack}/{range}.pbf';
+    return { version: 8, glyphs,
+      sources: { satellite: { type: 'raster', tiles: ['aerial://{z}/{x}/{y}'], tileSize: 256,
+        minzoom: 3, maxzoom: AERIAL_ZOOMS[1], attribution: 'Imagery: user-configured source' } },
+      layers: [
+        { id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } },
+        { id: 'satellite', type: 'raster', source: 'satellite' },
+      ] };
+  }
   if (!hasBasemap) return { version: 8,
     glyphs: new URL('basemap/', location.href).href + 'fonts/{fontstack}/{range}.pbf',
     sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0e1216' } }] };
@@ -2127,9 +2196,9 @@ async function setMapStyle(name) {
   document.body.classList.toggle('daymode', !isNightStyle()); // bar + panel follow the map's day/night
   for (const b of document.querySelectorAll('#styleSeg button')) b.classList.toggle('active', b.dataset.v === name);
   if (!map || !mapReady) return;
-  const canSat = name === 'satellite' && satMeta && satMeta.count > 0;
+  const canSat = name === 'satellite' && ((satMeta && satMeta.count > 0) || aerialConfigured());
   if (!hasBasemap && !canSat) return; // nothing to render a base from
-  if (name === 'satellite' && !canSat) toast('No satellite tiles — include them in a bundle from Dingo.');
+  if (name === 'satellite' && !canSat) toast('No satellite tiles — set an aerial source in settings, or bake tiles into a bundle from Dingo.');
   map.setStyle(await buildStyle());
   await new Promise(res => {
     const t = setInterval(() => { if (map.isStyleLoaded()) { clearInterval(t); res(); } }, 200);
@@ -2203,6 +2272,7 @@ async function initMap() {
   const protocol = pmProtocol = new pmtiles.Protocol();
   maplibregl.addProtocol('pmtiles', protocol.tile);
   maplibregl.addProtocol('dtile', dtileServe); // shared archive, cache-first
+  maplibregl.addProtocol('aerial', aerialServe); // device aerial source, cache-first
 
   // Strava corridor tiles served from IDB (baked into the .dingonav bundle).
   // Missing tiles (outside the corridor) resolve to a 1×1 transparent PNG so the
@@ -5043,6 +5113,13 @@ async function addFile(name, text, ctx) {
           revision: obj.revision || 0, description: obj.description || '',
           srcSlug: (ctx && ctx.slug) || (prev && prev.srcSlug) || null,
           sourceUrl: (ctx && !ctx.slug && ctx.sourceUrl) || (prev && prev.sourceUrl) || null,
+          // pack format v2 (shared-tiles design): optional per-pack tile-source
+          // override, and scheme references (list; singular `scheme` accepted).
+          // Schemes are stored for the upcoming scheme importer/switcher —
+          // applying them lands with the Studio design's token applier.
+          formatVersion: obj.formatVersion || 1,
+          tilesOverride: (obj.tiles && typeof obj.tiles === 'object' && !Array.isArray(obj.tiles)) ? obj.tiles : null,
+          schemes: Array.isArray(obj.schemes) ? obj.schemes : (obj.scheme ? [obj.scheme] : null),
           loadedAt: Date.now() };
         await idb.put(pack); S.packs.set(slug, pack);
       }
@@ -5285,6 +5362,17 @@ async function handleFiles(files) {
 }
 document.getElementById('fileInput').addEventListener('change', e => { handleFiles([...e.target.files]); e.target.value = ''; });
 document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
+const NSW_AERIAL = 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}';
+document.getElementById('aerialUrl').value = S.set.aerialUrl || '';
+document.getElementById('aerialUrl').onchange = e => {
+  S.set.aerialUrl = e.target.value.trim(); saveSet();
+  toast(aerialConfigured() ? 'Aerial source set — Sat style + corridor caching active' : 'Aerial source cleared');
+};
+document.getElementById('aerialNswBtn').onclick = () => {
+  document.getElementById('aerialUrl').value = NSW_AERIAL;
+  S.set.aerialUrl = NSW_AERIAL; saveSet();
+  toast('Aerial source: NSW Six Maps imagery');
+};
 document.getElementById('dtileClearBtn').onclick = async () => {
   if (!confirm('Clear all cached shared-archive tiles? Packs re-fetch their corridors next time you are online.')) return;
   try { await idb.tclear(); await idb.rclear(); } catch (e) {}
