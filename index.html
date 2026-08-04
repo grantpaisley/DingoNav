@@ -401,8 +401,9 @@
     width:88px; height:88px; border-radius:24px; font-size:40px;
     background:rgba(34,41,48,.95); text-shadow:0 1px 6px rgba(0,0,0,.8)}
 
-  /* MARK PICKER: full-screen 3×3 kind grid — tap the track in turn mode to place,
-     long-press an existing mark to change its kind */
+  /* MARK PICKER: full-screen kind grid — tap a point (riding or edit mode) to open it.
+     Fixed 12 slots: 9 kinds, Delete/Restore, two blanks reserved for future kinds —
+     3×4 portrait, 6×2 landscape, so the geometry never reflows. */
   #markPicker{position:fixed; inset:0; z-index:40; display:none; background:rgba(10,13,16,.92);
     flex-direction:column; justify-content:center; padding:18px}
   #markPicker.open{display:flex}
@@ -411,6 +412,13 @@
   #markPickerHead b{font-size:17px}
   #markPickerClose{background:none; border:none; color:var(--dim); font-size:22px; padding:8px; cursor:pointer}
   #markGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:480px; width:100%; margin:0 auto}
+  body:not(.portrait) #markGrid{grid-template-columns:repeat(6,1fr); max-width:860px}
+  body:not(.portrait) #markPickerHead{max-width:860px}
+  .mtile.blank{background:transparent; border:1px dashed #232d37; pointer-events:none}
+  .mtile.del{border-color:var(--bad)}
+  .mtile.del .ml{color:var(--bad)}
+  .mtile.restore{border-color:var(--ok)}
+  .mtile.restore .ml{color:var(--ok)}
   .mtile{background:var(--panel2); border:1px solid #2c3640; border-radius:14px; padding:16px 6px 12px;
     text-align:center; cursor:pointer; color:var(--fg)}
   .mtile:active{background:#26313c}
@@ -747,6 +755,7 @@
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/></symbol>
   <symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
@@ -2289,7 +2298,7 @@ async function initMap() {
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
   map.on('dragstart', () => { if (S.nav) setFollow(false); S.dotFit = false; trainEvent('drag'); });
-  // gesture zoom (pinch / wheel / double-tap) while navigating = hold, same as the ± buttons
+  // gesture zoom (pinch / wheel) while navigating = hold, same as the ± buttons
   map.on('zoomend', e => {
     if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom());
     if (S.nav) autoCompass(); // threshold-mode compass tracks zoom level
@@ -2299,14 +2308,14 @@ async function initMap() {
   // wait out the double-tap window so the two can't collide
   let rideTapT = null;
   map.on('click', e => {
-    if (!S.nav) { S.cueEdit ? cueEditTap(e.lngLat) : trackTap(e.lngLat); return; }
-    clearTimeout(rideTapT);
-    rideTapT = setTimeout(() => { rideTapT = null; rideTap(e.lngLat); }, 280);
+    clearTimeout(rideTapT); // every tap waits out the double-tap window — planning too
+    rideTapT = setTimeout(() => { rideTapT = null;
+      S.nav ? rideTap(e.lngLat) : S.cueEdit ? cueEditTap(e.lngLat) : trackTap(e.lngLat); }, 280);
   });
   map.on('dblclick', e => {
+    clearTimeout(rideTapT); rideTapT = null; // the pending single tap dies with the double
     if (!S.nav) return; // planning keeps the normal double-click zoom
     e.preventDefault(); // eat MapLibre's own double-tap zoom while riding
-    clearTimeout(rideTapT); rideTapT = null;
     S.snapZoom ? exitSnapZoom() : enterSnapZoom();
   });
   initLongPress();
@@ -4016,9 +4025,12 @@ function rideTap(lngLat) {
   if (typeof layoutEditing !== 'undefined' && layoutEditing) return;
   const [x, y] = toXY(lngLat.lat, lngLat.lng);
   const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
-  const tapR = Math.max(15, mpp * 30);
-  const hit = findTurnPointNear(x, y, tapR);
-  if (hit) { removeTurnPointAt(hit.x, hit.y); toast('Turn point removed'); vib([60]); }
+  const hit = findTurnPointNear(x, y, Math.max(15, mpp * 30));
+  // tap a point — even one placed a second ago — and the menu opens: change kind or delete
+  if (hit) { openMarkPicker(hit.x, hit.y, { cue: hit.cue }); return; }
+  // tap the bare track: a turn point appears right there, no picker on the way in
+  if (nearestPass(x, y) && addTurnPointAt(x, y)) { toast('Turn point added — tap it to change or delete'); vib([60]); }
+  // empty map: nothing
 }
 /* nearest visible turn point (any analysed track) within R metres */
 function findTurnPointNear(x, y, R) {
@@ -4054,7 +4066,8 @@ function openMarkPicker(x, y, edit, only) {
   const near = nearestPass(x, y, only);
   if (!near) { toast('No track there — tap on the route'); return; }
   pickerCtx = { x, y, dirAuto: inferTurnDir(near.trk, near.idx), dirOv: null, edit: edit || null, only: only || null };
-  document.getElementById('markPickerTitle').textContent = edit ? 'Change mark' : 'Add mark here';
+  document.getElementById('markPickerTitle').textContent =
+    edit && edit.removed ? 'Removed mark' : edit ? 'Change mark' : 'Add mark here';
   renderMarkGrid();
   markPickerEl.classList.add('open');
 }
@@ -4064,28 +4077,48 @@ function renderMarkGrid() {
   const cur = pickerCtx.edit ? kindOf(pickerCtx.edit.cue) : null;
   const d = pickerCtx.dirOv || pickerCtx.dirAuto;
   const dirTxt = ({ L: 'left', R: 'right', S: 'straight' })[d] + (pickerCtx.dirOv ? '' : ' · auto');
+  // slot 10: Delete on an existing mark (Restore on a removed base cue in edit
+  // mode); a blank when adding. Slots 11–12 reserved for future kinds.
+  const act = pickerCtx.edit
+    ? (pickerCtx.edit.removed
+      ? '<div class="mtile restore" data-act="restore"><svg class="ic" style="color:var(--ok)"><use href="#i-rotate-ccw"/></svg><div class="ml">Restore</div><div class="ms"></div></div>'
+      : '<div class="mtile del" data-act="del"><svg class="ic" style="color:var(--bad)"><use href="#i-trash"/></svg><div class="ml">Delete</div><div class="ms"></div></div>')
+    : '<div class="mtile blank"></div>';
   markGrid.innerHTML = Object.entries(MARKS).map(([k, m]) =>
     '<div class="mtile' + (k === cur ? ' cur' : '') + '" data-k="' + k + '">'
     + '<svg class="ic" style="color:' + m.col + '"><use href="#i-' + m.ic + '"/></svg>'
     + '<div class="ml">' + m.label + '</div>'
     + (k === 'turn' ? '<div class="ms"><span id="dirChip">' + dirTxt + '</span></div>' : '<div class="ms"></div>')
-    + '</div>').join('');
-  for (const el of markGrid.querySelectorAll('.mtile')) el.onclick = ev => {
+    + '</div>').join('')
+    + act + '<div class="mtile blank"></div><div class="mtile blank"></div>';
+  for (const el of markGrid.querySelectorAll('.mtile:not(.blank)')) el.onclick = ev => {
     if (ev.target.closest('#dirChip')) { // cycle the turn direction: auto → L → R → S → auto
       const order = [null, 'L', 'R', 'S'];
       pickerCtx.dirOv = order[(order.indexOf(pickerCtx.dirOv) + 1) % order.length];
       renderMarkGrid(); return;
     }
+    if (el.dataset.act === 'del') { deleteMark(); return; }
+    if (el.dataset.act === 'restore') { restoreMark(); return; }
     placeMark(el.dataset.k);
   };
 }
 function placeMark(kind) {
   const { x, y, dirOv, edit, only } = pickerCtx;
   closeMarkPicker();
-  if (edit) removeTurnPointAt(x, y); // change = remove + re-add: two records, replays cleanly everywhere
+  if (edit && !edit.removed) removeTurnPointAt(x, y); // change = remove + re-add: two records, replays cleanly everywhere
   const n = addTurnPointAt(x, y, false, kind, kind === 'turn' ? dirOv : null, only);
   if (n) { toast(MARKS[kind].label + ' marked — queued for the pack'); vib([60]); }
   else toast('Nothing placed — no track there, or a mark already sits on this spot');
+}
+function deleteMark() { // slot-10 red tile: one tap, no confirm — the point is one tap from re-added
+  const { x, y } = pickerCtx;
+  closeMarkPicker();
+  if (removeTurnPointAt(x, y)) { toast('Mark deleted'); vib([60]); }
+}
+function restoreMark() { // edit mode, greyed base cue: bring the auto cue back
+  const { x, y, only } = pickerCtx;
+  closeMarkPicker();
+  if (addTurnPointAt(x, y, false, null, null, only)) { toast('Cue restored'); vib([60]); }
 }
 /* all passes of a track through a point: indices within R, clustered by index gaps —
    an out-and-back section carries the turn in both directions automatically */
@@ -5514,7 +5547,7 @@ function setCueEdit(on) {
     applyCueEditPaint(on);
     map.getCanvas().style.cursor = on ? 'crosshair' : '';
   }
-  if (on) toast('Edit cues — tap a dot to remove it, tap the route to add one');
+  if (on) toast('Edit cues — tap the route to add a turn point, tap a dot to change or delete it');
   else if (S.sel >= 0) {
     const t = S.tracks[S.sel], ov = t.overlay;
     saveCueOverlay(t);
@@ -5534,26 +5567,20 @@ function cueEditTap(lngLat) {
   const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
   const tapR = Math.max(15, mpp * 22);
   const ov = cueOverlay(trk);
-  let best = null, bd = Infinity, isAdded = false;
-  for (const c of trk.baseCues) { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; isAdded = false; } }
-  for (const c of ov.added)     { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; isAdded = true; } }
-  if (best && bd <= tapR) {
-    if (isAdded) { ov.added = ov.added.filter(c => c !== best); toast('Added cue deleted'); }
-    else {
-      const ri = ov.removed.findIndex(r => Math.abs(r - best.at) < 25);
-      if (ri >= 0) { ov.removed.splice(ri, 1); toast('Cue restored'); }
-      else { ov.removed.push(best.at); toast('Cue removed — tap again to restore'); }
-    }
-    saveCueOverlay(trk); applyCueOverlay(trk);
-    updateBottomBar(); refreshMapData(); drawProgress(true);
-  } else {
-    const near = nearestOnTrack(trk, x, y, -1);
-    if (near.idx < 0 || near.d > tapR) return; // not near the route — ignore
-    // same add flow as riding mode: the 9-kind picker, restricted to the
-    // selected track. Snapped track-point coords guarantee the picker's fixed
-    // 25 m radius hits even when the zoom-scaled tapR is wider; placement +
-    // save + pack sync all happen in placeMark → addTurnPointAt.
-    openMarkPicker(trk.xy[near.idx * 2], trk.xy[near.idx * 2 + 1], null, trk);
+  let best = null, bd = tapR, removed = false;
+  for (const c of trk.baseCues) { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; removed = cueRemoved(ov, c.at); } }
+  for (const c of ov.added)     { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; removed = false; } }
+  if (best) { // tap a dot — greyed removed ones included — and the menu opens
+    openMarkPicker(trk.xy[best.idx * 2], trk.xy[best.idx * 2 + 1], { cue: best, removed }, trk);
+    return;
+  }
+  const near = nearestOnTrack(trk, x, y, -1);
+  if (near.idx < 0 || near.d > tapR) return; // not near the route — ignore
+  // tap the route: a turn point appears right there, same as riding — tap it to
+  // change the kind. Snapped track-point coords guarantee the fixed 25 m radius
+  // hits even when the zoom-scaled tapR is wider; save + pack sync in addTurnPointAt.
+  if (addTurnPointAt(trk.xy[near.idx * 2], trk.xy[near.idx * 2 + 1], false, null, null, trk)) {
+    toast('Turn point added — tap it to change or delete'); vib([60]);
   }
 }
 function cueOverlay(trk) { return trk.overlay || (trk.overlay = { removed: [], added: [] }); }
