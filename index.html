@@ -1006,6 +1006,9 @@
     <div id="hillStatus">no terrain shading loaded</div>
     <div class="btnRow"><button class="btn" id="hillBtn">Load .pmtiles terrain…</button></div>
     <div class="hint">Optional elevation extract adds hillshade relief under the trails — gullies and ridges readable at a glance, still flat north-up 2D. Cut one with <b>make_hillshade.py</b> (see README).</div>
+    <div id="dtileStatus">Shared tile cache: —</div>
+    <div class="btnRow"><button class="btn" id="dtileClearBtn">Clear shared tile cache</button></div>
+    <div class="hint">With no local .pmtiles loaded, maps come from the shared dingodirt archive: each pack's ride corridor is fetched once and cached for offline. Deleting a pack releases its tiles.</div>
     <div data-reg="map"></div>
     <div class="hint" id="stravaInfo">No Strava tiles — include them in a .dingonav bundle from Dingo.</div>
     <div class="btnRow"><button class="btn" id="fsBtn"><svg class="ic"><use href="#i-maximize"/></svg> Fullscreen</button><button class="btn" id="diagBtn">Copy cue diagnostics</button></div>
@@ -1078,6 +1081,7 @@
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/pmtiles.js"></script>
 <script src="vendor/fflate.js"></script>
+<script src="corridor.js"></script>
 <script>
 'use strict';
 /* ================================================================
@@ -1091,13 +1095,29 @@ const idb = {
   db: null,
   open() {
     return new Promise((res, rej) => {
-      const r = indexedDB.open('dingonav', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'id' });
+      const r = indexedDB.open('dingonav', 2);
+      r.onupgradeneeded = () => {
+        const db = r.result;
+        if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' });
+        // v2: shared-archive tile cache + per-pack reference sets (for GC)
+        if (!db.objectStoreNames.contains('tiles')) db.createObjectStore('tiles', { keyPath: 'key' });
+        if (!db.objectStoreNames.contains('tilerefs')) db.createObjectStore('tilerefs', { keyPath: 'id' });
+      };
       r.onsuccess = () => { idb.db = r.result; res(); };
       r.onerror = () => rej(r.error);
     });
   },
-  tx(mode) { return idb.db.transaction('files', mode).objectStore('files'); },
+  tx(mode, store = 'files') { return idb.db.transaction(store, mode).objectStore(store); },
+  // shared-tile cache ('tiles') + per-pack refs ('tilerefs'): same wrappers, other stores
+  tput(rec) { return new Promise((res, rej) => { const q = idb.tx('readwrite', 'tiles').put(rec); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
+  tget(key) { return new Promise((res, rej) => { const q = idb.tx('readonly', 'tiles').get(key); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  tdel(key) { return new Promise((res, rej) => { const q = idb.tx('readwrite', 'tiles').delete(key); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
+  tkeys() { return new Promise((res, rej) => { const q = idb.tx('readonly', 'tiles').getAllKeys(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  tclear() { return new Promise((res, rej) => { const q = idb.tx('readwrite', 'tiles').clear(); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
+  rput(rec) { return new Promise((res, rej) => { const q = idb.tx('readwrite', 'tilerefs').put(rec); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
+  rall() { return new Promise((res, rej) => { const q = idb.tx('readonly', 'tilerefs').getAll(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  rdel(id) { return new Promise((res, rej) => { const q = idb.tx('readwrite', 'tilerefs').delete(id); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
+  rclear() { return new Promise((res, rej) => { const q = idb.tx('readwrite', 'tilerefs').clear(); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
   put(rec) { return new Promise((res, rej) => { const q = idb.tx('readwrite').put(rec); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
   del(id) { return new Promise((res, rej) => { const q = idb.tx('readwrite').delete(id); q.onsuccess = res; q.onerror = () => rej(q.error); }); },
   get(id) { return new Promise((res, rej) => { const q = idb.tx('readonly').get(id); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
@@ -1284,6 +1304,119 @@ const STRAVA_BLANK = (() => {
   const b64 = c.toDataURL('image/png').split(',')[1];
   return Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
 })();
+
+/* ---------------- shared tile archive (pack format v2) ----------------
+   Corridor-cached tiles from tiles.dingodirt.com replace embedded pack
+   pmtiles: dtile://<src>/{z}/{x}/{y} serves cache-first from the IDB
+   'tiles' store, falls through to a live PMTiles range request while
+   online (caching the result), and returns a blank offline.
+   Design: Dingo/Docs/plans/2026-08-04-shared-tiles-pack-v2-design.md */
+const DTILES = {
+  // localStorage override for dev/self-hosters, e.g. 'http://localhost:8123/'
+  base: localStorage.getItem('dtiles-base') || 'https://tiles.dingodirt.com/',
+  files: { basemap: 'basemap-au.pmtiles', hillshade: 'hillshade-au.pmtiles' },
+  maxzoom: { basemap: 14, hillshade: 12 },
+  remotes: {},
+  remote(src) {
+    if (!this.remotes[src]) this.remotes[src] = new pmtiles.PMTiles(this.base + this.files[src]);
+    return this.remotes[src];
+  },
+};
+let sharedBase = false, sharedHill = false; // serving from the shared archive?
+// flat-earth DEM blank (terrarium 0 m = rgb(128,0,0)) for offline hillshade misses
+const DEM_BLANK = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 1;
+  const g = c.getContext('2d'); g.fillStyle = 'rgb(128,0,0)'; g.fillRect(0, 0, 1, 1);
+  const b64 = c.toDataURL('image/png').split(',')[1];
+  return Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+})();
+
+async function dtileServe(params) {
+  const m = params.url.match(/^dtile:\/\/(\w+)\/(\d+)\/(\d+)\/(\d+)$/);
+  if (!m) return { data: null };
+  const [, src, z, x, y] = m;
+  const key = `${src}/${z}/${x}/${y}`;
+  try {
+    const rec = await idb.tget(key);
+    if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() };
+  } catch (e) {}
+  if (navigator.onLine) {
+    try {
+      const t = await DTILES.remote(src).getZxy(+z, +x, +y);
+      if (t && t.data) {
+        idb.tput({ key, src, blob: new Blob([t.data]) }).catch(() => {}); // organic warm-up
+        return { data: t.data };
+      }
+    } catch (e) {}
+  }
+  // offline miss (or empty tile): vector → no data; DEM → flat shading
+  return { data: src === 'hillshade' ? DEM_BLANK.buffer.slice(0) : null };
+}
+
+/* Prefetch a pack's corridor into the cache. Resumable: present tiles are
+   skipped, so re-running after a dropped connection costs the delta. */
+let dtileFetching = false;
+async function prefetchCorridor(slug) {
+  if (!(sharedBase || sharedHill) || dtileFetching) return;
+  // coordsLL is [lon, lat] pairs (GeoJSON order) — hand corridor.js explicit objects
+  const tracks = S.tracks.filter(t => (t.pack || '') === slug && t.coordsLL)
+    .map(t => t.coordsLL.map(p => ({ lon: p[0], lat: p[1] })));
+  if (!tracks.length) return;
+  dtileFetching = true;
+  try {
+    const jobs = [];
+    if (sharedBase) for (const t of DingoCorridor.corridorTiles(tracks, { maxzoom: DTILES.maxzoom.basemap }))
+      jobs.push({ src: 'basemap', ...t });
+    if (sharedHill) for (const t of DingoCorridor.corridorTiles(tracks, { maxzoom: DTILES.maxzoom.hillshade }))
+      jobs.push({ src: 'hillshade', ...t });
+    const have = new Set(await idb.tkeys().catch(() => []));
+    const todo = jobs.filter(j => !have.has(`${j.src}/${j.z}/${j.x}/${j.y}`));
+    const keys = jobs.map(j => `${j.src}/${j.z}/${j.x}/${j.y}`);
+    // reference set first — an interrupted fetch still owns its tiles
+    for (const src of ['basemap', 'hillshade'])
+      await idb.rput({ id: slug + '|' + src, pack: slug, src,
+        keys: keys.filter(k => k.startsWith(src + '/')) }).catch(() => {});
+    if (!todo.length) { updateDtileStatus(); return; }
+    toast(`Fetching offline maps: ${todo.length} tiles…`);
+    let done = 0, errs = 0;
+    const workers = Array.from({ length: 4 }, async () => {
+      while (todo.length) {
+        const j = todo.shift();
+        try {
+          const t = await DTILES.remote(j.src).getZxy(j.z, j.x, j.y);
+          if (t && t.data) await idb.tput({ key: `${j.src}/${j.z}/${j.x}/${j.y}`, src: j.src, blob: new Blob([t.data]) });
+        } catch (e) { errs++; }
+        if (++done % 400 === 0) toast(`Offline maps: ${done} tiles…`);
+      }
+    });
+    await Promise.all(workers);
+    toast(errs ? `Offline maps partial (${errs} failed) — re-open online to finish`
+               : 'Offline maps ready for this ride');
+  } finally { dtileFetching = false; updateDtileStatus(); }
+}
+
+/* Drop a pack's tile references and GC tiles nothing references any more. */
+async function dropTileRefs(slug) {
+  try {
+    await idb.rdel(slug + '|basemap'); await idb.rdel(slug + '|hillshade');
+    const refs = await idb.rall();
+    const wanted = new Set();
+    for (const r of refs) for (const k of r.keys || []) wanted.add(k);
+    for (const key of await idb.tkeys()) if (!wanted.has(key)) await idb.tdel(key);
+  } catch (e) {}
+  updateDtileStatus();
+}
+
+async function updateDtileStatus() {
+  const el = document.getElementById('dtileStatus');
+  if (!el) return;
+  try {
+    const keys = await idb.tkeys();
+    el.textContent = keys.length
+      ? `Shared tile cache: ${keys.length} tiles on device`
+      : 'Shared tile cache: empty (fills when a v2 pack loads)';
+  } catch (e) { el.textContent = 'Shared tile cache: unavailable'; }
+}
 
 /* ---------------- GPX / GeoJSON parsing ---------------- */
 function parseGPX(text, fallbackName) {
@@ -1971,9 +2104,13 @@ async function buildStyle() {
   const ov = st.ov && st.ov();
   if (ov) layersArr = layersArr.map(l => ov[l.id]
     ? { ...l, paint: { ...l.paint, ...ov[l.id] } } : l);
-  const sources = { protomaps: { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } };
+  const sources = { protomaps: sharedBase
+    ? { type: 'vector', tiles: ['dtile://basemap/{z}/{x}/{y}'], maxzoom: DTILES.maxzoom.basemap, attribution: '© OpenStreetMap, Protomaps' }
+    : { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } };
   if (hasHillshade && st.hill) {
-    sources.dem = { type: 'raster-dem', url: 'pmtiles://hillshade', encoding: 'terrarium', tileSize: 256 };
+    sources.dem = sharedHill
+      ? { type: 'raster-dem', tiles: ['dtile://hillshade/{z}/{x}/{y}'], maxzoom: DTILES.maxzoom.hillshade, encoding: 'terrarium', tileSize: 256 }
+      : { type: 'raster-dem', url: 'pmtiles://hillshade', encoding: 'terrarium', tileSize: 256 };
     const hill = { id: 'hillshade', type: 'hillshade', source: 'dem',
       layout: { visibility: S.set.hillshade === false ? 'none' : 'visible' }, paint: st.hill };
     const at = layersArr.findIndex(l => l.id === 'water'); // relief under water, roads and labels
@@ -2021,14 +2158,31 @@ function attachBase(blob, name) {
   basePM = new pmtiles.PMTiles(new pmtiles.FileSource(new File([blob], 'base')));
   basePMKey = name + ':' + blob.size;   // part of the cue cache key
   pmProtocol.add(basePM);
-  hasBasemap = true;
+  hasBasemap = true; sharedBase = false; // a real local archive always wins over shared mode
   baseUrlRef = new URL('basemap/', location.href).href;
   setBaseStatus('Basemap: ' + name + ' (' + (blob.size / 1e6).toFixed(0) + ' MB, on device)');
 }
 function attachHill(blob, name) {
   pmProtocol.add(new pmtiles.PMTiles(new pmtiles.FileSource(new File([blob], 'hillshade'))));
-  hasHillshade = true;
+  hasHillshade = true; sharedHill = false;
   setHillStatus('Terrain: ' + name + ' (' + (blob.size / 1e6).toFixed(0) + ' MB, on device)');
+}
+/* Shared archive (pack v2): no local .pmtiles -> vector basemap + DEM come from
+   tiles.dingodirt.com via dtile://, corridor-cached per pack. The cue engine gets
+   a cache-first getZxy shim so turn alerts work offline too. */
+function attachSharedBase() {
+  sharedBase = true; hasBasemap = true; basePMKey = 'shared:' + DTILES.base;
+  baseUrlRef = new URL('basemap/', location.href).href;
+  basePM = { getZxy: async (z, x, y) => {
+    try { const rec = await idb.tget(DTILES.tileKey('basemap', z, x, y)); if (rec && rec.blob) return { data: await rec.blob.arrayBuffer() }; } catch (e) {}
+    if (navigator.onLine) { try { return await DTILES.remote('basemap').getZxy(z, x, y); } catch (e) {} }
+    return undefined;
+  } };
+  setBaseStatus('Basemap: shared archive — corridor tiles cached per pack');
+}
+function attachSharedHill() {
+  sharedHill = true; hasHillshade = true;
+  setHillStatus('Terrain: shared archive — corridor tiles cached per pack');
 }
 /* Re-apply the style on a live map, for a basemap/hillshade that landed after boot.
    Mirrors setMapStyle()'s swap path exactly, minus the settings write and the toast —
@@ -2048,6 +2202,7 @@ async function reStyle() {
 async function initMap() {
   const protocol = pmProtocol = new pmtiles.Protocol();
   maplibregl.addProtocol('pmtiles', protocol.tile);
+  maplibregl.addProtocol('dtile', dtileServe); // shared archive, cache-first
 
   // Strava corridor tiles served from IDB (baked into the .dingonav bundle).
   // Missing tiles (outside the corridor) resolve to a 1×1 transparent PNG so the
@@ -2077,8 +2232,9 @@ async function initMap() {
   let baseRec = null, hillRec = null;
   try { [baseRec, hillRec, satMeta] = await idb.getMany(['basemap', 'hillshade', 'sat-meta']); } catch (e) {}
   if (baseRec && baseRec.blob) attachBase(baseRec.blob, baseRec.name);
-  else setBaseStatus('no basemap — tracks on dark background');
+  else attachSharedBase(); // no local archive -> shared archive, corridor-cached (pack v2)
   if (hillRec && hillRec.blob) attachHill(hillRec.blob, hillRec.name);
+  else if (sharedBase) attachSharedHill();
   else setHillStatus('no terrain shading (optional)');
 
   const style = await buildStyle();
@@ -2145,7 +2301,9 @@ async function initMap() {
   // already on screen; each arrival upgrades the live style in place. Neither
   // promise ever rejects — baseReady is awaited on the boot critical path.
   const basePending = (async () => {
-    if (hasBasemap) return;
+    // shared mode boots the map instantly, but a bundled local archive (while
+    // the deploy still ships one) downloads behind it and takes over on arrival
+    if (hasBasemap && !sharedBase) return;
     bootPhase('basemap');
     try {
       const blob = await fetchBlobProgress('basemap/central-coast.pmtiles', bootBytes);
@@ -2160,7 +2318,7 @@ async function initMap() {
   })();
   basePending.then(baseSettle, baseSettle); // settle either way — never leave a waiter hanging
   const hillPending = (async () => {
-    if (hasHillshade) return;
+    if (hasHillshade && !sharedHill) return;
     try {
       const blob = await fetchBlobProgress('basemap/hillshade.pmtiles', null);
       if (!(await isPMTiles(blob))) return; // SPA-fallback HTML masquerading as the file
@@ -4929,6 +5087,7 @@ async function removePackData(slug) {
   S.sel = selId ? S.tracks.findIndex(t => t.id === selId) : -1;
   if (selId && S.sel < 0) stopNav();
   try { await idb.del('heatmap-' + slug); } catch (e) {}
+  await dropTileRefs(slug); // shared-archive corridor tiles: unreference + GC
   if (S.heatPack === slug) {
     S.heat = null;
     for (const t of S.tracks) t.alerts = null; // cues depend on heatmap
@@ -4996,6 +5155,7 @@ async function refreshPack(slug) {
     const r = isZip
       ? await loadBundleZip(new File([blob], (pack.srcSlug || slug) + '.dingonav'), ctx)
       : await addFile('shared-bundle.json', await blob.text(), ctx);
+    if (!isZip && r && r.pack) prefetchCorridor(r.pack).catch(() => {}); // JSON packs never embed tiles
     // a rename in Dingo changes the bundleId — drop the stale pack it replaces
     if (r && r.pack && r.pack !== slug) await removePack(slug);
     const now = (r && r.pack && S.packs.get(r.pack)) || pack;
@@ -5090,6 +5250,8 @@ async function loadBundleZip(file, ctx) {
       startFriends();
     }
   }
+  // v2 packs ship no tiles — fetch the ride corridor from the shared archive
+  if (pack && !basemap) prefetchCorridor(pack).catch(e => console.warn('corridor prefetch', e));
   return { bundle: true, zip: true, tracks: nT, heatmap: nH > 0, errs, basemap, stravaTiles, satTiles,
            bundleName, description, pack, revision };
 }
@@ -5123,6 +5285,11 @@ async function handleFiles(files) {
 }
 document.getElementById('fileInput').addEventListener('change', e => { handleFiles([...e.target.files]); e.target.value = ''; });
 document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('dtileClearBtn').onclick = async () => {
+  if (!confirm('Clear all cached shared-archive tiles? Packs re-fetch their corridors next time you are online.')) return;
+  try { await idb.tclear(); await idb.rclear(); } catch (e) {}
+  updateDtileStatus(); toast('Shared tile cache cleared');
+};
 document.getElementById('baseBtn').onclick = () => document.getElementById('baseInput').click();
 document.getElementById('baseInput').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
@@ -7779,6 +7946,7 @@ async function boot() {
       const r = isZip
         ? await loadBundleZip(new File([blob], (slug || 'shared') + '.dingonav'), ctx)
         : await addFile('shared-bundle.json', await blob.text(), ctx);
+      if (!isZip && r && r.pack) prefetchCorridor(r.pack).catch(() => {}); // JSON packs never embed tiles
       // strip the param only AFTER a successful import — a failed/interrupted
       // download keeps ?b= in the URL so the next open retries automatically
       // (the import is idempotent: purge + stable ids make a re-run harmless)
@@ -7822,6 +7990,7 @@ async function boot() {
   // If it throws before arming baseSettle, settle here — boot awaits baseReady
   // below, so an unsettled promise would deadlock the rest of this function.
   try { await initMap(); } catch (e) { console.error('[dingonav] map init failed', e); baseSettle(); }
+  updateDtileStatus();
   fitSelected();   // llBounds are lat/lon — independent of the basemap
   startFriends();  // ride-name socket up from boot: turn-point edits sync while planning too
   // maybeIntro() used to fire here, raising a second modal the moment the map
