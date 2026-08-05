@@ -1,0 +1,69 @@
+{
+  "name": "Waze",
+  "author": "Dingo Studio built-ins",
+  "version": 1,
+  "schemaVersion": "1.0",
+  "params": {
+    "guidance.mode": "turnByTurn",
+    "guidance.cueSource": "router",
+    "guidance.laneGuidance": true,
+    "guidance.stackCues": true,
+    "guidance.waypointAdvance": "auto",
+    "camera.followMode": "courseUp",
+    "camera.pauseOnGesture": true,
+    "camera.pitch": 40,
+    "camera.autoZoom": true,
+    "camera.zoomMode": "speed",
+    "camera.zoomCurve": [
+      [
+        0,
+        150
+      ],
+      [
+        30,
+        400
+      ],
+      [
+        60,
+        1000
+      ],
+      [
+        100,
+        2200
+      ]
+    ],
+    "camera.maxZoom": 19,
+    "camera.approachZoom": true,
+    "camera.approachSecs": 18,
+    "camera.approachMul": 1.5,
+    "camera.approachFloorM": 250,
+    "camera.lookAhead": 0.25,
+    "camera.easeMs": 600,
+    "camera.overviewWindowMin": 0,
+    "position.snapToRoute": true,
+    "position.marker": "arrow",
+    "position.breadcrumb": false,
+    "offroute.detectM": 25,
+    "offroute.rejoinM": 15,
+    "offroute.alert": "none",
+    "offroute.banner": false,
+    "offroute.guideLine": false,
+    "reroute.mode": "routePriority",
+    "reroute.triggerM": 25,
+    "reroute.retrySecs": 10,
+    "reroute.confirm": false,
+    "cues.farSecs": 25,
+    "cues.farMaxM": 700,
+    "voice.mode": "tts",
+    "voice.density": "high",
+    "voice.streetNames": true,
+    "hud.speedo": true,
+    "hud.speedLimit": true,
+    "hud.speedAlert": "both",
+    "hud.speedAlertKmh": 0,
+    "hud.nextTurnPanel": "full",
+    "hud.etaPanel": true,
+    "hud.units": "metric",
+    "hud.nightAuto": true
+  }
+}

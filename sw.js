@@ -1,6 +1,6 @@
 // DingoNav service worker — cache-first so the app works fully offline.
 // Bump CACHE when shipping a new version.
-const CACHE = 'dingonav-v66';
+const CACHE = 'dingonav-v67';
 const SHELL = [
   './', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
   './vendor/maplibre-gl.js', './vendor/maplibre-gl.css', './vendor/pmtiles.js', './vendor/fflate.js',
@@ -11,6 +11,11 @@ const SHELL = [
   './basemap/sprites/light.json', './basemap/sprites/light.png',
   './basemap/sprites/light@2x.json', './basemap/sprites/light@2x.png',
 ];
+// ride schemas — Studio's look (.dingoscheme) + feel (.dingobehavior) presets, offline-first
+for (const f of ['default', 'google-maps', 'waze', 'locus', 'oziexplorer', 'dmd2', 'index'])
+  SHELL.push(`./schemes/${f}.json`);
+for (const f of ['default', 'google-maps', 'waze', 'locus', 'dmd2', 'index'])
+  SHELL.push(`./behaviors/${f}.json`);
 const FONTS = ['Noto Sans Regular', 'Noto Sans Medium', 'Noto Sans Italic'];
 const RANGES = ['0-255', '256-511', '512-767'];
 for (const f of FONTS) for (const r of RANGES) SHELL.push(`./basemap/fonts/${encodeURIComponent(f)}/${r}.pbf`);

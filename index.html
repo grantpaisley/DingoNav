@@ -435,6 +435,22 @@
   #dirChip{display:inline-block; margin-top:2px; padding:2px 10px; border-radius:999px;
     background:#26313c; font-size:12px; color:var(--accent)}
 
+  /* SCHEMA PICKER: full-screen like the mark picker — Look (.dingoscheme) and
+     Behaviour (.dingobehavior) tile rows; tap = reset-then-apply, glove-sized */
+  #schemaPicker{position:fixed; inset:0; z-index:40; display:none; background:rgba(10,13,16,.92);
+    flex-direction:column; justify-content:center; padding:18px; overflow-y:auto}
+  #schemaPicker.open{display:flex}
+  #schemaHead{display:flex; align-items:center; justify-content:space-between;
+    max-width:480px; width:100%; margin:0 auto 10px}
+  #schemaHead b{font-size:17px}
+  #schemaClose{background:none; border:none; color:var(--dim); font-size:22px; padding:8px; cursor:pointer}
+  .schSec{max-width:480px; width:100%; margin:8px auto 6px; font-size:12.5px; color:var(--dim);
+    text-transform:uppercase; letter-spacing:.06em}
+  .schGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:480px; width:100%; margin:0 auto}
+  .schGrid .mtile{padding:18px 6px}
+  body:not(.portrait) #schemaPicker .schGrid, body:not(.portrait) #schemaHead,
+  body:not(.portrait) #schemaPicker .schSec{max-width:640px}
+
   /* ---------- panel ---------- */
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
   #shade.on{display:block}
@@ -765,6 +781,7 @@
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/></symbol>
@@ -857,6 +874,14 @@
     <button id="markPickerClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
   <div id="markGrid"></div>
 </div>
+<!-- ride schema selector: Studio preset pairs. A tap overwrites ALL local
+     settings (factory reset + preset); identity and pairing survive. -->
+<div id="schemaPicker">
+  <div id="schemaHead"><b>Ride schema — replaces all settings</b>
+    <button id="schemaClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <div class="schSec">Look — .dingoscheme</div><div id="schSchemes" class="schGrid"></div>
+  <div class="schSec">Behaviour — .dingobehavior</div><div id="schBehaviors" class="schGrid"></div>
+</div>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
 
 <!-- Startup / readiness screen. `loading` is in the MARKUP so the card paints before
@@ -920,7 +945,7 @@
   <div class="gtile" id="gNavMode"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Follow</div><div class="gs"></div></div>
   <div class="gtile" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
   <div class="gtile" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
-  <div class="gtile" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
+  <div class="gtile" id="gSchema"><div class="gi"><svg class="ic"><use href="#i-palette"/></svg></div><div class="gl">Schema</div></div>
   <div class="gtile" id="gColour"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Track colour</div></div>
   <div class="gtile" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
 </div><div class="ctl" id="gloveClose" title="close menu"><svg class="ic"><use href="#i-menu"/></svg></div></div>
@@ -1198,6 +1223,14 @@ function bearing(ax, ay, bx, by) { return Math.atan2(bx - ax, by - ay) * 180 / M
 function angDiff(a, b) { let d = b - a; while (d > 180) d -= 360; while (d < -180) d += 360; return d; }
 
 /* ---------------- state ---------------- */
+/* factory settings — one source of truth so the schema switcher can reset to
+   a clean slate before laying a preset over the top */
+const SET_D = { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
+  profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
+  compassAuto: 'turns', countUnit: 'm', showAdv: false, mapStyle: 'daylight', hillshade: true,
+  varg: false, vargOwn: false, vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
+  navMode: 'follow', startBrief: true };  // navMode: follow | explore | snap — survives restarts by design
+const factorySet = () => ({ ...SET_D, zoomPresets: {}, adv: {}, keys: {}, layout: {} });
 const S = {
   tracks: [], heat: null, sel: -1,
   packs: new Map(), heatPack: '', // bundle packs (slug → record); pack whose heatmap is active
@@ -1205,11 +1238,7 @@ const S = {
   pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
   trail: [], trailTrack: null, prog: null, rides: [], autoOrient: false, autoBlock: false,
-  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
-    profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
-    compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargOwn: false, vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
-    navMode: 'follow', startBrief: true },  // navMode: follow | explore | snap — survives restarts by design
+  set: factorySet(),
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
@@ -2115,7 +2144,8 @@ const MAP_STYLES = {
   dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // shading fights the dark flavor
   satellite:{ label: 'Sat', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // raster imagery base, built specially below
 };
-const STYLE_CYCLE = ['daylight', 'contrast', 'dark', 'satellite'];
+// active schema owns the day look — the cycle collapses to schema ↔ satellite
+function styleCycle() { return MAP_STYLES.scheme ? ['scheme', 'satellite'] : ['daylight', 'contrast', 'dark', 'satellite']; }
 let baseUrlRef = '', hasBasemap = false;
 const baseLayerCache = {};
 function curStyle() { return MAP_STYLES[S.set.mapStyle] || MAP_STYLES.daylight; }
@@ -2163,8 +2193,14 @@ async function buildStyle() {
   if (!baseLayerCache[st.file]) baseLayerCache[st.file] = await (await fetch('basemap/' + st.file)).json();
   let layersArr = baseLayerCache[st.file];
   const ov = st.ov && st.ov();
-  if (ov) layersArr = layersArr.map(l => ov[l.id]
-    ? { ...l, paint: { ...l.paint, ...ov[l.id] } } : l);
+  if (ov) { // __labels sentinel (schema applier): patch every symbol layer's text paint
+    const labels = ov.__labels;
+    layersArr = layersArr.map(l => {
+      let patch = ov[l.id];
+      if (labels && l.type === 'symbol') patch = { ...labels, ...patch };
+      return patch ? { ...l, paint: { ...l.paint, ...patch } } : l;
+    });
+  }
   const sources = { protomaps: sharedBase
     ? { type: 'vector', tiles: ['dtile://basemap/{z}/{x}/{y}'], maxzoom: DTILES.maxzoom.basemap, attribution: '© OpenStreetMap, Protomaps' }
     : { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } };
@@ -2292,7 +2328,19 @@ async function initMap() {
   // Satellite meta must load BEFORE the first buildStyle() — the 'satellite' style
   // branch needs it, else a reload with Sat pre-selected renders empty.
   let baseRec = null, hillRec = null;
-  try { [baseRec, hillRec, satMeta] = await idb.getMany(['basemap', 'hillshade', 'sat-meta']); } catch (e) {}
+  let schemaRec = null;
+  try { [baseRec, hillRec, satMeta, schemaRec] = await idb.getMany(['basemap', 'hillshade', 'sat-meta', 'schema']); } catch (e) {}
+  // stored schema re-mounts its look (CSS vars, mark colours, map style entry)
+  // before the first buildStyle — no default-style flash. A schema that fails
+  // to mount must never brick Nav: fall back to the factory look and say so.
+  if (schemaRec) {
+    SCHEMA = { scheme: schemaRec.schemeId || 'default', behavior: schemaRec.behaviorId || 'matched' };
+    if (schemaRec.scheme) {
+      try { mountScheme(validSchemaFile(schemaRec.scheme, '.dingoscheme')); }
+      catch (e) { unmountScheme(); SCHEMA = { scheme: 'default', behavior: SCHEMA.behavior }; toast('Stored schema failed — factory look'); }
+    }
+  }
+  if (S.set.mapStyle === 'scheme' && !MAP_STYLES.scheme) S.set.mapStyle = 'daylight'; // stale setting, schema gone
   if (baseRec && baseRec.blob) attachBase(baseRec.blob, baseRec.name);
   else attachSharedBase(); // no local archive -> shared archive, corridor-cached (pack v2)
   if (hillRec && hillRec.blob) attachHill(hillRec.blob, hillRec.name);
@@ -2397,7 +2445,10 @@ function clsMatch() { return ['match', ['get', 'class'], 'other', ADV('colOther'
 /* route widths: total px interpolated overview→nav zoom; the core keeps its share
    so one width knob scales the whole cased line. Casing IS the day/night effect:
    dark case on day styles reads as shadow, white on night styles reads as glow. */
-function isNightStyle() { return S.set.mapStyle === 'dark' || S.set.mapStyle === 'satellite'; }
+function isNightStyle() {
+  if (S.set.mapStyle === 'scheme' && MAP_STYLES.scheme) return MAP_STYLES.scheme.sprite === 'dark';
+  return S.set.mapStyle === 'dark' || S.set.mapStyle === 'satellite';
+}
 function caseColor() {
   const m = ADV('caseMode');
   return m === 'white' ? '#ffffff' : m === 'dark' ? '#101820' : isNightStyle() ? '#ffffff' : '#101820';
@@ -3139,8 +3190,8 @@ const KEY_ACTIONS = {
     if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); } } },
   orient: { def: ['KeyN'], run: () => northBtn.onclick() },
   style:  { def: ['KeyD'], run: () => { // day/night flip from the bars
-    const i = STYLE_CYCLE.indexOf(S.set.mapStyle);
-    setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]); } },
+    const c = styleCycle(), i = c.indexOf(S.set.mapStyle);
+    setMapStyle(c[(i + 1) % c.length]); } },
 };
 let keyCapture = null;
 window.addEventListener('keydown', e => {
@@ -4290,6 +4341,8 @@ function turnSyncInfo() {
 /* ---------------- marked spots: hazard / camp / water — MARK SPOT in the ☰ grid ---------------- */
 let spots = [];
 try { spots = JSON.parse(localStorage.getItem('dingonav-spots') || '[]'); } catch (e) {}
+/* local spot-drop — no longer on the glove grid (Schema took the tile,
+   2026-08-05); kept because friend/pack 'spot' sync still lands via the inbox */
 function markSpot() {
   if (!S.pos) { toast('No GPS fix yet'); return; }
   const [la, lo] = toLL(S.pos.x, S.pos.y);
@@ -4455,11 +4508,12 @@ document.getElementById('gZoom').onclick = gloveTap(() => {
   document.getElementById('setAutoZoom').checked = S.set.autoZoom;
 });
 document.getElementById('gLayers').onclick = gloveTap(() => {
+  const STYLE_CYCLE = styleCycle();
   const i = STYLE_CYCLE.indexOf(S.set.mapStyle);
   setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]);
 });
 document.getElementById('gMute').onclick = gloveTap(() => setSound(!S.set.sound));
-document.getElementById('gMark').onclick = () => { closeGlove(); markSpot(); };
+document.getElementById('gSchema').onclick = () => { closeGlove(); openSchemaPicker(); };
 document.getElementById('gNavMode').onclick = gloveTap(() => // tap cycles follow → explore → snap
   setNavMode(NAV_MODES[(NAV_MODES.indexOf(navMode()) + 1) % NAV_MODES.length]));
 document.getElementById('gSettings').onclick = () => { closeGlove(); openPanel();
@@ -4704,7 +4758,7 @@ const TRAIN_STEPS = [
       'the map as your bars turn — the fastest way to read a confusing junction.' },
   { title: 'The glove menu', target: '#menuBtn', advance: { ev: 'glove' },
     html: 'Tap the <b>☰ button</b> (bottom left) — the whole screen becomes giant glove-sized tiles: ' +
-      '<b>Mute, Mark spot, Auto zoom, map layers, track colour, Stop</b>.' },
+      '<b>Mute, Schema, Auto zoom, map layers, track colour, Stop</b>.' },
   { title: 'Mute', target: '#gMute', advance: { ev: 'unmute' },
     html: 'Tap <b>Mute</b>, then tap it <b>again</b> to un-mute. Muted, all beeps stop — ' +
       'except <b>danger barks, which always sound</b>.' },
@@ -7326,6 +7380,202 @@ function applyAllSettings() {
   if (S.nav) S.set.wake ? requestWake() : releaseWake();
   if (mapReady) setMapStyle(S.set.mapStyle).then(() => { applyAdvPaint(); refreshMapData(); drawProgress(true); });
   startFriends();
+}
+
+
+/* ---------------- ride schemas: .dingoscheme (look) + .dingobehavior (feel) ----------------
+   Studio's preset pairs, vendored in schemes/ + behaviors/ (SW-precached, offline).
+   Applying one is RESET-THEN-APPLY: settings return to factory defaults, the
+   preset lands on top — a deterministic overwrite of all local tuning. Identity
+   and pairing (name / email / ride code / controller keys / Varg / aerial URL)
+   survive. The active schema persists in IDB and its look re-mounts before the
+   first buildStyle so there's no default-style flash.
+   Compatibility contract (Studio design 2026-08-02 + behaviour framework
+   2026-08-03): ignore unknown tokens/params, default missing ones, reject on
+   schemaVersion major mismatch, and a bad schema must never brick Nav — a
+   stored schema that fails to mount falls back to the factory look.
+   The scheme applier below is the vendored canonical piece (Studio's
+   js/applier-nav.js) translated to Nav's runtime names. */
+const SCHEMA_SCHEMES = [
+  { id: 'default', label: 'Dingo default' },
+  { id: 'google-maps', label: 'Google Maps' },
+  { id: 'waze', label: 'Waze' },
+  { id: 'locus', label: 'Locus Map' },
+  { id: 'oziexplorer', label: 'OziExplorer' },
+  { id: 'dmd2', label: 'DMD2' },
+];
+const SCHEMA_BEHAVIORS = [
+  { id: 'matched', label: 'Matched' }, // pairs by scheme id — "make it feel like Waze" is one tap
+  { id: 'default', label: 'Dingo default' },
+  { id: 'google-maps', label: 'Google Maps' },
+  { id: 'waze', label: 'Waze' },
+  { id: 'locus', label: 'Locus Map' },
+  { id: 'dmd2', label: 'DMD2' },
+];
+let SCHEMA = { scheme: 'default', behavior: 'matched' }; // active ids (mirrors the IDB record)
+let activeScheme = null; // validated .dingoscheme JSON, or null = factory look
+/* defaults for the tokens Nav consumes (scheme.js TOKEN_DEFS subset) —
+   null = inherit the base style / factory value, per the missing-token rule */
+const SCHEME_D = {
+  'basemap.base': 'dark', 'basemap.trackDashed': false, 'basemap.hillshade': true,
+  'basemap.hillshadeShadow': '#54524a', 'basemap.hillshadeStrength': 0.35,
+  'overlays.heatOwn': '#ff7a00', 'overlays.heatPlan': '#3390ff', 'overlays.heatOther': '#ff2d2d',
+  'overlays.route': '#4AA8FF', 'overlays.routeWOut': 6, 'overlays.routeWIn': 11,
+  'overlays.caseMode': 'auto', 'overlays.done': '#7F8791', 'overlays.chevSize': 15,
+  'overlays.chevGap': 90, 'overlays.breadcrumb': '#ff2d2d',
+  'hud.bg': '#0e1216', 'hud.panel': '#161c22', 'hud.text': '#e8eef4', 'hud.dim': '#8fa0b0',
+  'hud.accent': '#00e5ff', 'hud.ok': '#38d178', 'hud.warn': '#ffb020', 'hud.bad': '#ff4545',
+};
+function tokOf(sch, k) { const v = sch.tokens && sch.tokens[k]; return v == null ? SCHEME_D[k] : v; }
+/* basemap token → [layer ids…, paint prop] — vendored from applier-nav.js.
+   Casing layers stay with the base style on purpose: coarse v1 vocabulary. */
+const SCHEME_BASE_MAP = {
+  'basemap.background': [['background'], 'background-color'],
+  'basemap.earth':      [['earth'], 'fill-color'],
+  'basemap.park':       [['landuse_park', 'landcover'], 'fill-color'],
+  'basemap.green':      [['landuse_urban_green'], 'fill-color'],
+  'basemap.water':      [['water'], 'fill-color'],
+  'basemap.waterLine':  [['water_stream', 'water_river'], 'line-color'],
+  'basemap.buildings':  [['buildings'], 'fill-color'],
+  'basemap.roadHighway': [['roads_highway', 'roads_bridges_highway', 'roads_tunnels_highway'], 'line-color'],
+  'basemap.roadMajor':  [['roads_major', 'roads_bridges_major', 'roads_tunnels_major',
+    'roads_link', 'roads_bridges_link', 'roads_tunnels_link'], 'line-color'],
+  'basemap.roadMinor':  [['roads_minor', 'roads_minor_service', 'roads_bridges_minor', 'roads_tunnels_minor'], 'line-color'],
+  'basemap.roadTrack':  [['roads_other', 'roads_bridges_other', 'roads_tunnels_other'], 'line-color'],
+};
+function schemeOv(sch) { // per-layer paint overrides in the MAP_STYLES ov shape (+ __labels sentinel)
+  const ov = {};
+  const put = (id, prop, val) => { (ov[id] = ov[id] || {})[prop] = val; };
+  for (const [key, [ids, prop]] of Object.entries(SCHEME_BASE_MAP)) {
+    const v = tokOf(sch, key);
+    if (v == null) continue;
+    for (const id of ids) put(id, prop, v);
+  }
+  if (tokOf(sch, 'basemap.trackDashed')) put('roads_other', 'line-dasharray', [2.5, 1.6]);
+  const lt = tokOf(sch, 'basemap.labelText'), lh = tokOf(sch, 'basemap.labelHalo');
+  if (lt != null || lh != null) {
+    ov.__labels = {};
+    if (lt != null) ov.__labels['text-color'] = lt;
+    if (lh != null) ov.__labels['text-halo-color'] = lh;
+  }
+  return ov;
+}
+const MARKS_D = Object.fromEntries(Object.entries(MARKS).map(([k, m]) => [k, m.col])); // factory mark colours
+const SCHEME_CSS = { '--bg': 'hud.bg', '--panel': 'hud.panel', '--fg': 'hud.text', '--dim': 'hud.dim',
+  '--accent': 'hud.accent', '--ok': 'hud.ok', '--warn': 'hud.warn', '--bad': 'hud.bad',
+  '--own': 'overlays.heatOwn', '--plan': 'overlays.heatPlan', '--other': 'overlays.heatOther' };
+/* mount = the non-persistent half of a scheme (CSS vars, mark colours, the
+   dynamic MAP_STYLES entry). Runs at apply AND at boot re-mount; everything
+   else a scheme touches lives in S.set and persists on its own. */
+function mountScheme(sch) {
+  activeScheme = sch;
+  const light = tokOf(sch, 'basemap.base') === 'light';
+  MAP_STYLES.scheme = { label: (sch.name || 'Schema').slice(0, 12), file: light ? 'layers-light.json' : 'layers.json',
+    sprite: light ? 'light' : 'dark', ov: () => schemeOv(activeScheme),
+    hill: tokOf(sch, 'basemap.hillshade')
+      ? { 'hillshade-exaggeration': tokOf(sch, 'basemap.hillshadeStrength'),
+          'hillshade-shadow-color': tokOf(sch, 'basemap.hillshadeShadow'),
+          'hillshade-highlight-color': '#ffffff' } : null };
+  for (const [v, k] of Object.entries(SCHEME_CSS)) document.documentElement.style.setProperty(v, tokOf(sch, k));
+  for (const k in MARKS) MARKS[k].col = tokOf(sch, 'marks.' + k) || MARKS_D[k];
+}
+function unmountScheme() {
+  activeScheme = null; delete MAP_STYLES.scheme;
+  for (const v in SCHEME_CSS) document.documentElement.style.removeProperty(v);
+  for (const k in MARKS) MARKS[k].col = MARKS_D[k];
+}
+/* scheme → the settings half: ADV knobs + hillshade toggle + the map style */
+function applySchemeSettings(sch) {
+  const a = S.set.adv;
+  const put = (k, v) => { if (v != null) a[k] = v; };
+  put('colOwn', tokOf(sch, 'overlays.heatOwn')); put('colPlan', tokOf(sch, 'overlays.heatPlan'));
+  put('colOther', tokOf(sch, 'overlays.heatOther')); put('colRoute', tokOf(sch, 'overlays.route'));
+  put('routeWOut', tokOf(sch, 'overlays.routeWOut')); put('routeWIn', tokOf(sch, 'overlays.routeWIn'));
+  put('caseMode', tokOf(sch, 'overlays.caseMode')); put('colDone', tokOf(sch, 'overlays.done'));
+  put('chevSize', tokOf(sch, 'overlays.chevSize')); put('chevGap', tokOf(sch, 'overlays.chevGap'));
+  put('colCrumb', tokOf(sch, 'overlays.breadcrumb'));
+  S.set.hillshade = !!tokOf(sch, 'basemap.hillshade');
+  S.set.mapStyle = 'scheme';
+}
+/* behaviour → the params with Nav homes today; the rest (reroute, pitch, lane
+   guidance, TTS…) have no machinery yet and are skipped per the contract */
+function applyBehaviorSettings(bh) {
+  const p = bh.params || {};
+  const num = k => (typeof p[k] === 'number' && isFinite(p[k])) ? p[k] : null;
+  const a = S.set.adv;
+  const put = (k, v) => { if (v != null) a[k] = v; };
+  if (p['camera.followMode'] === 'northUp') S.set.orient = 'north';
+  else if (p['camera.followMode'] === 'courseUp') S.set.orient = 'course';
+  if (typeof p['camera.autoZoom'] === 'boolean') S.set.autoZoom = p['camera.autoZoom'];
+  put('easeMs', num('camera.easeMs'));
+  if (num('camera.approachSecs') != null) { a.apprS = num('camera.approachSecs'); a.apprUnit = 's'; }
+  put('apprMul', num('camera.approachMul'));
+  put('apprFloor', num('camera.approachFloorM'));
+  put('offM', num('offroute.detectM'));
+  put('onM', num('offroute.rejoinM'));
+  put('trailGap', num('position.breadcrumbSpacingM'));
+  if (typeof p['position.breadcrumb'] === 'boolean') S.set.trail = p['position.breadcrumb'];
+  if (p['voice.mode']) S.set.sound = p['voice.mode'] !== 'silent';
+  // speed→span curve: its ends become the zoom presets Nav's cruise grammar reads
+  const curve = Array.isArray(p['camera.zoomCurve'])
+    ? p['camera.zoomCurve'].filter(x => Array.isArray(x) && isFinite(x[1]) && x[1] > 0) : [];
+  if (curve.length) {
+    const spans = curve.map(x => x[1]);
+    S.set.zoomPresets[S.set.vehicle] = { min: Math.min(...spans), max: Math.max(...spans) };
+  }
+}
+function validSchemaFile(obj, what) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('bad ' + what);
+  const major = parseInt(String(obj.schemaVersion || ''), 10);
+  if (major !== 1) throw new Error(what + ' needs schema v' + (obj.schemaVersion || '?') + ' — update the app to use it');
+  return obj;
+}
+async function fetchSchemaFile(kind, id) {
+  const r = await fetch(kind + '/' + encodeURIComponent(id) + '.json');
+  if (!r.ok) throw new Error(kind + '/' + id + ' not found');
+  return validSchemaFile(await r.json(), kind === 'schemes' ? '.dingoscheme' : '.dingobehavior');
+}
+/* identity + pairing keys that survive the factory reset — they're who you are
+   and what you're connected to, not look-and-feel (offerConfig's fromPack list,
+   grown to device pairing + migration stamps) */
+const SCHEMA_KEEP = ['name', 'email', 'code', 'codeAuto', 'keys', 'varg', 'vargOwn', 'vargVin', 'vargPin', 'vargExtra',
+  'aerialUrl', 'seenIntro', 'seenZoomTip', '_v2', '_v3', '_v4', '_v5', '_packCfg'];
+async function applySchema(schemeId, behaviorId) {
+  const bhId = behaviorId === 'matched'
+    ? (SCHEMA_BEHAVIORS.some(b => b.id === schemeId) ? schemeId : 'default') : behaviorId;
+  const scheme = schemeId === 'default' ? null : await fetchSchemaFile('schemes', schemeId);
+  const behavior = bhId === 'default' ? null : await fetchSchemaFile('behaviors', bhId);
+  // reset-then-apply: factory defaults, preset on top — no residue of hand-tuning
+  const keep = {};
+  for (const k of SCHEMA_KEEP) if (S.set[k] !== undefined) keep[k] = S.set[k];
+  S.set = Object.assign(factorySet(), keep);
+  unmountScheme();
+  if (scheme) { mountScheme(scheme); applySchemeSettings(scheme); }
+  if (behavior) applyBehaviorSettings(behavior);
+  SCHEMA = { scheme: schemeId, behavior: behaviorId };
+  idb.put({ id: 'schema', kind: 'schema', schemeId, behaviorId, scheme, behavior }).catch(() => {});
+  applyAllSettings();
+  const sLbl = (SCHEMA_SCHEMES.find(x => x.id === schemeId) || {}).label || schemeId;
+  toast('Schema: ' + sLbl + (bhId !== schemeId ? ' look · ' + ((SCHEMA_BEHAVIORS.find(x => x.id === bhId) || {}).label || bhId) + ' behaviour' : '') + ' — all settings replaced');
+}
+
+/* ---------------- schema selector: two tile rows, look + behaviour ---------------- */
+const schemaPickerEl = document.getElementById('schemaPicker');
+function openSchemaPicker() { renderSchemaPicker(); schemaPickerEl.classList.add('open'); }
+function closeSchemaPicker() { schemaPickerEl.classList.remove('open'); }
+document.getElementById('schemaClose').onclick = closeSchemaPicker;
+function renderSchemaPicker() {
+  const tile = (x, cur) => '<div class="mtile' + (x.id === cur ? ' cur' : '') + '" data-id="' + x.id + '">'
+    + '<div class="ml">' + x.label + '</div></div>';
+  document.getElementById('schSchemes').innerHTML = SCHEMA_SCHEMES.map(x => tile(x, SCHEMA.scheme)).join('');
+  document.getElementById('schBehaviors').innerHTML = SCHEMA_BEHAVIORS.map(x => tile(x, SCHEMA.behavior)).join('');
+  const wire = (host, fn) => { for (const el of host.querySelectorAll('.mtile')) el.onclick = () => fn(el.dataset.id); };
+  wire(document.getElementById('schSchemes'), id => pickSchema(id, SCHEMA.behavior));
+  wire(document.getElementById('schBehaviors'), id => pickSchema(SCHEMA.scheme, id));
+}
+function pickSchema(schemeId, behaviorId) {
+  closeSchemaPicker();
+  applySchema(schemeId, behaviorId).catch(e => toast('Schema failed: ' + e.message));
 }
 
 /* Apply a config over S.set — always behind a confirm, never silently.

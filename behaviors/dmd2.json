@@ -1,0 +1,61 @@
+{
+  "name": "DMD2",
+  "author": "Dingo Studio built-ins",
+  "version": 1,
+  "schemaVersion": "1.0",
+  "params": {
+    "guidance.mode": "track",
+    "guidance.cueSource": "none",
+    "guidance.strictOrder": false,
+    "guidance.laneGuidance": false,
+    "guidance.stackCues": false,
+    "guidance.waypointAdvance": "auto",
+    "camera.followMode": "courseUp",
+    "camera.pauseOnGesture": true,
+    "camera.pitch": 30,
+    "camera.autoZoom": true,
+    "camera.zoomMode": "speed",
+    "camera.zoomCurve": [
+      [
+        0,
+        300
+      ],
+      [
+        40,
+        800
+      ],
+      [
+        90,
+        2000
+      ]
+    ],
+    "camera.maxZoom": 18,
+    "camera.approachZoom": false,
+    "camera.lookAhead": 0.2,
+    "camera.easeMs": 800,
+    "camera.overviewWindowMin": 0,
+    "position.snapToRoute": false,
+    "position.marker": "arrow",
+    "position.breadcrumb": true,
+    "position.breadcrumbSpacingM": 15,
+    "offroute.detectM": 100,
+    "offroute.rejoinM": 60,
+    "offroute.alert": "beep",
+    "offroute.repeatSecs": 30,
+    "offroute.banner": true,
+    "offroute.guideLine": false,
+    "offroute.maxDeviationM": 0,
+    "reroute.mode": "none",
+    "reroute.confirm": false,
+    "voice.mode": "beeps",
+    "voice.density": "low",
+    "voice.streetNames": false,
+    "hud.speedo": true,
+    "hud.speedLimit": false,
+    "hud.speedAlert": "none",
+    "hud.nextTurnPanel": "off",
+    "hud.etaPanel": true,
+    "hud.units": "metric",
+    "hud.nightAuto": false
+  }
+}
