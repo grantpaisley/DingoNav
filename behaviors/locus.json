@@ -1,0 +1,67 @@
+{
+  "name": "Locus Map",
+  "author": "Dingo Studio built-ins",
+  "version": 1,
+  "schemaVersion": "1.0",
+  "params": {
+    "guidance.mode": "track",
+    "guidance.cueSource": "shape",
+    "guidance.strictOrder": false,
+    "guidance.laneGuidance": false,
+    "guidance.stackCues": true,
+    "guidance.waypointAdvance": "auto",
+    "camera.followMode": "northUp",
+    "camera.pauseOnGesture": true,
+    "camera.pitch": 0,
+    "camera.autoZoom": true,
+    "camera.zoomMode": "speed",
+    "camera.zoomCurve": [
+      [
+        0,
+        400
+      ],
+      [
+        50,
+        800
+      ],
+      [
+        100,
+        1600
+      ],
+      [
+        200,
+        12800
+      ]
+    ],
+    "camera.maxZoom": 18,
+    "camera.approachZoom": false,
+    "camera.lookAhead": 0.1,
+    "camera.easeMs": 1000,
+    "camera.overviewWindowMin": 0,
+    "position.snapToRoute": true,
+    "position.marker": "arrow",
+    "position.breadcrumb": true,
+    "position.breadcrumbSpacingM": 10,
+    "offroute.detectM": 75,
+    "offroute.rejoinM": 50,
+    "offroute.alert": "voice",
+    "offroute.repeatSecs": 60,
+    "offroute.banner": true,
+    "offroute.guideLine": true,
+    "offroute.maxDeviationM": 500,
+    "reroute.mode": "routePriority",
+    "reroute.triggerM": 100,
+    "reroute.retrySecs": 30,
+    "reroute.confirm": false,
+    "voice.mode": "tts",
+    "voice.density": "medium",
+    "voice.streetNames": false,
+    "hud.speedo": true,
+    "hud.speedLimit": false,
+    "hud.speedAlert": "none",
+    "hud.nextTurnPanel": "full",
+    "hud.etaPanel": true,
+    "hud.units": "metric",
+    "hud.nightAuto": false
+  }
+}

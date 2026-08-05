@@ -1,0 +1,8 @@
+[
+  { "id": "default", "label": "Dingo default", "file": "default.json" },
+  { "id": "google-maps", "label": "Google Maps", "file": "google-maps.json" },
+  { "id": "waze", "label": "Waze", "file": "waze.json" },
+  { "id": "locus", "label": "Locus Map", "file": "locus.json" },
+  { "id": "oziexplorer", "label": "OziExplorer", "file": "oziexplorer.json" },
+  { "id": "dmd2", "label": "DMD2", "file": "dmd2.json" }
+]

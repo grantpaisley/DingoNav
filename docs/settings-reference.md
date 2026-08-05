@@ -127,8 +127,6 @@ Three tiers:
 |---|---|---|---|
 | Riding button opacity | 0.4 | 0.1–1 | **Night styles only** — Day maps force full opacity |
 | Trail dot spacing (m) | 20 | 5–100 | global (breadcrumb) |
-| Heatmap knockout along route (m) | 18 | 0–60 | global |
-| Heatmap under route opacity | 0 | 0–0.5 | global |
 | Heatmap: own rides | `#ff7a00` | colour | incl. archived rides |
 | Heatmap: other riders / planned | `#ff2d2d` / `#3390ff` | colour | global |
 | Basemap minor trails colour / width × | `#909090` / 1 | colour / 0.3–3 | **Trail map style only** |

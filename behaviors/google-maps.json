@@ -1,0 +1,69 @@
+{
+  "name": "Google Maps",
+  "author": "Dingo Studio built-ins",
+  "version": 1,
+  "schemaVersion": "1.0",
+  "params": {
+    "guidance.mode": "turnByTurn",
+    "guidance.cueSource": "router",
+    "guidance.laneGuidance": true,
+    "guidance.stackCues": true,
+    "guidance.waypointAdvance": "auto",
+    "camera.followMode": "courseUp",
+    "camera.pauseOnGesture": true,
+    "camera.pitch": 45,
+    "camera.autoZoom": true,
+    "camera.zoomMode": "speed",
+    "camera.zoomCurve": [
+      [
+        0,
+        200
+      ],
+      [
+        30,
+        500
+      ],
+      [
+        60,
+        1200
+      ],
+      [
+        100,
+        2500
+      ]
+    ],
+    "camera.maxZoom": 19,
+    "camera.approachZoom": true,
+    "camera.approachSecs": 20,
+    "camera.approachMul": 1.5,
+    "camera.approachFloorM": 300,
+    "camera.lookAhead": 0.25,
+    "camera.easeMs": 700,
+    "camera.overviewWindowMin": 45,
+    "position.snapToRoute": true,
+    "position.marker": "chevron",
+    "position.breadcrumb": false,
+    "offroute.detectM": 30,
+    "offroute.rejoinM": 20,
+    "offroute.alert": "none",
+    "offroute.banner": false,
+    "offroute.guideLine": false,
+    "reroute.mode": "routePriority",
+    "reroute.triggerM": 30,
+    "reroute.retrySecs": 10,
+    "reroute.confirm": false,
+    "cues.farSecs": 30,
+    "cues.farMaxM": 800,
+    "voice.mode": "tts",
+    "voice.density": "high",
+    "voice.streetNames": true,
+    "hud.speedo": true,
+    "hud.speedLimit": true,
+    "hud.speedAlert": "visual",
+    "hud.speedAlertKmh": 8,
+    "hud.nextTurnPanel": "full",
+    "hud.etaPanel": true,
+    "hud.units": "metric",
+    "hud.nightAuto": true
+  }
+}

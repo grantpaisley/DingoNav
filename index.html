@@ -60,10 +60,9 @@
   #hudSpeed.cd{color:var(--warn)} #hudSpeed.cd small{color:var(--warn)}
   #hudSpeed.low{color:var(--bad)}
   /* riding: N owns the top-left corner — the speed readout sits below it, slightly inboard,
-     with the hold/lock pills stacked underneath */
+     with the hold pill stacked underneath */
   body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 106px); left:16px}
   body.navving #holdPill{top:calc(env(safe-area-inset-top) + 256px)}
-  body.navving #lockPill{top:calc(env(safe-area-inset-top) + 292px)}
   /* Stark Varg pill — the SECOND number slot: it carries whatever the big left readout
      didn't take (battery if the big one is speed, speed if the big one is battery). Sits
      immediately left of the box button and matches its height, so the two read as one row.
@@ -275,27 +274,27 @@
   /* the glyph steps down out of the needle's way rather than the needle riding over it */
   #orientCtl #orientGlyph{margin-top:8px; line-height:1}
   #baseRow{position:fixed; left:0; right:0; bottom:calc(var(--chromeB,0px) + 8px); z-index:16;
-    display:flex; align-items:flex-end; padding:0 10px; pointer-events:none}
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 10px; pointer-events:none}
   #baseRow .ctl, #baseRow #startBtn{pointer-events:auto}
-  /* landscape: ☰ hard left, dot hard right, − / + together in the centre, START after the + */
-  #zoomOut{margin-left:auto} #zoomIn{margin-left:10px} #dotBtn{margin-left:auto}
-  /* the dot is the one round face — centre-on-me; wears the centre-lock ring */
+  /* the dot is the one round face — centre-on-me. It only shows once the map is away
+     from you (drag, the box button); its slot is HELD while hidden so ☰ − + never move */
+  body.following #baseRow #dotBtn{opacity:0; pointer-events:none} /* two ids: outranks the navving idle-fade opacity */
+  #dotBtn{transition:opacity .2s}
   body:not(.portrait) #baseRow #dotBtn{width:96px; height:96px; border-radius:50%; font-size:44px}
-  #dotBtn.locked{border-color:var(--accent); color:var(--accent);
-    box-shadow:0 0 0 4px rgba(0,229,255,.25)}
   /* portrait / square: the four butt up edge-to-edge, ¼ of the screen each */
   body.portrait #baseRow{padding:0; align-items:stretch}
   body.portrait #baseRow .ctl{flex:1 1 0; width:auto; margin:0; border-radius:0; height:88px}
-  /* turn mode: ADD MARK owns the bottom centre — the zoom pair steps aside */
-  body.turnmode #zoomOut, body.turnmode #zoomIn{display:none}
-  body.portrait.turnmode #baseRow .ctl{flex:0 0 25vw}
-  body.portrait.turnmode #baseRow #dotBtn{margin-left:auto}
+  /* riding: the row grows for gloves and goes near-transparent — icons over the map,
+     full face only while pressed (the --navOp idle fade still applies on top) */
+  body.navving #baseRow .ctl{width:104px; height:104px; font-size:46px;
+    background:rgba(22,28,34,.35); border-color:rgba(42,53,64,.5)}
+  body.navving.portrait #baseRow .ctl{width:auto; height:104px}
+  body.navving:not(.portrait) #baseRow #dotBtn{width:104px; height:104px}
+  body.navving #baseRow .ctl:active{background:rgba(22,28,34,.92)}
   /* START: green, stopped-with-a-track only. In landscape it's an in-flow member of the
      base row, sitting in the gap between the + and the dot. */
-  /* margin-left:auto here makes THREE auto margins in the row (zoomOut, START, dot), so
-     the free space splits into equal thirds and START lands midway between + and the dot.
-     With START hidden it falls back to the original two-auto split, ☰ | − + | ◎. */
-  #startBtn{margin-left:auto; z-index:16; flex:none;
+  /* space-between on the row spreads ☰ − + START ◎ evenly, START simply joining in */
+  #startBtn{z-index:16; flex:none;
     height:68px; padding:0 32px; border:none; border-radius:18px; background:var(--ok); color:#04240f;
     font-size:22px; font-weight:800; letter-spacing:.03em; cursor:pointer; display:none;
     box-shadow:0 4px 18px rgba(0,0,0,.45)}
@@ -325,11 +324,10 @@
   body.navving #cueEditBtn{display:none !important} /* planning-only */
   #cueEditBtn.active{border-color:var(--warn); color:var(--warn)}
   /* stacked under the speed readout, clear of the glance card (top centre) */
-  #holdPill, #lockPill{position:fixed; top:64px; left:12px; z-index:14;
+  #holdPill{position:fixed; top:64px; left:12px; z-index:14;
     display:none; padding:6px 14px; border-radius:999px; font-size:14px; color:var(--fg);
     background:rgba(22,28,34,.75); border:1px solid #2a3540}
   #holdPill.on{display:block}
-  #lockPill.on{display:block; top:100px; border-color:var(--accent)}
   #north{position:fixed; left:12px; bottom:120px; z-index:10; width:88px; height:88px; border-radius:50%;
     background:rgba(22,28,34,.9); border:1px solid #2a3540; display:flex; align-items:center; justify-content:center;
     font-weight:800; color:var(--bad); font-size:30px; cursor:pointer}
@@ -408,22 +406,10 @@
   #gloveClose{position:fixed; left:10px; bottom:calc(var(--chromeB,0px) + 8px);
     width:88px; height:88px; border-radius:24px; font-size:40px;
     background:rgba(34,41,48,.95); text-shadow:0 1px 6px rgba(0,0,0,.8)}
-  /* TURN MODE: double-tap the map while riding — zoomed, compass-up; MARK TURN arms, tap places */
-  #markTurn{position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(var(--chromeB,0px) + 12px); z-index:18; display:none; padding:0 44px;
-    height:92px; border:none; border-radius:24px; background:var(--warn); color:#231a00;
-    font-size:26px; font-weight:900; letter-spacing:.03em; box-shadow:0 6px 24px rgba(0,0,0,.55);
-    cursor:pointer}
-  #markTurn.armed{background:var(--accent); color:#00222c}
-  body.turnmode #markTurn{display:block}
-  #turnHint{position:fixed; left:50%; transform:translateX(-50%);
-    bottom:calc(var(--chromeB,0px) + 116px); z-index:18; display:none; font-size:13px;
-    color:var(--fg); background:rgba(14,18,22,.75); padding:6px 14px; border-radius:999px;
-    pointer-events:none; white-space:nowrap}
-  body.turnmode #turnHint{display:block}
 
-  /* MARK PICKER: full-screen 3×3 kind grid — tap the track in turn mode to place,
-     long-press an existing mark to change its kind */
+  /* MARK PICKER: full-screen kind grid — tap a point (riding or edit mode) to open it.
+     Fixed 12 slots: 9 kinds, Delete/Restore, two blanks reserved for future kinds —
+     3×4 portrait, 6×2 landscape, so the geometry never reflows. */
   #markPicker{position:fixed; inset:0; z-index:40; display:none; background:rgba(10,13,16,.92);
     flex-direction:column; justify-content:center; padding:18px}
   #markPicker.open{display:flex}
@@ -432,6 +418,13 @@
   #markPickerHead b{font-size:17px}
   #markPickerClose{background:none; border:none; color:var(--dim); font-size:22px; padding:8px; cursor:pointer}
   #markGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:480px; width:100%; margin:0 auto}
+  body:not(.portrait) #markGrid{grid-template-columns:repeat(6,1fr); max-width:860px}
+  body:not(.portrait) #markPickerHead{max-width:860px}
+  .mtile.blank{background:transparent; border:1px dashed #232d37; pointer-events:none}
+  .mtile.del{border-color:var(--bad)}
+  .mtile.del .ml{color:var(--bad)}
+  .mtile.restore{border-color:var(--ok)}
+  .mtile.restore .ml{color:var(--ok)}
   .mtile{background:var(--panel2); border:1px solid #2c3640; border-radius:14px; padding:16px 6px 12px;
     text-align:center; cursor:pointer; color:var(--fg)}
   .mtile:active{background:#26313c}
@@ -441,6 +434,22 @@
   .mtile .ms{font-size:11.5px; color:var(--dim); margin-top:2px; min-height:14px}
   #dirChip{display:inline-block; margin-top:2px; padding:2px 10px; border-radius:999px;
     background:#26313c; font-size:12px; color:var(--accent)}
+
+  /* SCHEMA PICKER: full-screen like the mark picker — Look (.dingoscheme) and
+     Behaviour (.dingobehavior) tile rows; tap = reset-then-apply, glove-sized */
+  #schemaPicker{position:fixed; inset:0; z-index:40; display:none; background:rgba(10,13,16,.92);
+    flex-direction:column; justify-content:center; padding:18px; overflow-y:auto}
+  #schemaPicker.open{display:flex}
+  #schemaHead{display:flex; align-items:center; justify-content:space-between;
+    max-width:480px; width:100%; margin:0 auto 10px}
+  #schemaHead b{font-size:17px}
+  #schemaClose{background:none; border:none; color:var(--dim); font-size:22px; padding:8px; cursor:pointer}
+  .schSec{max-width:480px; width:100%; margin:8px auto 6px; font-size:12.5px; color:var(--dim);
+    text-transform:uppercase; letter-spacing:.06em}
+  .schGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:480px; width:100%; margin:0 auto}
+  .schGrid .mtile{padding:18px 6px}
+  body:not(.portrait) #schemaPicker .schGrid, body:not(.portrait) #schemaHead,
+  body:not(.portrait) #schemaPicker .schSec{max-width:640px}
 
   /* ---------- panel ---------- */
   #shade{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:19; display:none}
@@ -638,7 +647,6 @@
     /* shrunk corner buttons → the readouts tuck under them sooner */
     body.navving #hudSpeed{top:calc(env(safe-area-inset-top) + 64px); left:12px}
     body.navving #holdPill{top:calc(env(safe-area-inset-top) + 148px)}
-    body.navving #lockPill{top:calc(env(safe-area-inset-top) + 182px)}
     #vargModeBig{font-size:76px; top:calc(env(safe-area-inset-top) + 64px); right:12px}
     #vargModeDetail{font-size:16px; column-gap:8px}
     body.navving #vargInd{top:calc(env(safe-area-inset-top) + 70px)}
@@ -652,9 +660,12 @@
     #vargPill .vm, #vargPill .u{font-size:13px}
     body:not(.portrait) #baseRow #dotBtn{width:64px; height:64px; border-radius:50%; font-size:30px}
     body.portrait #baseRow .ctl{height:52px}
+    /* short screens: the riding enlargement would eat the map — stay compact */
+    body.navving #baseRow .ctl{width:72px; height:64px; font-size:30px}
+    body.navving.portrait #baseRow .ctl{width:auto; height:64px}
+    body.navving:not(.portrait) #baseRow #dotBtn{width:72px; height:72px}
     #startBtn, #revToggle{height:52px; font-size:18px; padding:0 22px; bottom:calc(var(--chromeB,0px) + 68px)}
     #hud{left:74px; right:74px}
-    #markTurn{height:64px; font-size:20px; padding:0 30px}
     #gloveBtn{width:88px; height:88px; border-radius:22px; font-size:38px}
     #banner{top:62px; font-size:16px; padding:7px 16px}
     #progress.expanded #progCanvas{height:44px}
@@ -765,12 +776,13 @@
   <symbol id="i-arrow-up" viewBox="0 0 24 24"><line x1="12" x2="12" y1="19" y2="5"/><polyline points="5 12 12 5 19 12"/></symbol>
   <symbol id="i-arrow-big-left" viewBox="0 0 24 24"><path d="M18 15h-6v4l-7-7 7-7v4h6v6z"/></symbol>
   <symbol id="i-arrow-big-right" viewBox="0 0 24 24"><path d="M6 9h6V5l7 7-7 7v-4H6V9z"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
   <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></symbol>
   <symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/></symbol>
   <symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
@@ -857,15 +869,20 @@
   <div class="ctl" id="dotBtn" title="centre on me"><svg class="ic"><use href="#i-locate-fixed"/></svg></div>
 </div>
 <button id="revToggle" title="ride direction — tap to reverse"><svg class="ic"><use href="#i-arrow-left-right"/></svg><span id="revLbl">FORWARD</span></button>
-<button id="markTurn" title="add a mark on the track">ADD MARK</button>
-<div id="turnHint">ADD MARK then tap the track · tap a point to remove · long-press a point to change it</div>
 <div id="markPicker">
   <div id="markPickerHead"><b id="markPickerTitle">Add mark here</b>
     <button id="markPickerClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
   <div id="markGrid"></div>
 </div>
+<!-- ride schema selector: Studio preset pairs. A tap overwrites ALL local
+     settings (factory reset + preset); identity and pairing survive. -->
+<div id="schemaPicker">
+  <div id="schemaHead"><b>Ride schema — replaces all settings</b>
+    <button id="schemaClose"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <div class="schSec">Look — .dingoscheme</div><div id="schSchemes" class="schGrid"></div>
+  <div class="schSec">Behaviour — .dingobehavior</div><div id="schBehaviors" class="schGrid"></div>
+</div>
 <div id="holdPill" title="auto-zoom held — tap to release">⤢ held</div>
-<div id="lockPill" title="centre lock — long-press map to unlock"><svg class="ic"><use href="#i-lock"/></svg> locked</div>
 
 <!-- Startup / readiness screen. `loading` is in the MARKUP so the card paints before
      the app script runs. The card is up while boot is working OR while first-run
@@ -928,7 +945,7 @@
   <div class="gtile" id="gNavMode"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Follow</div><div class="gs"></div></div>
   <div class="gtile" id="gRideProf"><div class="gi"><svg class="ic"><use href="#i-bike"/></svg></div><div class="gl">Profile</div></div>
   <div class="gtile" id="gZoom"><div class="gi"><svg class="ic"><use href="#i-maximize-2"/></svg></div><div class="gl">Auto zoom</div></div>
-  <div class="gtile" id="gMark"><div class="gi"><svg class="ic"><use href="#i-map-pin"/></svg></div><div class="gl">Mark spot</div></div>
+  <div class="gtile" id="gSchema"><div class="gi"><svg class="ic"><use href="#i-palette"/></svg></div><div class="gl">Schema</div></div>
   <div class="gtile" id="gColour"><div class="gi"><svg class="ic"><use href="#i-route"/></svg></div><div class="gl">Track colour</div></div>
   <div class="gtile" id="gSettings"><div class="gi"><svg class="ic"><use href="#i-settings"/></svg></div><div class="gl">Settings</div></div>
 </div><div class="ctl" id="gloveClose" title="close menu"><svg class="ic"><use href="#i-menu"/></svg></div></div>
@@ -1206,6 +1223,14 @@ function bearing(ax, ay, bx, by) { return Math.atan2(bx - ax, by - ay) * 180 / M
 function angDiff(a, b) { let d = b - a; while (d > 180) d -= 360; while (d < -180) d += 360; return d; }
 
 /* ---------------- state ---------------- */
+/* factory settings — one source of truth so the schema switcher can reset to
+   a clean slate before laying a preset over the top */
+const SET_D = { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
+  profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
+  compassAuto: 'turns', countUnit: 'm', showAdv: false, mapStyle: 'daylight', hillshade: true,
+  varg: false, vargOwn: false, vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
+  navMode: 'follow', startBrief: true };  // navMode: follow | explore | snap — survives restarts by design
+const factorySet = () => ({ ...SET_D, zoomPresets: {}, adv: {}, keys: {}, layout: {} });
 const S = {
   tracks: [], heat: null, sel: -1,
   packs: new Map(), heatPack: '', // bundle packs (slug → record); pack whose heatmap is active
@@ -1213,11 +1238,7 @@ const S = {
   pos: null, navState: null, courseBearing: null, deviceHeading: null,
   friends: new Map(), demo: null,
   trail: [], trailTrack: null, prog: null, rides: [], autoOrient: false, autoBlock: false,
-  set: { sound: true, confirm: true, autoZoom: true, wake: true, name: '', email: '', code: '', orient: 'north',
-    profile: false, vehicle: 'enduro', trackColour: 'none', trail: true,
-    compassAuto: 'turns', countUnit: 'm', showAdv: false, zoomPresets: {}, adv: {}, keys: {}, mapStyle: 'daylight', hillshade: true,
-    varg: false, vargOwn: false, vargVin: '', vargPin: '', vargExtra: false, rideProfile: 'adventure', bigLeft: '',
-    navMode: 'follow', startBrief: true },  // navMode: follow | explore | snap — survives restarts by design
+  set: factorySet(),
 };
 try { Object.assign(S.set, JSON.parse(localStorage.getItem('dingonav-set') || '{}')); } catch (e) {}
 S.set.zoomPresets = S.set.zoomPresets || {}; S.set.adv = S.set.adv || {};
@@ -1293,7 +1314,7 @@ const ADV_D = {
   chevSize: 15, chevGap: 90, // direction Vs — drawn in the casing colour, so they dim with the travelled case
   slopeG1: 10, slopeG2: 17, slopeGap: 70, slopeSize: 16, // uphill chevrons: steep / very-steep grade %, spacing m, glyph px
   colRoute: '#4AA8FF', colOwn: '#ff7a00', colOther: '#ff2d2d', colPlan: '#3390ff',
-  colTrail: '#909090', trailProm: 1, gpsAcc: 0, heatMask: 18, heatUnderOp: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
+  colTrail: '#909090', trailProm: 1, gpsAcc: 0, // basemap trails mid-grey — stock orange shouted over the ridden heat
   // backtrack breadcrumb: one solid red line, drawn at a share of the route core so the
   // covered segments still read either side of it (1 = full core width)
   colCrumb: '#ff2d2d', crumbOp: 0.75, crumbFrac: 0.75,
@@ -2123,7 +2144,8 @@ const MAP_STYLES = {
   dark:     { label: 'Dark', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // shading fights the dark flavor
   satellite:{ label: 'Sat', file: 'layers.json', sprite: 'dark', ov: null, hill: null }, // raster imagery base, built specially below
 };
-const STYLE_CYCLE = ['daylight', 'contrast', 'dark', 'satellite'];
+// active schema owns the day look — the cycle collapses to schema ↔ satellite
+function styleCycle() { return MAP_STYLES.scheme ? ['scheme', 'satellite'] : ['daylight', 'contrast', 'dark', 'satellite']; }
 let baseUrlRef = '', hasBasemap = false;
 const baseLayerCache = {};
 function curStyle() { return MAP_STYLES[S.set.mapStyle] || MAP_STYLES.daylight; }
@@ -2171,8 +2193,14 @@ async function buildStyle() {
   if (!baseLayerCache[st.file]) baseLayerCache[st.file] = await (await fetch('basemap/' + st.file)).json();
   let layersArr = baseLayerCache[st.file];
   const ov = st.ov && st.ov();
-  if (ov) layersArr = layersArr.map(l => ov[l.id]
-    ? { ...l, paint: { ...l.paint, ...ov[l.id] } } : l);
+  if (ov) { // __labels sentinel (schema applier): patch every symbol layer's text paint
+    const labels = ov.__labels;
+    layersArr = layersArr.map(l => {
+      let patch = ov[l.id];
+      if (labels && l.type === 'symbol') patch = { ...labels, ...patch };
+      return patch ? { ...l, paint: { ...l.paint, ...patch } } : l;
+    });
+  }
   const sources = { protomaps: sharedBase
     ? { type: 'vector', tiles: ['dtile://basemap/{z}/{x}/{y}'], maxzoom: DTILES.maxzoom.basemap, attribution: '© OpenStreetMap, Protomaps' }
     : { type: 'vector', url: 'pmtiles://base', attribution: '© OpenStreetMap, Protomaps' } };
@@ -2300,7 +2328,19 @@ async function initMap() {
   // Satellite meta must load BEFORE the first buildStyle() — the 'satellite' style
   // branch needs it, else a reload with Sat pre-selected renders empty.
   let baseRec = null, hillRec = null;
-  try { [baseRec, hillRec, satMeta] = await idb.getMany(['basemap', 'hillshade', 'sat-meta']); } catch (e) {}
+  let schemaRec = null;
+  try { [baseRec, hillRec, satMeta, schemaRec] = await idb.getMany(['basemap', 'hillshade', 'sat-meta', 'schema']); } catch (e) {}
+  // stored schema re-mounts its look (CSS vars, mark colours, map style entry)
+  // before the first buildStyle — no default-style flash. A schema that fails
+  // to mount must never brick Nav: fall back to the factory look and say so.
+  if (schemaRec) {
+    SCHEMA = { scheme: schemaRec.schemeId || 'default', behavior: schemaRec.behaviorId || 'matched' };
+    if (schemaRec.scheme) {
+      try { mountScheme(validSchemaFile(schemaRec.scheme, '.dingoscheme')); }
+      catch (e) { unmountScheme(); SCHEMA = { scheme: 'default', behavior: SCHEMA.behavior }; toast('Stored schema failed — factory look'); }
+    }
+  }
+  if (S.set.mapStyle === 'scheme' && !MAP_STYLES.scheme) S.set.mapStyle = 'daylight'; // stale setting, schema gone
   if (baseRec && baseRec.blob) attachBase(baseRec.blob, baseRec.name);
   else attachSharedBase(); // no local archive -> shared archive, corridor-cached (pack v2)
   if (hillRec && hillRec.blob) attachHill(hillRec.blob, hillRec.name);
@@ -2315,28 +2355,28 @@ async function initMap() {
   });
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
-  map.on('dragstart', () => { if (S.nav) setFollow(false); S.dotFit = false; trainEvent('drag'); });
-  // gesture zoom (pinch / wheel / double-tap) while navigating = hold, same as the ± buttons
+  map.on('dragstart', () => { setFollow(false); S.dotFit = false; trainEvent('drag'); }); // any drag = away from centre, the dot appears
+  // gesture zoom (pinch / wheel) while navigating = hold, same as the ± buttons
   map.on('zoomend', e => {
     if (e.originalEvent && S.nav && S.set.autoZoom) setHold(map.getZoom());
     if (S.nav) autoCompass(); // threshold-mode compass tracks zoom level
     if (e.originalEvent) trainEvent('zoom-gesture');
   });
-  // riding: double-tap toggles TURN MODE; single taps (point removal, armed
-  // placement) wait out the double-tap window so the two can't collide
+  // riding: double-tap toggles the snap zoom; single taps (point menu, tap-to-add)
+  // wait out the double-tap window so the two can't collide
   let rideTapT = null;
   map.on('click', e => {
-    if (!S.nav) { S.cueEdit ? cueEditTap(e.lngLat) : trackTap(e.lngLat); return; }
-    clearTimeout(rideTapT);
-    rideTapT = setTimeout(() => { rideTapT = null; rideTap(e.lngLat); }, 280);
+    clearTimeout(rideTapT); // every tap waits out the double-tap window — planning too
+    rideTapT = setTimeout(() => { rideTapT = null;
+      S.nav ? rideTap(e.lngLat) : S.cueEdit ? cueEditTap(e.lngLat) : trackTap(e.lngLat); }, 280);
   });
   map.on('dblclick', e => {
+    clearTimeout(rideTapT); rideTapT = null; // the pending single tap dies with the double
     if (!S.nav) return; // planning keeps the normal double-click zoom
     e.preventDefault(); // eat MapLibre's own double-tap zoom while riding
-    clearTimeout(rideTapT); rideTapT = null;
-    S.turn ? exitTurnMode() : enterTurnMode();
+    S.snapZoom ? exitSnapZoom() : enterSnapZoom();
   });
-  initLockGesture();
+  initLongPress();
   // the N button's red needle counter-rotates with the map — always pointing true north
   map.on('rotate', () => { const n = document.getElementById('orientNeedle');
     if (n) n.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)'; });
@@ -2405,7 +2445,10 @@ function clsMatch() { return ['match', ['get', 'class'], 'other', ADV('colOther'
 /* route widths: total px interpolated overview→nav zoom; the core keeps its share
    so one width knob scales the whole cased line. Casing IS the day/night effect:
    dark case on day styles reads as shadow, white on night styles reads as glow. */
-function isNightStyle() { return S.set.mapStyle === 'dark' || S.set.mapStyle === 'satellite'; }
+function isNightStyle() {
+  if (S.set.mapStyle === 'scheme' && MAP_STYLES.scheme) return MAP_STYLES.scheme.sprite === 'dark';
+  return S.set.mapStyle === 'dark' || S.set.mapStyle === 'satellite';
+}
 function caseColor() {
   const m = ADV('caseMode');
   return m === 'white' ? '#ffffff' : m === 'dark' ? '#101820' : isNightStyle() ? '#ffffff' : '#101820';
@@ -2462,13 +2505,6 @@ function addOverlays() {
   map.addLayer({ id: 'heat-core', type: 'line', source: 'heat',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': clsMatch(), 'line-opacity': 0.35,
-      'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
-  // heatmap under the route corridor — its own layer so the opacity is a knob
-  // (0 = dash gaps show pure basemap; raise it to see the recordings beneath the route)
-  map.addSource('heatU', { type: 'geojson', data: EMPTY });
-  map.addLayer({ id: 'heat-under', type: 'line', source: 'heatU',
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': clsMatch(), 'line-opacity': ADV('heatUnderOp'),
       'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.7, 12, 1.6, 15, 3, 17, 6] } });
   // every loaded track rides in route blue WITHOUT casing — the casing is the
   // selection signal (the selected track alone gets the cased nav treatment)
@@ -2650,93 +2686,13 @@ function circlePoly(lat, lon, radiusM) {
   }
   return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] } };
 }
-/* heatmap knocked out along the selected route, so the dash gaps in the route line show the
-   basemap underneath instead of heatmap orange. Data-level clip: heatmap vertices within
-   heatMask metres of the route (long segments get sampled so a straight run can't sneak
-   across) are split off into an "under" collection drawn by heat-under at its own opacity
-   (default fully transparent — dial heatUnderOp up to see the recordings beneath the route).
-   Cached per track — it's a one-off sweep. */
-let heatMaskCache = { src: null, key: '', data: null };
-function maskedHeatData() {
-  if (!S.heat) return { keep: EMPTY, under: EMPTY };
-  const trk = S.tracks[S.sel], M = ADV('heatMask');
-  if (!trk || !M) return { keep: S.heat.geojson, under: EMPTY };
-  const key = trk.id + ':' + M;
-  if (heatMaskCache.src === S.heat && heatMaskCache.key === key) return heatMaskCache.data;
-  const M2 = M * M, C = trk.cell;
-  // route bbox (+M) fast-rejects the bulk of the heatmap before any grid lookups
-  let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
-  for (let i = 0; i < trk.n; i++) {
-    const x = trk.xy[i * 2], y = trk.xy[i * 2 + 1];
-    if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
-    if (y < by0) by0 = y; if (y > by1) by1 = y;
-  }
-  bx0 -= M; by0 -= M; bx1 += M; by1 += M;
-  const nearRoute = (x, y) => { // 3×3 grid cells around the point cover the mask radius
-    if (x < bx0 || x > bx1 || y < by0 || y > by1) return false;
-    const cx = (x / C) | 0, cy = (y / C) | 0;
-    for (let ix = cx - 1; ix <= cx + 1; ix++) for (let iy = cy - 1; iy <= cy + 1; iy++) {
-      const a = trk.grid.get(ix + ',' + iy); if (!a) continue;
-      for (const i of a) { const dx = trk.xy[i * 2] - x, dy = trk.xy[i * 2 + 1] - y; if (dx * dx + dy * dy < M2) return true; }
-    }
-    return false;
-  };
-  const featsK = [], featsU = [];
-  for (const f of S.heat.geojson.features) {
-    const g = f.geometry; if (!g) continue;
-    const parts = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : null;
-    if (!parts) { featsK.push(f); continue; }
-    const runsK = [], runsU = [];
-    for (const coords of parts) {
-      let curK = [], curU = [], px = null, py = null, pc = null;
-      // boundary points join the under-run so the faint layer stays continuous with the kept line
-      const emit = (ll, keep) => {
-        if (keep) {
-          if (curU.length) { curU.push(ll); if (curU.length > 1) runsU.push(curU); curU = []; }
-          curK.push(ll);
-        } else {
-          if (curK.length) { curU.push(curK[curK.length - 1]); if (curK.length > 1) runsK.push(curK); curK = []; }
-          curU.push(ll);
-        }
-      };
-      for (const c of coords) {
-        const [x, y] = toXY(c[1], c[0]);
-        if (px != null) {
-          const seg = dist(px, py, x, y);
-          // sample long segments so the check can't be jumped — but only near the route bbox
-          if (seg > 30 && seg < 2000 &&
-              !(Math.max(px, x) < bx0 || Math.min(px, x) > bx1 || Math.max(py, y) < by0 || Math.min(py, y) > by1)) {
-            const steps = Math.ceil(seg / 15);
-            for (let s = 1; s < steps; s++) {
-              const t = s / steps;
-              emit([pc[0] + (c[0] - pc[0]) * t, pc[1] + (c[1] - pc[1]) * t], !nearRoute(px + (x - px) * t, py + (y - py) * t));
-            }
-          }
-        }
-        emit(c, !nearRoute(x, y));
-        px = x; py = y; pc = c;
-      }
-      if (curK.length > 1) runsK.push(curK);
-      if (curU.length > 1) runsU.push(curU);
-    }
-    for (const r of runsK) featsK.push({ type: 'Feature', properties: f.properties,
-      geometry: { type: 'LineString', coordinates: r } });
-    for (const r of runsU) featsU.push({ type: 'Feature', properties: f.properties,
-      geometry: { type: 'LineString', coordinates: r } });
-  }
-  heatMaskCache = { src: S.heat, key, data: {
-    keep: { type: 'FeatureCollection', features: featsK },
-    under: { type: 'FeatureCollection', features: featsU } } };
-  return heatMaskCache.data;
-}
 function refreshMapData() {
   if (!mapReady) return;
-  const heat = maskedHeatData();
+  const heat = S.heat ? S.heat.geojson : EMPTY;
   // archived local rides join the bundle heat as 'own' class — ridden trails accumulate on-device
-  map.getSource('heat').setData(!S.rides.length ? heat.keep : { type: 'FeatureCollection',
-    features: heat.keep.features.concat(S.rides.map(r => ({ type: 'Feature', properties: { class: 'own' },
+  map.getSource('heat').setData(!S.rides.length ? heat : { type: 'FeatureCollection',
+    features: heat.features.concat(S.rides.map(r => ({ type: 'Feature', properties: { class: 'own' },
       geometry: { type: 'LineString', coordinates: r.pts } }))) });
-  map.getSource('heatU').setData(heat.under);
   map.getSource('tracksOther').setData({ type: 'FeatureCollection',
     features: S.tracks.filter((t, i) => i !== S.sel).map(t => ({ type: 'Feature', properties: {},
       geometry: { type: 'LineString', coordinates: t.coordsLL } })) });
@@ -2958,7 +2914,7 @@ function cruiseZoom(la) {
    travel direction (heading south → dot drifts toward the top of the screen). */
 let camOffX = 0, camOffY = 0;
 function camTargetOff() {
-  if (S.turn) return [0, Math.round(innerHeight * 0.18)]; // turn mode: junction fills the view ahead
+  if (S.snapZoom) return [0, Math.round(innerHeight * 0.18)]; // snap zoom: junction fills the view ahead
   const o = effOrient();
   if (o === 'north') {
     if (S.courseBearing == null || !S.pos || S.pos.speed < 1.5) return [camOffX, camOffY]; // hold last
@@ -2978,8 +2934,8 @@ function followCamera() {
   camOffX += (tx - camOffX) * 0.18; camOffY += (ty - camOffY) * 0.18; // slow migration, not a jump
   const opts = { center: [lo, la], duration: ADV('easeMs'), easing: t => t,
     offset: [Math.round(camOffX), Math.round(camOffY)] };
-  if (S.turn) { // turn mode: compass-up to the heading, tight zoom held while following
-    opts.zoom = S.turn.zoom;
+  if (S.snapZoom) { // snap zoom: compass-up to the heading, tight zoom held while following
+    opts.zoom = S.snapZoom.zoom;
     if (S.courseBearing != null) opts.bearing = S.courseBearing;
   } else {
     // off track: freeze the zoom (keep centring) until back on track — no lurching auto-zoom while lost
@@ -3146,26 +3102,15 @@ function fitTap() { // box: zoom out to the whole track
 document.getElementById('boxBtn').onclick = fitTap;
 function setFollow(on) {
   S.follow = on;
-  document.getElementById('dotBtn').classList.toggle('active', on); // lit = centred on you
+  document.body.classList.toggle('following', on); // following = the dot has nothing to offer, hide it
 }
 setFollow(true);
 
-/* ---------------- centre lock: long-press the map to pin yourself centred ----------------
-   Locked = drag-pan disabled, so a glove brush can't knock the map off you at speed.
-   Long-press again to unlock; while unlocked + panned away, long-press recentres AND locks. */
-const lockPill = document.getElementById('lockPill');
-function setLock(on) {
-  S.lock = on; lockPill.classList.toggle('on', on);
-  document.getElementById('dotBtn').classList.toggle('locked', on); // the dot wears the lock state
-  if (mapReady) on ? map.dragPan.disable() : map.dragPan.enable(); // drag is otherwise always live
-  trainEvent(on ? 'lock' : 'unlock');
-}
-lockPill.onclick = () => { setLock(false); toast('Centre lock off'); };
-
-/* the dot button always comes home; hold-to-lock is gone
-   (2026-07-17 design) — centre lock lives on the map long-press only. */
+/* the dot button always comes home (2026-07-17 design). Long-press has one job
+   left (2026-08-04 design): stopped, near a track → the track picker. Centre
+   lock is gone — drag-pan is always live; taps handle marks. */
 document.getElementById('dotBtn').onclick = recentreTap;
-function initLockGesture() {
+function initLongPress() {
   const el = map.getContainer();
   let timer = null, start = null;
   const cancel = () => { if (timer) clearTimeout(timer); timer = null; };
@@ -3175,31 +3120,16 @@ function initLockGesture() {
     start = [p.clientX, p.clientY];
     cancel();
     timer = setTimeout(() => {
-      timer = null; vib([40]);
-      // long-press ON a mark: change its kind (the picker), not the centre lock
-      if (mapReady && start) {
-        const r = el.getBoundingClientRect();
-        const ll = map.unproject([start[0] - r.left, start[1] - r.top]);
-        const [mx, my] = toXY(ll.lat, ll.lng);
-        const mpp = spanForZoom(map.getZoom(), ll.lat) / (el.clientHeight || 700);
-        const hit = findTurnPointNear(mx, my, Math.max(15, mpp * 30));
-        if (hit) { openMarkPicker(hit.x, hit.y, { cue: hit.cue }); return; }
-        // long-press ON a track line: the picker — including the one already selected.
-        // Stopped only: while riding this gesture is the centre lock, and the route is
-        // exactly where a rider's thumb lands, so the two would fight constantly.
-        if (!S.nav && S.tracks.length) {
-          const tapR = Math.max(20, mpp * 24);
-          let bd = Infinity;
-          for (const t of S.tracks) bd = Math.min(bd, nearestOnTrack(t, mx, my).d);
-          if (bd <= tapR) { openTrackPicker('pick'); return; }
-        }
-      }
-      if (S.lock) { setLock(false); toast('Centre lock off — map can be moved'); }
-      else {
-        setLock(true); setFollow(true);
-        if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la], duration: 400 }); }
-        toast('Centre lock on — long-press to release');
-      }
+      timer = null;
+      if (!mapReady || !start || S.nav || !S.tracks.length) return;
+      const r = el.getBoundingClientRect();
+      const ll = map.unproject([start[0] - r.left, start[1] - r.top]);
+      const [mx, my] = toXY(ll.lat, ll.lng);
+      const mpp = spanForZoom(map.getZoom(), ll.lat) / (el.clientHeight || 700);
+      const tapR = Math.max(20, mpp * 24);
+      let bd = Infinity;
+      for (const t of S.tracks) bd = Math.min(bd, nearestOnTrack(t, mx, my).d);
+      if (bd <= tapR) { vib([40]); openTrackPicker('pick'); }
     }, 600);
   };
   const move = e => {
@@ -3260,8 +3190,8 @@ const KEY_ACTIONS = {
     if (S.pos && mapReady) { const [la, lo] = toLL(S.pos.x, S.pos.y); map.easeTo({ center: [lo, la] }); } } },
   orient: { def: ['KeyN'], run: () => northBtn.onclick() },
   style:  { def: ['KeyD'], run: () => { // day/night flip from the bars
-    const i = STYLE_CYCLE.indexOf(S.set.mapStyle);
-    setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]); } },
+    const c = styleCycle(), i = c.indexOf(S.set.mapStyle);
+    setMapStyle(c[(i + 1) % c.length]); } },
 };
 let keyCapture = null;
 window.addEventListener('keydown', e => {
@@ -3607,7 +3537,7 @@ function startNav() {
 }
 function stopNav() {
   S.nav = false;
-  exitTurnMode(false);
+  exitSnapZoom(false);
   S._turnCue = null; applyCdArrows(); applyMoveGestures();
   S.autoOrient = false; S.autoBlock = false; applyOrient(); // hand orientation back to the rider's mode
   document.body.classList.remove('navving', 'hasroute');
@@ -3616,7 +3546,7 @@ function stopNav() {
   document.getElementById('banner').classList.remove('on');
   prog.classList.remove('on', 'offtrack', 'countdown');
   document.getElementById('gloveBtn').classList.remove('on');
-  setHold(null); setLock(false);
+  setHold(null);
   closeGlove();
   placeProgress();
   const nb = document.getElementById('navBtn'); nb.textContent = 'Start'; nb.classList.remove('stop');
@@ -3718,8 +3648,6 @@ function onFix(lat, lon, acc, speed, heading) {
   if (hdg != null && !isNaN(hdg) && (spd || 0) > 2)
     S.courseBearing = S.courseBearing == null ? hdg : S.courseBearing + angDiff(S.courseBearing, hdg) * 0.4;
   renderMain(); applyMoveGestures();
-  // turn mode decays on its own once the junction is cleared — no tap-out needed mid-corner
-  if (S.turn && dist(x, y, S.turn.ax, S.turn.ay) > 60) exitTurnMode();
   refreshPosLayers(); followCamera();
   if (!S.nav || !ns) return;
   // breadcrumb drops for EVERY ride — off-track, free-ride, exploring. It used to sit below
@@ -4124,42 +4052,30 @@ function applyMoveGestures() {
   else { map.touchZoomRotate.enable(); map.doubleClickZoom.enable(); }
 }
 
-/* ---------------- TURN MODE ----------------
-   Unmarked intersection, double-tap the map: snap zoom in, compass-up to the
-   heading, rider low-third — resolve which fork is the track. Double-tap again
-   (or ride ~60 m past the junction) returns to the riding zoom.
-   MARK TURN is two-step: press to arm, then tap the track to place (a stray tap
-   costs one tap — tap a point to remove it). Tap elsewhere right after removing
-   = the point re-places there (move = delete + place).
+/* ---------------- SNAP ZOOM ----------------
+   Unmarked intersection, double-tap the map while riding: snap zoom in to the
+   "zoom in" preset, compass-up to the heading, rider low-third — resolve which
+   fork is the track. Double-tap again eases back to exactly the zoom you left.
+   Manual both ways, and it works at any speed — this is the junction gesture.
    Turn points ARE cues: they ride the existing overlay system, anchored to geometry —
    every pass of every analysed track sharing the segment gets the point. */
-const markTurnBtn = document.getElementById('markTurn');
-function setMarkArm(on) {
-  if (S.turn) S.turn.arming = on;
-  markTurnBtn.textContent = on ? 'Tap track to choose' : 'Add mark';
-  markTurnBtn.classList.toggle('armed', on);
-}
-function enterTurnMode() {
-  if (S.turn || !mapReady || !S.pos) return;
+function enterSnapZoom() {
+  if (S.snapZoom || !mapReady || !S.pos) return;
   const [la, lo] = toLL(S.pos.x, S.pos.y);
   // remember the target zoom: followCamera keeps re-easing while we move, and each
   // ease without a zoom would freeze the interrupted entry animation mid-flight
-  S.turn = { prevZoom: map.getZoom(), zoom: Math.max(16.5, zoomForSpan(presetSpan('min'), la)),
-    ax: S.pos.x, ay: S.pos.y, removed: null, arming: false };
-  document.body.classList.add('turnmode');
-  setMarkArm(false);
-  setFollow(true); S.dotFit = false; // entering centres you — the dot/square shows square
+  S.snapZoom = { prevZoom: map.getZoom(), zoom: Math.max(16.5, zoomForSpan(presetSpan('min'), la)) };
+  setFollow(true); S.dotFit = false; // snapping in centres you on the junction
   const brg = S.courseBearing != null ? S.courseBearing : (S.pos.heading || 0);
-  map.easeTo({ center: [lo, la], zoom: S.turn.zoom,
+  map.easeTo({ center: [lo, la], zoom: S.snapZoom.zoom,
     bearing: brg, offset: [0, Math.round(innerHeight * 0.18)], duration: 450 });
   setHold(null); vib([40]);
-  trainEvent('turnmode');
+  trainEvent('snapzoom');
 }
-function exitTurnMode(restore = true) {
-  if (!S.turn) return;
-  trainEvent('turnmode-exit');
-  const t = S.turn; S.turn = null;
-  document.body.classList.remove('turnmode');
+function exitSnapZoom(restore = true) {
+  if (!S.snapZoom) return;
+  trainEvent('snapzoom-exit');
+  const t = S.snapZoom; S.snapZoom = null;
   if (restore && mapReady) {
     const opts = { zoom: t.prevZoom, duration: 500 };
     if (effOrient() === 'north') opts.bearing = 0; // north-up gets its north back
@@ -4170,36 +4086,13 @@ function rideTap(lngLat) {
   if (typeof layoutEditing !== 'undefined' && layoutEditing) return;
   const [x, y] = toXY(lngLat.lat, lngLat.lng);
   const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
-  const tapR = Math.max(15, mpp * 30);
-  const hit = findTurnPointNear(x, y, tapR);
-  if (!S.turn) {
-    // a direct tap on a point outside turn mode says "this turn is obvious" — remove it,
-    // and the auto-zoom it was driving releases with it
-    if (hit) { removeTurnPointAt(hit.x, hit.y); toast('Turn point removed'); vib([60]); }
-    return; // empty taps do nothing — TURN MODE is a double-tap
-  }
-  if (S.turn.arming) { // ADD MARK armed — the tapped spot opens the kind picker
-    if (nearestPass(x, y)) { setMarkArm(false); openMarkPicker(x, y); }
-    else toast('No track there — tap on the route');
-    return;
-  }
-  if (hit) {
-    S.turn.removed = true;
-    removeTurnPointAt(hit.x, hit.y);
-    toast('Turn point removed — tap the track to re-place it'); vib([60]);
-    return;
-  }
-  if (S.turn.removed) { // move = delete + place
-    if (addTurnPointAt(x, y)) { S.turn.removed = null; toast('Turn point moved'); vib([60]); }
-    else toast('No track there — tap on the route');
-  }
-  // empty tap otherwise: nothing — double-tap leaves turn mode
+  const hit = findTurnPointNear(x, y, Math.max(15, mpp * 30));
+  // tap a point — even one placed a second ago — and the menu opens: change kind or delete
+  if (hit) { openMarkPicker(hit.x, hit.y, { cue: hit.cue }); return; }
+  // tap the bare track: a turn point appears right there, no picker on the way in
+  if (nearestPass(x, y) && addTurnPointAt(x, y)) { toast('Turn point added — tap it to change or delete'); vib([60]); }
+  // empty map: nothing
 }
-markTurnBtn.onclick = () => {
-  if (!S.turn) return;
-  setMarkArm(!S.turn.arming);
-  toast(S.turn.arming ? 'Tap the track to choose a mark' : 'Placement cancelled');
-};
 /* nearest visible turn point (any analysed track) within R metres */
 function findTurnPointNear(x, y, R) {
   let best = null, bd = R;
@@ -4234,7 +4127,8 @@ function openMarkPicker(x, y, edit, only) {
   const near = nearestPass(x, y, only);
   if (!near) { toast('No track there — tap on the route'); return; }
   pickerCtx = { x, y, dirAuto: inferTurnDir(near.trk, near.idx), dirOv: null, edit: edit || null, only: only || null };
-  document.getElementById('markPickerTitle').textContent = edit ? 'Change mark' : 'Add mark here';
+  document.getElementById('markPickerTitle').textContent =
+    edit && edit.removed ? 'Removed mark' : edit ? 'Change mark' : 'Add mark here';
   renderMarkGrid();
   markPickerEl.classList.add('open');
 }
@@ -4244,28 +4138,48 @@ function renderMarkGrid() {
   const cur = pickerCtx.edit ? kindOf(pickerCtx.edit.cue) : null;
   const d = pickerCtx.dirOv || pickerCtx.dirAuto;
   const dirTxt = ({ L: 'left', R: 'right', S: 'straight' })[d] + (pickerCtx.dirOv ? '' : ' · auto');
+  // slot 10: Delete on an existing mark (Restore on a removed base cue in edit
+  // mode); a blank when adding. Slots 11–12 reserved for future kinds.
+  const act = pickerCtx.edit
+    ? (pickerCtx.edit.removed
+      ? '<div class="mtile restore" data-act="restore"><svg class="ic" style="color:var(--ok)"><use href="#i-rotate-ccw"/></svg><div class="ml">Restore</div><div class="ms"></div></div>'
+      : '<div class="mtile del" data-act="del"><svg class="ic" style="color:var(--bad)"><use href="#i-trash"/></svg><div class="ml">Delete</div><div class="ms"></div></div>')
+    : '<div class="mtile blank"></div>';
   markGrid.innerHTML = Object.entries(MARKS).map(([k, m]) =>
     '<div class="mtile' + (k === cur ? ' cur' : '') + '" data-k="' + k + '">'
     + '<svg class="ic" style="color:' + m.col + '"><use href="#i-' + m.ic + '"/></svg>'
     + '<div class="ml">' + m.label + '</div>'
     + (k === 'turn' ? '<div class="ms"><span id="dirChip">' + dirTxt + '</span></div>' : '<div class="ms"></div>')
-    + '</div>').join('');
-  for (const el of markGrid.querySelectorAll('.mtile')) el.onclick = ev => {
+    + '</div>').join('')
+    + act + '<div class="mtile blank"></div><div class="mtile blank"></div>';
+  for (const el of markGrid.querySelectorAll('.mtile:not(.blank)')) el.onclick = ev => {
     if (ev.target.closest('#dirChip')) { // cycle the turn direction: auto → L → R → S → auto
       const order = [null, 'L', 'R', 'S'];
       pickerCtx.dirOv = order[(order.indexOf(pickerCtx.dirOv) + 1) % order.length];
       renderMarkGrid(); return;
     }
+    if (el.dataset.act === 'del') { deleteMark(); return; }
+    if (el.dataset.act === 'restore') { restoreMark(); return; }
     placeMark(el.dataset.k);
   };
 }
 function placeMark(kind) {
   const { x, y, dirOv, edit, only } = pickerCtx;
   closeMarkPicker();
-  if (edit) removeTurnPointAt(x, y); // change = remove + re-add: two records, replays cleanly everywhere
+  if (edit && !edit.removed) removeTurnPointAt(x, y); // change = remove + re-add: two records, replays cleanly everywhere
   const n = addTurnPointAt(x, y, false, kind, kind === 'turn' ? dirOv : null, only);
   if (n) { toast(MARKS[kind].label + ' marked — queued for the pack'); vib([60]); }
   else toast('Nothing placed — no track there, or a mark already sits on this spot');
+}
+function deleteMark() { // slot-10 red tile: one tap, no confirm — the point is one tap from re-added
+  const { x, y } = pickerCtx;
+  closeMarkPicker();
+  if (removeTurnPointAt(x, y)) { toast('Mark deleted'); vib([60]); }
+}
+function restoreMark() { // edit mode, greyed base cue: bring the auto cue back
+  const { x, y, only } = pickerCtx;
+  closeMarkPicker();
+  if (addTurnPointAt(x, y, false, null, null, only)) { toast('Cue restored'); vib([60]); }
 }
 /* all passes of a track through a point: indices within R, clustered by index gaps —
    an out-and-back section carries the turn in both directions automatically */
@@ -4427,6 +4341,8 @@ function turnSyncInfo() {
 /* ---------------- marked spots: hazard / camp / water — MARK SPOT in the ☰ grid ---------------- */
 let spots = [];
 try { spots = JSON.parse(localStorage.getItem('dingonav-spots') || '[]'); } catch (e) {}
+/* local spot-drop — no longer on the glove grid (Schema took the tile,
+   2026-08-05); kept because friend/pack 'spot' sync still lands via the inbox */
 function markSpot() {
   if (!S.pos) { toast('No GPS fix yet'); return; }
   const [la, lo] = toLL(S.pos.x, S.pos.y);
@@ -4592,11 +4508,12 @@ document.getElementById('gZoom').onclick = gloveTap(() => {
   document.getElementById('setAutoZoom').checked = S.set.autoZoom;
 });
 document.getElementById('gLayers').onclick = gloveTap(() => {
+  const STYLE_CYCLE = styleCycle();
   const i = STYLE_CYCLE.indexOf(S.set.mapStyle);
   setMapStyle(STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]);
 });
 document.getElementById('gMute').onclick = gloveTap(() => setSound(!S.set.sound));
-document.getElementById('gMark').onclick = () => { closeGlove(); markSpot(); };
+document.getElementById('gSchema').onclick = () => { closeGlove(); openSchemaPicker(); };
 document.getElementById('gNavMode').onclick = gloveTap(() => // tap cycles follow → explore → snap
   setNavMode(NAV_MODES[(NAV_MODES.indexOf(navMode()) + 1) % NAV_MODES.length]));
 document.getElementById('gSettings').onclick = () => { closeGlove(); openPanel();
@@ -4759,7 +4676,7 @@ const TRAIN_PTS = [
 const TRAIN_CUES = [
   { ll: [-33.31876,151.35342], deg: 115,  type: 'right', name: 'Middle Ridge Rd' }, // ~297 m
   { ll: [-33.31619,151.35258], deg: -56,  type: 'left' },                           // ~612 m
-  { ll: [-33.31692,151.35053], deg: 117,  type: 'right' },                          // ~839 m — the TURN MODE fork
+  { ll: [-33.31692,151.35053], deg: 117,  type: 'right' },                          // ~839 m — the snap-zoom fork
   { ll: [-33.31415,151.34879], deg: 73,   type: 'right' },                          // ~1195 m
   { ll: [-33.31362,151.3504],  deg: -81,  type: 'left' },                           // ~1367 m
   { ll: [-33.31179,151.34908], deg: -90,  type: 'left' },                           // ~1608 m
@@ -4828,7 +4745,7 @@ const TRAIN_STEPS = [
   { title: 'The whole track', target: '#boxBtn', advance: { ev: 'fit' },
     html: 'Tap the <b>box button</b> (top right) — the map zooms right out to frame the whole ride.' },
   { title: 'Come home', target: '#dotBtn', advance: { ev: 'recentre' },
-    html: 'And the <b>dot button</b> (bottom right) snaps you back onto yourself. <b>Tap it</b> to carry on.' },
+    html: 'The <b>dot button</b> (bottom right) appears whenever the map is off you — <b>tap it</b> to snap back onto yourself and carry on.' },
   { title: 'Zoom when stopped', advance: { ev: 'zoom-gesture' },
     html: 'You\'re stopped right now, so <b>pinch to zoom</b> works (on a computer: scroll). ' +
       'Above walking pace finger-zoom locks so a glove brush can\'t wreck the view — riding, use the − / + buttons.' },
@@ -4841,16 +4758,16 @@ const TRAIN_STEPS = [
       'the map as your bars turn — the fastest way to read a confusing junction.' },
   { title: 'The glove menu', target: '#menuBtn', advance: { ev: 'glove' },
     html: 'Tap the <b>☰ button</b> (bottom left) — the whole screen becomes giant glove-sized tiles: ' +
-      '<b>Mute, Mark spot, Auto zoom, map layers, track colour, Stop</b>.' },
+      '<b>Mute, Schema, Auto zoom, map layers, track colour, Stop</b>.' },
   { title: 'Mute', target: '#gMute', advance: { ev: 'unmute' },
     html: 'Tap <b>Mute</b>, then tap it <b>again</b> to un-mute. Muted, all beeps stop — ' +
       'except <b>danger barks, which always sound</b>.' },
-  { at: t => t.alerts[2].at - 45, title: 'Turn mode', advance: { ev: 'turnmode' },
+  { at: t => t.alerts[2].at - 45, title: 'Snap zoom', advance: { ev: 'snapzoom' },
     html: 'Unmarked fork ahead. <b>Double-tap the map</b>: it snap-zooms in and turns track-up ' +
       'so you can read which fork is yours.' },
-  { title: 'Marks — then back out', target: '#markTurn', advance: { ev: 'turnmode-exit' },
-    html: 'In turn mode, <b>ADD MARK</b> pins this junction for everyone who shares the pack ' +
-      '(press it, tap the track — not now, this is a tour). <b>Double-tap again</b> to ride on.' },
+  { title: 'Marks — then back out', advance: { ev: 'snapzoom-exit' },
+    html: '<b>Tap the track</b> to pin a turn point at this junction for everyone who shares the pack; ' +
+      'tap any point to change or delete it (not now, this is a tour). <b>Double-tap again</b> to ride on.' },
   { at: t => t.alerts[2].at + 110, title: 'Going off track', advance: { ack: true },
     html: 'Now watch — we\'ll <b>overshoot on purpose</b>. You\'ll hear a <b>low growl</b> and ' +
       'see a red banner with your distance back to the route.' },
@@ -4861,9 +4778,6 @@ const TRAIN_STEPS = [
   { title: 'Back on — and direction', advance: { ack: true },
     html: 'That chirp = back on track. One more trick: ride a route in the <b>wrong direction</b> and ' +
       'DingoNav notices, flips every cue around, and tells you — no setting to find.' },
-  { at: t => t.alerts[4].at + 80, title: 'Centre lock', advance: { ev: 'lock' },
-    html: '<b>Press and hold the map</b> for a second: <b>centre lock</b>. The map pins to you and dragging ' +
-      'is disabled, so a knee or glove brush can\'t move it. Long-press again later to release.' },
   { at: t => t.alerts[8].at - 250, title: 'Danger marks', advance: { ack: true },
     html: 'A <b>danger mark</b> is ahead — riders drop these on washouts, wires, cliffs. It <b>triple-barks ' +
       'at 200 m</b> and again at 50 m — <b>even when muted</b>. Roll on and listen.' },
@@ -5697,7 +5611,7 @@ function setCueEdit(on) {
     applyCueEditPaint(on);
     map.getCanvas().style.cursor = on ? 'crosshair' : '';
   }
-  if (on) toast('Edit cues — tap a dot to remove it, tap the route to add one');
+  if (on) toast('Edit cues — tap the route to add a turn point, tap a dot to change or delete it');
   else if (S.sel >= 0) {
     const t = S.tracks[S.sel], ov = t.overlay;
     saveCueOverlay(t);
@@ -5717,26 +5631,20 @@ function cueEditTap(lngLat) {
   const mpp = spanForZoom(map.getZoom(), lngLat.lat) / (map.getContainer().clientHeight || 700);
   const tapR = Math.max(15, mpp * 22);
   const ov = cueOverlay(trk);
-  let best = null, bd = Infinity, isAdded = false;
-  for (const c of trk.baseCues) { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; isAdded = false; } }
-  for (const c of ov.added)     { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; isAdded = true; } }
-  if (best && bd <= tapR) {
-    if (isAdded) { ov.added = ov.added.filter(c => c !== best); toast('Added cue deleted'); }
-    else {
-      const ri = ov.removed.findIndex(r => Math.abs(r - best.at) < 25);
-      if (ri >= 0) { ov.removed.splice(ri, 1); toast('Cue restored'); }
-      else { ov.removed.push(best.at); toast('Cue removed — tap again to restore'); }
-    }
-    saveCueOverlay(trk); applyCueOverlay(trk);
-    updateBottomBar(); refreshMapData(); drawProgress(true);
-  } else {
-    const near = nearestOnTrack(trk, x, y, -1);
-    if (near.idx < 0 || near.d > tapR) return; // not near the route — ignore
-    // same add flow as riding mode: the 9-kind picker, restricted to the
-    // selected track. Snapped track-point coords guarantee the picker's fixed
-    // 25 m radius hits even when the zoom-scaled tapR is wider; placement +
-    // save + pack sync all happen in placeMark → addTurnPointAt.
-    openMarkPicker(trk.xy[near.idx * 2], trk.xy[near.idx * 2 + 1], null, trk);
+  let best = null, bd = tapR, removed = false;
+  for (const c of trk.baseCues) { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; removed = cueRemoved(ov, c.at); } }
+  for (const c of ov.added)     { const d = dist(x, y, trk.xy[c.idx * 2], trk.xy[c.idx * 2 + 1]); if (d < bd) { bd = d; best = c; removed = false; } }
+  if (best) { // tap a dot — greyed removed ones included — and the menu opens
+    openMarkPicker(trk.xy[best.idx * 2], trk.xy[best.idx * 2 + 1], { cue: best, removed }, trk);
+    return;
+  }
+  const near = nearestOnTrack(trk, x, y, -1);
+  if (near.idx < 0 || near.d > tapR) return; // not near the route — ignore
+  // tap the route: a turn point appears right there, same as riding — tap it to
+  // change the kind. Snapped track-point coords guarantee the fixed 25 m radius
+  // hits even when the zoom-scaled tapR is wider; save + pack sync in addTurnPointAt.
+  if (addTurnPointAt(trk.xy[near.idx * 2], trk.xy[near.idx * 2 + 1], false, null, null, trk)) {
+    toast('Turn point added — tap it to change or delete'); vib([60]);
   }
 }
 function cueOverlay(trk) { return trk.overlay || (trk.overlay = { removed: [], added: [] }); }
@@ -7272,8 +7180,6 @@ const SETTINGS = [
   { h: 'Rendering & misc' },
   { k: 'btnOp', t: 'range', adv: 1, l: 'Riding button opacity', min: 0.1, max: 1, step: 0.05 },
   { k: 'trailGap', t: 'range', adv: 1, l: 'Breadcrumb point spacing (m)', min: 5, max: 100, step: 5 },
-  { k: 'heatMask', t: 'range', adv: 1, l: 'Heatmap knockout along route (m, 0 = off)', min: 0, max: 60, step: 2 },
-  { k: 'heatUnderOp', t: 'range', adv: 1, l: 'Heatmap under route opacity', min: 0, max: 0.5, step: 0.02 },
   { k: 'routeWOut', t: 'range', adv: 1, l: 'Route width zoomed out (px)', min: 2, max: 14, step: 0.5 },
   { k: 'routeWIn', t: 'range', adv: 1, l: 'Route width zoomed in (px)', min: 4, max: 20, step: 0.5 },
   { k: 'coreFrac', t: 'range', adv: 1, l: 'Core share of route width', min: 0.4, max: 0.95, step: 0.01 },
@@ -7318,7 +7224,6 @@ function advApply(k) {
   if (k === 'btnOp') document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   else if (k === 'colRoute') { applyAdvPaint(); refreshMapData(); } // segment features bake the colour in
   else if (k === 'slopeG1' || k === 'slopeG2' || k === 'slopeGap' || k === 'recentM' || k === 'colDone') refreshRouteFeatures(); // baked into features
-  else if (k === 'heatMask') { heatMaskCache.key = ''; refreshMapData(); } // re-clip with the new radius
   else if (k === 'colTrail' || k === 'trailProm') { clearTimeout(restyleT); restyleT = setTimeout(() => setMapStyle(S.set.mapStyle), 400); }
   else applyAdvPaint();
 }
@@ -7345,8 +7250,6 @@ function applyAdvPaint() {
   map.setPaintProperty('surf-recent', 'line-width', coreW());
   // keep the tiny mark-dot tier matched to the route width sliders
   if (!S.cueEdit) map.setPaintProperty('mark-dots', 'circle-radius', markDotR());
-  map.setPaintProperty('heat-under', 'line-opacity', ADV('heatUnderOp'));
-  map.setPaintProperty('heat-under', 'line-color', clsMatch());
   for (const l of ['dir-vs-rem', 'dir-vs-done']) {
     map.setLayoutProperty(l, 'visibility', ADV('chevSize') > 0 ? 'visible' : 'none');
     map.setLayoutProperty(l, 'text-size', Math.max(1, ADV('chevSize')));
@@ -7475,9 +7378,204 @@ function applyAllSettings() {
   applyOrient(); applyStrava(); applyHill(); applyVarg();
   document.documentElement.style.setProperty('--navOp', ADV('btnOp'));
   if (S.nav) S.set.wake ? requestWake() : releaseWake();
-  heatMaskCache.key = ''; // heatMask may have changed — force a re-clip
   if (mapReady) setMapStyle(S.set.mapStyle).then(() => { applyAdvPaint(); refreshMapData(); drawProgress(true); });
   startFriends();
+}
+
+
+/* ---------------- ride schemas: .dingoscheme (look) + .dingobehavior (feel) ----------------
+   Studio's preset pairs, vendored in schemes/ + behaviors/ (SW-precached, offline).
+   Applying one is RESET-THEN-APPLY: settings return to factory defaults, the
+   preset lands on top — a deterministic overwrite of all local tuning. Identity
+   and pairing (name / email / ride code / controller keys / Varg / aerial URL)
+   survive. The active schema persists in IDB and its look re-mounts before the
+   first buildStyle so there's no default-style flash.
+   Compatibility contract (Studio design 2026-08-02 + behaviour framework
+   2026-08-03): ignore unknown tokens/params, default missing ones, reject on
+   schemaVersion major mismatch, and a bad schema must never brick Nav — a
+   stored schema that fails to mount falls back to the factory look.
+   The scheme applier below is the vendored canonical piece (Studio's
+   js/applier-nav.js) translated to Nav's runtime names. */
+const SCHEMA_SCHEMES = [
+  { id: 'default', label: 'Dingo default' },
+  { id: 'google-maps', label: 'Google Maps' },
+  { id: 'waze', label: 'Waze' },
+  { id: 'locus', label: 'Locus Map' },
+  { id: 'oziexplorer', label: 'OziExplorer' },
+  { id: 'dmd2', label: 'DMD2' },
+];
+const SCHEMA_BEHAVIORS = [
+  { id: 'matched', label: 'Matched' }, // pairs by scheme id — "make it feel like Waze" is one tap
+  { id: 'default', label: 'Dingo default' },
+  { id: 'google-maps', label: 'Google Maps' },
+  { id: 'waze', label: 'Waze' },
+  { id: 'locus', label: 'Locus Map' },
+  { id: 'dmd2', label: 'DMD2' },
+];
+let SCHEMA = { scheme: 'default', behavior: 'matched' }; // active ids (mirrors the IDB record)
+let activeScheme = null; // validated .dingoscheme JSON, or null = factory look
+/* defaults for the tokens Nav consumes (scheme.js TOKEN_DEFS subset) —
+   null = inherit the base style / factory value, per the missing-token rule */
+const SCHEME_D = {
+  'basemap.base': 'dark', 'basemap.trackDashed': false, 'basemap.hillshade': true,
+  'basemap.hillshadeShadow': '#54524a', 'basemap.hillshadeStrength': 0.35,
+  'overlays.heatOwn': '#ff7a00', 'overlays.heatPlan': '#3390ff', 'overlays.heatOther': '#ff2d2d',
+  'overlays.route': '#4AA8FF', 'overlays.routeWOut': 6, 'overlays.routeWIn': 11,
+  'overlays.caseMode': 'auto', 'overlays.done': '#7F8791', 'overlays.chevSize': 15,
+  'overlays.chevGap': 90, 'overlays.breadcrumb': '#ff2d2d',
+  'hud.bg': '#0e1216', 'hud.panel': '#161c22', 'hud.text': '#e8eef4', 'hud.dim': '#8fa0b0',
+  'hud.accent': '#00e5ff', 'hud.ok': '#38d178', 'hud.warn': '#ffb020', 'hud.bad': '#ff4545',
+};
+function tokOf(sch, k) { const v = sch.tokens && sch.tokens[k]; return v == null ? SCHEME_D[k] : v; }
+/* basemap token → [layer ids…, paint prop] — vendored from applier-nav.js.
+   Casing layers stay with the base style on purpose: coarse v1 vocabulary. */
+const SCHEME_BASE_MAP = {
+  'basemap.background': [['background'], 'background-color'],
+  'basemap.earth':      [['earth'], 'fill-color'],
+  'basemap.park':       [['landuse_park', 'landcover'], 'fill-color'],
+  'basemap.green':      [['landuse_urban_green'], 'fill-color'],
+  'basemap.water':      [['water'], 'fill-color'],
+  'basemap.waterLine':  [['water_stream', 'water_river'], 'line-color'],
+  'basemap.buildings':  [['buildings'], 'fill-color'],
+  'basemap.roadHighway': [['roads_highway', 'roads_bridges_highway', 'roads_tunnels_highway'], 'line-color'],
+  'basemap.roadMajor':  [['roads_major', 'roads_bridges_major', 'roads_tunnels_major',
+    'roads_link', 'roads_bridges_link', 'roads_tunnels_link'], 'line-color'],
+  'basemap.roadMinor':  [['roads_minor', 'roads_minor_service', 'roads_bridges_minor', 'roads_tunnels_minor'], 'line-color'],
+  'basemap.roadTrack':  [['roads_other', 'roads_bridges_other', 'roads_tunnels_other'], 'line-color'],
+};
+function schemeOv(sch) { // per-layer paint overrides in the MAP_STYLES ov shape (+ __labels sentinel)
+  const ov = {};
+  const put = (id, prop, val) => { (ov[id] = ov[id] || {})[prop] = val; };
+  for (const [key, [ids, prop]] of Object.entries(SCHEME_BASE_MAP)) {
+    const v = tokOf(sch, key);
+    if (v == null) continue;
+    for (const id of ids) put(id, prop, v);
+  }
+  if (tokOf(sch, 'basemap.trackDashed')) put('roads_other', 'line-dasharray', [2.5, 1.6]);
+  const lt = tokOf(sch, 'basemap.labelText'), lh = tokOf(sch, 'basemap.labelHalo');
+  if (lt != null || lh != null) {
+    ov.__labels = {};
+    if (lt != null) ov.__labels['text-color'] = lt;
+    if (lh != null) ov.__labels['text-halo-color'] = lh;
+  }
+  return ov;
+}
+const MARKS_D = Object.fromEntries(Object.entries(MARKS).map(([k, m]) => [k, m.col])); // factory mark colours
+const SCHEME_CSS = { '--bg': 'hud.bg', '--panel': 'hud.panel', '--fg': 'hud.text', '--dim': 'hud.dim',
+  '--accent': 'hud.accent', '--ok': 'hud.ok', '--warn': 'hud.warn', '--bad': 'hud.bad',
+  '--own': 'overlays.heatOwn', '--plan': 'overlays.heatPlan', '--other': 'overlays.heatOther' };
+/* mount = the non-persistent half of a scheme (CSS vars, mark colours, the
+   dynamic MAP_STYLES entry). Runs at apply AND at boot re-mount; everything
+   else a scheme touches lives in S.set and persists on its own. */
+function mountScheme(sch) {
+  activeScheme = sch;
+  const light = tokOf(sch, 'basemap.base') === 'light';
+  MAP_STYLES.scheme = { label: (sch.name || 'Schema').slice(0, 12), file: light ? 'layers-light.json' : 'layers.json',
+    sprite: light ? 'light' : 'dark', ov: () => schemeOv(activeScheme),
+    hill: tokOf(sch, 'basemap.hillshade')
+      ? { 'hillshade-exaggeration': tokOf(sch, 'basemap.hillshadeStrength'),
+          'hillshade-shadow-color': tokOf(sch, 'basemap.hillshadeShadow'),
+          'hillshade-highlight-color': '#ffffff' } : null };
+  for (const [v, k] of Object.entries(SCHEME_CSS)) document.documentElement.style.setProperty(v, tokOf(sch, k));
+  for (const k in MARKS) MARKS[k].col = tokOf(sch, 'marks.' + k) || MARKS_D[k];
+}
+function unmountScheme() {
+  activeScheme = null; delete MAP_STYLES.scheme;
+  for (const v in SCHEME_CSS) document.documentElement.style.removeProperty(v);
+  for (const k in MARKS) MARKS[k].col = MARKS_D[k];
+}
+/* scheme → the settings half: ADV knobs + hillshade toggle + the map style */
+function applySchemeSettings(sch) {
+  const a = S.set.adv;
+  const put = (k, v) => { if (v != null) a[k] = v; };
+  put('colOwn', tokOf(sch, 'overlays.heatOwn')); put('colPlan', tokOf(sch, 'overlays.heatPlan'));
+  put('colOther', tokOf(sch, 'overlays.heatOther')); put('colRoute', tokOf(sch, 'overlays.route'));
+  put('routeWOut', tokOf(sch, 'overlays.routeWOut')); put('routeWIn', tokOf(sch, 'overlays.routeWIn'));
+  put('caseMode', tokOf(sch, 'overlays.caseMode')); put('colDone', tokOf(sch, 'overlays.done'));
+  put('chevSize', tokOf(sch, 'overlays.chevSize')); put('chevGap', tokOf(sch, 'overlays.chevGap'));
+  put('colCrumb', tokOf(sch, 'overlays.breadcrumb'));
+  S.set.hillshade = !!tokOf(sch, 'basemap.hillshade');
+  S.set.mapStyle = 'scheme';
+}
+/* behaviour → the params with Nav homes today; the rest (reroute, pitch, lane
+   guidance, TTS…) have no machinery yet and are skipped per the contract */
+function applyBehaviorSettings(bh) {
+  const p = bh.params || {};
+  const num = k => (typeof p[k] === 'number' && isFinite(p[k])) ? p[k] : null;
+  const a = S.set.adv;
+  const put = (k, v) => { if (v != null) a[k] = v; };
+  if (p['camera.followMode'] === 'northUp') S.set.orient = 'north';
+  else if (p['camera.followMode'] === 'courseUp') S.set.orient = 'course';
+  if (typeof p['camera.autoZoom'] === 'boolean') S.set.autoZoom = p['camera.autoZoom'];
+  put('easeMs', num('camera.easeMs'));
+  if (num('camera.approachSecs') != null) { a.apprS = num('camera.approachSecs'); a.apprUnit = 's'; }
+  put('apprMul', num('camera.approachMul'));
+  put('apprFloor', num('camera.approachFloorM'));
+  put('offM', num('offroute.detectM'));
+  put('onM', num('offroute.rejoinM'));
+  put('trailGap', num('position.breadcrumbSpacingM'));
+  if (typeof p['position.breadcrumb'] === 'boolean') S.set.trail = p['position.breadcrumb'];
+  if (p['voice.mode']) S.set.sound = p['voice.mode'] !== 'silent';
+  // speed→span curve: its ends become the zoom presets Nav's cruise grammar reads
+  const curve = Array.isArray(p['camera.zoomCurve'])
+    ? p['camera.zoomCurve'].filter(x => Array.isArray(x) && isFinite(x[1]) && x[1] > 0) : [];
+  if (curve.length) {
+    const spans = curve.map(x => x[1]);
+    S.set.zoomPresets[S.set.vehicle] = { min: Math.min(...spans), max: Math.max(...spans) };
+  }
+}
+function validSchemaFile(obj, what) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('bad ' + what);
+  const major = parseInt(String(obj.schemaVersion || ''), 10);
+  if (major !== 1) throw new Error(what + ' needs schema v' + (obj.schemaVersion || '?') + ' — update the app to use it');
+  return obj;
+}
+async function fetchSchemaFile(kind, id) {
+  const r = await fetch(kind + '/' + encodeURIComponent(id) + '.json');
+  if (!r.ok) throw new Error(kind + '/' + id + ' not found');
+  return validSchemaFile(await r.json(), kind === 'schemes' ? '.dingoscheme' : '.dingobehavior');
+}
+/* identity + pairing keys that survive the factory reset — they're who you are
+   and what you're connected to, not look-and-feel (offerConfig's fromPack list,
+   grown to device pairing + migration stamps) */
+const SCHEMA_KEEP = ['name', 'email', 'code', 'codeAuto', 'keys', 'varg', 'vargOwn', 'vargVin', 'vargPin', 'vargExtra',
+  'aerialUrl', 'seenIntro', 'seenZoomTip', '_v2', '_v3', '_v4', '_v5', '_packCfg'];
+async function applySchema(schemeId, behaviorId) {
+  const bhId = behaviorId === 'matched'
+    ? (SCHEMA_BEHAVIORS.some(b => b.id === schemeId) ? schemeId : 'default') : behaviorId;
+  const scheme = schemeId === 'default' ? null : await fetchSchemaFile('schemes', schemeId);
+  const behavior = bhId === 'default' ? null : await fetchSchemaFile('behaviors', bhId);
+  // reset-then-apply: factory defaults, preset on top — no residue of hand-tuning
+  const keep = {};
+  for (const k of SCHEMA_KEEP) if (S.set[k] !== undefined) keep[k] = S.set[k];
+  S.set = Object.assign(factorySet(), keep);
+  unmountScheme();
+  if (scheme) { mountScheme(scheme); applySchemeSettings(scheme); }
+  if (behavior) applyBehaviorSettings(behavior);
+  SCHEMA = { scheme: schemeId, behavior: behaviorId };
+  idb.put({ id: 'schema', kind: 'schema', schemeId, behaviorId, scheme, behavior }).catch(() => {});
+  applyAllSettings();
+  const sLbl = (SCHEMA_SCHEMES.find(x => x.id === schemeId) || {}).label || schemeId;
+  toast('Schema: ' + sLbl + (bhId !== schemeId ? ' look · ' + ((SCHEMA_BEHAVIORS.find(x => x.id === bhId) || {}).label || bhId) + ' behaviour' : '') + ' — all settings replaced');
+}
+
+/* ---------------- schema selector: two tile rows, look + behaviour ---------------- */
+const schemaPickerEl = document.getElementById('schemaPicker');
+function openSchemaPicker() { renderSchemaPicker(); schemaPickerEl.classList.add('open'); }
+function closeSchemaPicker() { schemaPickerEl.classList.remove('open'); }
+document.getElementById('schemaClose').onclick = closeSchemaPicker;
+function renderSchemaPicker() {
+  const tile = (x, cur) => '<div class="mtile' + (x.id === cur ? ' cur' : '') + '" data-id="' + x.id + '">'
+    + '<div class="ml">' + x.label + '</div></div>';
+  document.getElementById('schSchemes').innerHTML = SCHEMA_SCHEMES.map(x => tile(x, SCHEMA.scheme)).join('');
+  document.getElementById('schBehaviors').innerHTML = SCHEMA_BEHAVIORS.map(x => tile(x, SCHEMA.behavior)).join('');
+  const wire = (host, fn) => { for (const el of host.querySelectorAll('.mtile')) el.onclick = () => fn(el.dataset.id); };
+  wire(document.getElementById('schSchemes'), id => pickSchema(id, SCHEMA.behavior));
+  wire(document.getElementById('schBehaviors'), id => pickSchema(SCHEMA.scheme, id));
+}
+function pickSchema(schemeId, behaviorId) {
+  closeSchemaPicker();
+  applySchema(schemeId, behaviorId).catch(e => toast('Schema failed: ' + e.message));
 }
 
 /* Apply a config over S.set — always behind a confirm, never silently.
