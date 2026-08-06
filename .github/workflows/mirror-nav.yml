@@ -1,0 +1,85 @@
+name: Mirror Nav from the monorepo
+
+# This repo's source moved to grantpaisley/dingodirt (apps/nav) in the
+# 2026-08 monorepo migration. The repo stays alive purely to keep this URL
+# serving:
+#
+#     https://grantpaisley.github.io/DingoNav/
+#
+# Installed PWAs and every pack share link already in the wild point here —
+# the daemon hardcodes it as the share-link default — so it must not 404.
+#
+# WHY THE MIRROR RUNS HERE AND NOT IN THE MONOREPO
+# A push-based deploy from dingodirt would need a cross-repo credential: a PAT
+# or deploy key with write access to this repo. That is exactly what the
+# migration retired (the old sync-appliers workflow and its SYNC_APPLIERS_TOKEN),
+# and re-introducing one for deploys would undo the point. Pulling instead
+# costs nothing: dingodirt is PUBLIC, so checking it out needs no token, and
+# this repo's own GITHUB_TOKEN deploys its own Pages. No secrets anywhere.
+#
+# The trade is latency — a monorepo change reaches this URL on the next
+# scheduled run rather than immediately. Run the workflow manually
+# (Actions -> this workflow -> Run workflow) when you want it now.
+
+on:
+  schedule:
+    # Every 6 hours. This is a mirror of a legacy URL, not the primary deploy.
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/mirror-nav.yml']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: Assemble and publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # No `token:` — grantpaisley/dingodirt is public.
+      - name: Check out the monorepo
+        uses: actions/checkout@v4
+        with:
+          repository: grantpaisley/dingodirt
+          ref: main
+
+      # The same script the monorepo's own deploy uses, so this URL and
+      # /dingodirt/nav/ can never drift in how they are built. It dereferences
+      # the core/ symlinks and hashes the presets into the SW cache name.
+      - name: Assemble nav
+        run: tools/assemble-app.sh nav _site
+
+      # Nav's service worker is cache-first: a bad deploy lingers on riders'
+      # phones until the cache name changes. Fail loudly rather than publish a
+      # broken artefact to the URL people actually have installed.
+      - name: Verify the artefact
+        run: |
+          set -e
+          test -f _site/index.html            || { echo "::error::index.html missing"; exit 1; }
+          test -f _site/sw.js                 || { echo "::error::sw.js missing"; exit 1; }
+          test -s _site/schemes/index.json    || { echo "::error::schemes missing"; exit 1; }
+          test -s _site/behaviors/index.json  || { echo "::error::behaviors missing"; exit 1; }
+          grep -qE 'dingonav-v[0-9]+-[0-9a-f]{8}' _site/sw.js \
+            || { echo "::error::SW cache name is not content-hashed"; exit 1; }
+          if find _site -type l | grep -q .; then
+            echo "::error::symlinks survived — they 404 on Pages"; exit 1
+          fi
+          echo "artefact ok: $(du -sh _site | cut -f1)"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
